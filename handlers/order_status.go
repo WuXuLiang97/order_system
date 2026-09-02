@@ -78,7 +78,12 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	_, err = tx.Exec("UPDATE orders SET status = ? WHERE id = ?", req.Status, req.ID)
+	// 状态流转为“已发货”时记录实际发货日期（首次发货时写入，重复流转不覆盖）。
+	if req.Status == 3 {
+		_, err = tx.Exec("UPDATE orders SET status = 3, shipped_date = COALESCE(shipped_date, CURDATE()) WHERE id = ?", req.ID)
+	} else {
+		_, err = tx.Exec("UPDATE orders SET status = ? WHERE id = ?", req.Status, req.ID)
+	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

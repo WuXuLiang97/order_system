@@ -59,6 +59,30 @@
                         <tbody id="orderTableBody"></tbody>
                     </table>
                 </div>
+                <div class="row mt-3">
+                    <div class="col-md-3">
+                        <label class="form-label">汇总月份</label>
+                        <input type="month" id="summaryMonth" class="form-control">
+                    </div>
+                    <div class="col-md-9 d-flex align-items-end flex-wrap gap-3">
+                        <div class="me-4">
+                            <span class="text-muted">当月发货金额（已发货）：</span>
+                            <strong id="monthlyTotal" class="fs-5 text-primary">¥0.00</strong>
+                        </div>
+                        <div class="me-4">
+                            <span class="text-muted">当月发货单数（已发货）：</span>
+                            <strong id="monthlyCount" class="fs-5 text-primary">0</strong>
+                        </div>
+                        <div class="me-4">
+                            <span class="text-muted">年度发货金额（已发货）：</span>
+                            <strong id="yearlyTotal" class="fs-5 text-success">¥0.00</strong>
+                        </div>
+                        <div>
+                            <span class="text-muted">年度发货单数（已发货）：</span>
+                            <strong id="yearlyCount" class="fs-5 text-success">0</strong>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -553,12 +577,14 @@ function loadOrders(status, keyword) {
 
 function applyFilter() {
     loadOrders($('#filterStatus').val(), $('#searchKeyword').val());
+    loadOrderSummary();
 }
 
 function resetFilter() {
     $('#filterStatus').val('');
     $('#searchKeyword').val('');
     loadOrders();
+    loadOrderSummary();
 }
 
 function statusBadge(s) {
@@ -762,7 +788,30 @@ $('#createOrderModal').on('show.bs.modal', function() {
     loadCustomersToSelect();
 });
 
+function currentMonthStr() {
+    var now = new Date();
+    var m = ('0' + (now.getMonth() + 1)).slice(-2);
+    return now.getFullYear() + '-' + m;
+}
+
+function loadOrderSummary() {
+    var month = $('#summaryMonth').val() || currentMonthStr();
+    $.ajax({
+        url: '/api/orders/summary?month=' + encodeURIComponent(month),
+        method: 'GET',
+        success: function (res) {
+            $('#monthlyTotal').text('¥' + parseFloat(res.monthly_total || 0).toFixed(2));
+            $('#monthlyCount').text(res.monthly_count || 0);
+            $('#yearlyTotal').text('¥' + parseFloat(res.yearly_total || 0).toFixed(2));
+            $('#yearlyCount').text(res.yearly_count || 0);
+        }
+    });
+}
+
 $(document).ready(function() {
+    if (!$('#summaryMonth').val()) $('#summaryMonth').val(currentMonthStr());
+    loadOrderSummary();
+    $('#summaryMonth').on('change', loadOrderSummary);
     loadOrders();
     loadProducts();
     bindCustomField('paymentSettlement', 'paymentSettlementCustom');

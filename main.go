@@ -58,6 +58,7 @@ func main() {
 	http.HandleFunc("/api/orders", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(handlers.CreateOrder))
 	http.HandleFunc("/api/orders/list", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.GetOrders))
 	http.HandleFunc("/api/orders/detail", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.GetOrderDetail))
+	http.HandleFunc("/api/orders/summary", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.GetOrderSummary))
 	http.HandleFunc("/api/orders/status", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(handlers.UpdateOrderStatus))
 	http.HandleFunc("/api/orders/delete", handlers.RequirePermission(handlers.PermOrderEditAll, handlers.DeleteOrder))
 	http.HandleFunc("/api/orders/update", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(handlers.UpdateOrder))

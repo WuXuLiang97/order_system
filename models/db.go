@@ -97,6 +97,9 @@ func ensureOrderColumns() error {
 	if err := ensureColumn("orders", "created_by_user_id", "INT NULL"); err != nil {
 		return err
 	}
+	if err := ensureColumn("orders", "shipped_date", "DATE NULL"); err != nil {
+		return err
+	}
 	if err := ensureColumn("orders", "payment_status", "TINYINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
@@ -139,6 +142,9 @@ func ensureOrderColumns() error {
 	}
 
 	if err := backfillOrderCreatedBy(); err != nil {
+		return err
+	}
+	if err := backfillShippedDate(); err != nil {
 		return err
 	}
 	return migrateOrderStatusV2()
@@ -196,6 +202,28 @@ func backfillOrderCreatedBy() error {
 		return err
 	}
 	if _, err := DB.Exec("INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('order_created_by_backfill')"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// backfillShippedDate 为历史已发货订单回填实际发货日期（按 预计发货日/下单日/创建日 顺序），一次性执行。
+func backfillShippedDate() error {
+	var count int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE migration_name = 'order_shipped_date_backfill'").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	if _, err := DB.Exec(`
+        UPDATE orders
+        SET shipped_date = COALESCE(expected_shipping_date, order_date, DATE(created_at))
+        WHERE status = 3 AND shipped_date IS NULL
+    `); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('order_shipped_date_backfill')"); err != nil {
 		return err
 	}
 	return nil
