@@ -31,12 +31,12 @@ func main() {
 
 	// 页面路由（需登录）
 	http.HandleFunc("/", handlers.RequireAuth(page("templates/layout.html", "templates/index.html")))
-	http.HandleFunc("/orders", handlers.RequireAuth(page("templates/layout.html", "templates/orders.html")))
-	http.HandleFunc("/products", handlers.RequireAuth(page("templates/layout.html", "templates/products.html")))
-	http.HandleFunc("/raw-materials", handlers.RequireAuth(page("templates/layout.html", "templates/raw_materials.html")))
-	http.HandleFunc("/purchase-materials", handlers.RequireAuth(page("templates/layout.html", "templates/purchase_materials.html")))
-	http.HandleFunc("/customers", handlers.RequireAuth(page("templates/layout.html", "templates/customers.html")))
-	http.HandleFunc("/order/detail", handlers.RequireAuth(handlers.OrderDetailPage))
+	http.HandleFunc("/orders", handlers.RequirePermission(handlers.PermOrderView, page("templates/layout.html", "templates/orders.html")))
+	http.HandleFunc("/products", handlers.RequirePermission(handlers.PermProductView, page("templates/layout.html", "templates/products.html")))
+	http.HandleFunc("/raw-materials", handlers.RequirePermission(handlers.PermMaterialView, page("templates/layout.html", "templates/raw_materials.html")))
+	http.HandleFunc("/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, page("templates/layout.html", "templates/purchase_materials.html")))
+	http.HandleFunc("/customers", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customers.html")))
+	http.HandleFunc("/order/detail", handlers.RequirePermission(handlers.PermOrderView, handlers.OrderDetailPage))
 
 	// 用户管理页面（仅管理员）
 	http.HandleFunc("/users", handlers.RequirePermission(handlers.PermUserManage, page("templates/layout.html", "templates/users.html")))
@@ -47,8 +47,8 @@ func main() {
 	http.HandleFunc("/api/change-name", handlers.RequireAuth(handlers.ChangeDisplayName))
 
 	// API 路由 - 产品（列表/详情需登录，写操作需 product:manage 权限）
-	http.HandleFunc("/api/products", handlers.RequireAuth(handlers.ListProducts))
-	http.HandleFunc("/api/products/get", handlers.RequireAuth(handlers.GetProduct))
+	http.HandleFunc("/api/products", handlers.RequireAnyPermission(handlers.PermProductView, handlers.PermOrderView)(handlers.ListProducts))
+	http.HandleFunc("/api/products/get", handlers.RequireAnyPermission(handlers.PermProductView, handlers.PermOrderView)(handlers.GetProduct))
 	http.HandleFunc("/api/products/add", handlers.RequirePermission(handlers.PermProductManage, handlers.AddProduct))
 	http.HandleFunc("/api/products/update", handlers.RequirePermission(handlers.PermProductManage, handlers.UpdateProduct))
 	http.HandleFunc("/api/products/delete", handlers.RequirePermission(handlers.PermProductManage, handlers.DeleteProduct))
@@ -56,43 +56,44 @@ func main() {
 
 	// API 路由 - 订单
 	http.HandleFunc("/api/orders", handlers.RequirePermission(handlers.PermOrderCreate, handlers.CreateOrder))
-	http.HandleFunc("/api/orders/list", handlers.RequireAuth(handlers.GetOrders))
-	http.HandleFunc("/api/orders/detail", handlers.RequireAuth(handlers.GetOrderDetail))
+	http.HandleFunc("/api/orders/list", handlers.RequirePermission(handlers.PermOrderView, handlers.GetOrders))
+	http.HandleFunc("/api/orders/detail", handlers.RequirePermission(handlers.PermOrderView, handlers.GetOrderDetail))
 	http.HandleFunc("/api/orders/status", handlers.RequirePermission(handlers.PermOrderUpdate, handlers.UpdateOrderStatus))
 	http.HandleFunc("/api/orders/delete", handlers.RequirePermission(handlers.PermOrderDelete, handlers.DeleteOrder))
 	http.HandleFunc("/api/orders/update", handlers.RequirePermission(handlers.PermOrderUpdate, handlers.UpdateOrder))
 
 	// API 路由 - 客户
-	http.HandleFunc("/api/customers", handlers.RequireAuth(handlers.ListCustomers))
-	http.HandleFunc("/api/customers/get", handlers.RequireAuth(handlers.GetCustomer))
+	http.HandleFunc("/api/customers", handlers.RequireAnyPermission(handlers.PermCustomerView, handlers.PermOrderView)(handlers.ListCustomers))
+	http.HandleFunc("/api/customers/get", handlers.RequireAnyPermission(handlers.PermCustomerView, handlers.PermOrderView)(handlers.GetCustomer))
 	http.HandleFunc("/api/customers/add", handlers.RequirePermission(handlers.PermCustomerManage, handlers.AddCustomer))
 	http.HandleFunc("/api/customers/update", handlers.RequirePermission(handlers.PermCustomerManage, handlers.UpdateCustomer))
 	http.HandleFunc("/api/customers/delete", handlers.RequirePermission(handlers.PermCustomerManage, handlers.DeleteCustomer))
 
 	// API 路由 - 采购物料
-	http.HandleFunc("/api/purchase-materials", handlers.RequireAuth(handlers.ListPurchaseMaterials))
-	http.HandleFunc("/api/purchase-materials/summary", handlers.RequireAuth(handlers.GetPurchaseMaterialsSummary))
-	http.HandleFunc("/api/purchase-materials/get", handlers.RequireAuth(handlers.GetPurchaseMaterial))
+	http.HandleFunc("/api/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, handlers.ListPurchaseMaterials))
+	http.HandleFunc("/api/purchase-materials/summary", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseMaterialsSummary))
+	http.HandleFunc("/api/purchase-materials/get", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseMaterial))
 	http.HandleFunc("/api/purchase-materials/add", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.AddPurchaseMaterial))
 	http.HandleFunc("/api/purchase-materials/update", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.UpdatePurchaseMaterial))
 	http.HandleFunc("/api/purchase-materials/delete", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.DeletePurchaseMaterial))
 	http.HandleFunc("/api/purchase-materials/upload", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.UploadPurchaseReceipt))
 
 	// API 路由 - 原材料（列表/详情/预警需登录，写操作需 material:manage 权限）
-	http.HandleFunc("/api/raw-materials", handlers.RequireAuth(handlers.ListRawMaterials))
-	http.HandleFunc("/api/raw-materials/get", handlers.RequireAuth(handlers.GetRawMaterial))
+	http.HandleFunc("/api/raw-materials", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.ListRawMaterials))
+	http.HandleFunc("/api/raw-materials/get", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.GetRawMaterial))
 	http.HandleFunc("/api/raw-materials/add", handlers.RequirePermission(handlers.PermMaterialManage, handlers.AddRawMaterial))
 	http.HandleFunc("/api/raw-materials/update", handlers.RequirePermission(handlers.PermMaterialManage, handlers.UpdateRawMaterial))
 	http.HandleFunc("/api/raw-materials/delete", handlers.RequirePermission(handlers.PermMaterialManage, handlers.DeleteRawMaterial))
 	http.HandleFunc("/api/raw-materials/inbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialInbound))
 	http.HandleFunc("/api/raw-materials/outbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialOutbound))
-	http.HandleFunc("/api/raw-materials/low-stock", handlers.RequireAuth(handlers.GetLowStockRawMaterials))
+	http.HandleFunc("/api/raw-materials/low-stock", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.GetLowStockRawMaterials))
 
 	// API 路由 - 用户管理（仅管理员）
 	http.HandleFunc("/api/users", handlers.RequirePermission(handlers.PermUserManage, handlers.ListUsers))
 	http.HandleFunc("/api/users/add", handlers.RequirePermission(handlers.PermUserManage, handlers.AddUser))
 	http.HandleFunc("/api/users/delete", handlers.RequirePermission(handlers.PermUserManage, handlers.DeleteUser))
 	http.HandleFunc("/api/users/reset-password", handlers.RequirePermission(handlers.PermUserManage, handlers.ResetPassword))
+	http.HandleFunc("/api/users/permissions", handlers.RequirePermission(handlers.PermUserManage, handlers.SaveUserPermissions))
 
 	os.MkdirAll("uploads/payment_receipts", 0755)
 	log.Println("Server started at :6688")

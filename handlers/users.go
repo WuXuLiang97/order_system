@@ -19,6 +19,14 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
+	for i := range users {
+		ps, err := models.GetUserPermissions(users[i].ID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		users[i].Permissions = ps
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(users)
 }
@@ -30,10 +38,11 @@ func AddUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Username    string `json:"username"`
-		Password    string `json:"password"`
-		DisplayName string `json:"display_name"`
-		Role        string `json:"role"`
+		Username    string   `json:"username"`
+		Password    string   `json:"password"`
+		DisplayName string   `json:"display_name"`
+		Role        string   `json:"role"`
+		Permissions []string `json:"permissions"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSONError(w, http.StatusBadRequest, "请求格式错误")
@@ -68,7 +77,17 @@ func AddUser(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusInternalServerError, "密码加密失败")
 		return
 	}
-	id, err := models.CreateUser(req.Username, hash, req.DisplayName, req.Role)
+	var id int64
+	if req.Role == models.RoleAdmin {
+		id, err = models.CreateUser(req.Username, hash, req.DisplayName, req.Role)
+	} else {
+		perms, perr := NormalizeGrantedPermissions(req.Permissions)
+		if perr != nil {
+			writeJSONError(w, http.StatusBadRequest, perr.Error())
+			return
+		}
+		id, err = models.CreateUserWithPermissions(req.Username, hash, req.DisplayName, req.Role, perms)
+	}
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -150,4 +169,47 @@ func ResetPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "密码重置成功"})
+}
+
+// SaveUserPermissions 保存指定普通用户的权限（管理员不受影响）。
+func SaveUserPermissions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPut && r.Method != http.MethodPost {
+		writeJSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	var req struct {
+		UserID      int      `json:"user_id"`
+		Permissions []string `json:"permissions"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, "请求格式错误")
+		return
+	}
+	if req.UserID <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "无效的用户ID")
+		return
+	}
+	target, err := models.GetUserByID(req.UserID)
+	if err == models.ErrUserNotFound {
+		writeJSONError(w, http.StatusNotFound, "用户不存在")
+		return
+	} else if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if target.IsAdmin() {
+		writeJSONError(w, http.StatusBadRequest, "管理员拥有全部权限，无需也不可修改授权")
+		return
+	}
+	perms, perr := NormalizeGrantedPermissions(req.Permissions)
+	if perr != nil {
+		writeJSONError(w, http.StatusBadRequest, perr.Error())
+		return
+	}
+	if err := models.SetUserPermissions(target.ID, perms); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": "授权保存成功"})
 }

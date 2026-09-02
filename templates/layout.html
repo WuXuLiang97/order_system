@@ -79,21 +79,31 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/"><i class="bi bi-house"></i> 系统首页</a>
                     </li>
+                    {{if .Can "order:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/orders"><i class="bi bi-cart"></i> 订单管理</a>
                     </li>
+                    {{end}}
+                    {{if .Can "product:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/products"><i class="bi bi-box"></i> 库存管理</a>
                     </li>
+                    {{end}}
+                    {{if .Can "material:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/raw-materials"><i class="bi bi-cubes"></i> 原材料管理</a>
                     </li>
+                    {{end}}
+                    {{if .Can "purchase:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/purchase-materials"><i class="bi bi-cart-plus"></i> 采购物料管理</a>
                     </li>
+                    {{end}}
+                    {{if .Can "customer:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/customers"><i class="bi bi-people"></i> 客户管理</a>
                     </li>
+                    {{end}}
                     {{if .Can "user:manage"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/users"><i class="bi bi-people"></i> 用户管理</a>

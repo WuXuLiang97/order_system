@@ -22,6 +22,9 @@ func InitDB(dataSourceName string) {
 	if err = EnsureUsersTable(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureUserPermissions(); err != nil {
+		log.Fatal(err)
+	}
 	if err = ensureProductAndMaterialColumns(); err != nil {
 		log.Fatal(err)
 	}

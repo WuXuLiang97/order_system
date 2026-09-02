@@ -17,6 +17,7 @@
                                 <th>用户名</th>
                                 <th>显示名称</th>
                                 <th>角色</th>
+                                <th>权限</th>
                                 <th>创建时间</th>
                                 <th>操作</th>
                             </tr>
@@ -26,6 +27,9 @@
                         </tbody>
                     </table>
                 </div>
+                <div class="text-muted small mt-1">
+                    说明：勾选“编辑”会自动同时勾选该模块“查看”；未勾选任何模块的普通用户登录后将看不到任何业务模块。管理员拥有全部权限，无需授权。
+                </div>
             </div>
         </div>
     </div>
@@ -33,7 +37,7 @@
 
 <!-- 添加用户模态框 -->
 <div class="modal fade" id="addUserModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">添加用户</h5>
@@ -41,30 +45,57 @@
             </div>
             <div class="modal-body">
                 <form id="addUserForm">
-                    <div class="mb-3">
-                        <label class="form-label">用户名 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="addUsername" required>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="addUsername" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">显示名称</label>
+                            <input type="text" class="form-control" id="addDisplayName" placeholder="可选">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">密码 <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="addPassword" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">角色 <span class="text-danger">*</span></label>
+                            <select class="form-select" id="addRole">
+                                <option value="user">普通用户（按下方授权）</option>
+                                <option value="admin">管理员（全部权限）</option>
+                            </select>
+                        </div>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label">显示名称</label>
-                        <input type="text" class="form-control" id="addDisplayName" placeholder="可选">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">密码 <span class="text-danger">*</span></label>
-                        <input type="password" class="form-control" id="addPassword" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">角色 <span class="text-danger">*</span></label>
-                        <select class="form-select" id="addRole">
-                            <option value="user">普通用户（仅查看）</option>
-                            <option value="admin">管理员（全部权限）</option>
-                        </select>
+                    <div id="addPermSection">
+                        <label class="form-label">模块授权（普通用户）</label>
+                        <div id="addPermRows"></div>
                     </div>
                 </form>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-primary" onclick="addUser()">确认添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 权限授权模态框 -->
+<div class="modal fade" id="authPermModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">权限授权 - <span id="authUserLabel"></span></h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="authUserId">
+                <div id="authPermRows"></div>
+                <div class="text-muted small mt-1">勾选“编辑”会自动同时勾选该模块“查看”；保存后立即生效。</div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveAuthPerm()">保存授权</button>
             </div>
         </div>
     </div>
@@ -99,23 +130,93 @@
 
 {{define "scripts"}}
 <script>
+var PERM_MODULES = [
+    { key: 'order', name: '订单管理', view: 'order:view', edits: ['order:create', 'order:update', 'order:delete'] },
+    { key: 'product', name: '库存管理', view: 'product:view', edits: ['product:manage'] },
+    { key: 'material', name: '原材料管理', view: 'material:view', edits: ['material:manage'] },
+    { key: 'purchase', name: '采购物料管理', view: 'purchase:view', edits: ['purchase:manage'] },
+    { key: 'customer', name: '客户管理', view: 'customer:view', edits: ['customer:manage'] }
+];
+
+function moduleRowsHtml(prefix, perms) {
+    var has = {};
+    (perms || []).forEach(function (p) { has[p] = true; });
+    var rows = '';
+    PERM_MODULES.forEach(function (m) {
+        var view = !!has[m.view];
+        var edit = m.edits.some(function (p) { return has[p]; });
+        rows += `<tr>
+            <td>${m.name}</td>
+            <td><input type="checkbox" id="${prefix}_view_${m.key}" ${view ? 'checked' : ''}></td>
+            <td><input type="checkbox" class="perm-edit" id="${prefix}_edit_${m.key}" data-prefix="${prefix}" data-module="${m.key}" ${edit ? 'checked' : ''}></td>
+        </tr>`;
+    });
+    return `<table class="table table-sm table-bordered align-middle mb-0"><thead><tr><th>模块</th><th style="width:90px">查看</th><th style="width:90px">编辑</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+function renderPermSection(containerId, prefix, perms) {
+    $('#' + containerId).html(moduleRowsHtml(prefix, perms));
+}
+
+function collectPerms(prefix) {
+    var list = [];
+    PERM_MODULES.forEach(function (m) {
+        var view = $('#' + prefix + '_view_' + m.key).prop('checked');
+        var edit = $('#' + prefix + '_edit_' + m.key).prop('checked');
+        if (edit) {
+            list.push(m.view);
+            m.edits.forEach(function (p) { list.push(p); });
+        } else if (view) {
+            list.push(m.view);
+        }
+    });
+    return list;
+}
+
+function permSummary(perms) {
+    if (!perms || !perms.length) return '<span class="text-muted">—</span>';
+    var has = {};
+    perms.forEach(function (p) { has[p] = true; });
+    var parts = [];
+    PERM_MODULES.forEach(function (m) {
+        if (has[m.view]) {
+            var edit = m.edits.some(function (p) { return has[p]; });
+            parts.push(m.name + (edit ? '·编辑' : '·查看'));
+        }
+    });
+    return parts.join('、') || '<span class="text-muted">—</span>';
+}
+
+$(document).on('change', '.perm-edit', function () {
+    if ($(this).prop('checked')) {
+        $('#' + $(this).data('prefix') + '_view_' + $(this).data('module')).prop('checked', true);
+    }
+});
+
 function loadUsers() {
     $.ajax({
         url: '/api/users',
         method: 'GET',
         success: function (data) {
+            window.__USER_LIST__ = data || [];
             var tbody = $('#userTableBody');
             tbody.empty();
             if (!data || data.length === 0) {
-                tbody.append('<tr><td colspan="6" class="text-center text-muted">暂无用户</td></tr>');
+                tbody.append('<tr><td colspan="7" class="text-center text-muted">暂无用户</td></tr>');
                 return;
             }
             var currentId = window.CURRENT_USER ? window.CURRENT_USER.id : null;
             data.forEach(function (u) {
-                var roleLabel = u.role === 'admin'
+                var isAdmin = u.role === 'admin';
+                var roleLabel = isAdmin
                     ? '<span class="badge bg-danger">管理员</span>'
                     : '<span class="badge bg-secondary">普通用户</span>';
-                var actions = `<button class="btn btn-warning btn-sm me-1" onclick="showResetPwd(${u.id}, '${u.username}')">重置密码</button>`;
+                var permCell = isAdmin ? '<span class="badge bg-danger">全部权限</span>' : permSummary(u.permissions);
+                var actions = '';
+                if (!isAdmin) {
+                    actions += `<button class="btn btn-info btn-sm me-1" onclick="showAuthPerm(${u.id}, '${u.username}', this)">授权</button>`;
+                }
+                actions += `<button class="btn btn-warning btn-sm me-1" onclick="showResetPwd(${u.id}, '${u.username}')">重置密码</button>`;
                 if (currentId !== u.id) {
                     actions += `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.username}')">删除</button>`;
                 } else {
@@ -127,6 +228,7 @@ function loadUsers() {
                         <td><strong>${u.username}</strong></td>
                         <td>${u.display_name || '-'}</td>
                         <td>${roleLabel}</td>
+                        <td>${permCell}</td>
                         <td>${new Date(u.created_at).toLocaleString()}</td>
                         <td>${actions}</td>
                     </tr>
@@ -140,6 +242,36 @@ function loadUsers() {
     });
 }
 
+function showAuthPerm(id, username) {
+    var users = window.__USER_LIST__ || [];
+    var u = users.find(function (x) { return x.id === id; }) || { permissions: [] };
+    $('#authUserId').val(id);
+    $('#authUserLabel').text(username);
+    renderPermSection('authPermRows', 'auth', u.permissions || []);
+    $('#authPermModal').modal('show');
+}
+
+function saveAuthPerm() {
+    var id = parseInt($('#authUserId').val());
+    if (!id) { alert('参数错误'); return; }
+    $.ajax({
+        url: '/api/users/permissions',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ user_id: id, permissions: collectPerms('auth') }),
+        success: function (res) {
+            alert(res.message || '授权保存成功');
+            $('#authPermModal').modal('hide');
+            loadUsers();
+        },
+        error: function (xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('保存失败: ' + msg);
+        }
+    });
+}
+
 function addUser() {
     var username = $('#addUsername').val().trim();
     var password = $('#addPassword').val();
@@ -149,11 +281,12 @@ function addUser() {
         alert('请输入用户名和密码');
         return;
     }
+    var permissions = role === 'admin' ? [] : collectPerms('add');
     $.ajax({
         url: '/api/users',
         method: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({ username: username, password: password, display_name: displayName, role: role }),
+        data: JSON.stringify({ username: username, password: password, display_name: displayName, role: role, permissions: permissions }),
         success: function (res) {
             alert(res.message || '添加成功');
             $('#addUserModal').modal('hide');
@@ -215,6 +348,16 @@ function deleteUser(id, username) {
         }
     });
 }
+
+$('#addUserModal').on('show.bs.modal', function () {
+    $('#addRole').val('user');
+    $('#addPermSection').show();
+    renderPermSection('addPermRows', 'add', []);
+});
+
+$('#addRole').on('change', function () {
+    $('#addPermSection').toggle($(this).val() === 'user');
+});
 
 $(document).ready(function () {
     loadUsers();

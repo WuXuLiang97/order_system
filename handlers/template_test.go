@@ -22,11 +22,24 @@ func makePageData(user *models.User) PageData {
 			userJSON = template.JS(b)
 		}
 	}
-	permBytes, _ := json.Marshal(PermissionsFor(user))
+	perms := map[string]bool{}
+	if user != nil {
+		if user.IsAdmin() {
+			for _, p := range allPermissions {
+				perms[p] = true
+			}
+		} else {
+			// 测试模拟已迁移的普通用户：默认拥有各模块查看权限
+			for _, g := range grantableGroups {
+				perms[g[0]] = true
+			}
+		}
+	}
+	permBytes, _ := json.Marshal(perms)
 	return PageData{
 		User:      user,
 		UserJSON:  userJSON,
-		Perms:     PermissionsFor(user),
+		Perms:     perms,
 		PermsJSON: template.JS(permBytes),
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"html/template"
 	"net/http"
 	"order-system/models"
@@ -13,7 +14,18 @@ import (
 )
 
 // ============================================
-// 权限定义：普通用户仅拥有查看权限，管理员拥有全部权限
+// 权限定义与判断：
+//   - admin 角色拥有全部权限；
+//   - 普通用户按 user_permissions 表按用户授权（勾选“编辑”会自动补上该模块“查看”）。
+//
+// 用户管理可授予的模块（查看 / 编辑）：
+//
+//	订单管理: order:view / order:create+order:update+order:delete
+//	库存管理: product:view / product:manage
+//	原材料管理: material:view / material:manage
+//	采购物料管理: purchase:view / purchase:manage
+//	客户管理: customer:view / customer:manage
+//
 // ============================================
 const (
 	PermOrderView      = "order:view"
@@ -31,22 +43,62 @@ const (
 	PermUserManage     = "user:manage"
 )
 
-var rolePermissions = map[string][]string{
-	models.RoleAdmin: {
-		PermOrderView, PermOrderCreate, PermOrderUpdate, PermOrderDelete,
-		PermProductView, PermProductManage,
-		PermMaterialView, PermMaterialManage,
-		PermPurchaseView, PermPurchaseManage,
-		PermCustomerView, PermCustomerManage,
-		PermUserManage,
-	},
-	models.RoleUser: {
-		PermOrderView,
-		PermProductView,
-		PermMaterialView,
-		PermPurchaseView,
-		PermCustomerView,
-	},
+// allPermissions 系统全部权限（admin 拥有，普通用户按授权表）。
+var allPermissions = []string{
+	PermOrderView, PermOrderCreate, PermOrderUpdate, PermOrderDelete,
+	PermProductView, PermProductManage,
+	PermMaterialView, PermMaterialManage,
+	PermPurchaseView, PermPurchaseManage,
+	PermCustomerView, PermCustomerManage,
+	PermUserManage,
+}
+
+// grantableGroups 用户管理中可逐用户授予的权限分组，每组第 0 个为该模块“查看”权限。
+var grantableGroups = [][]string{
+	{PermOrderView, PermOrderCreate, PermOrderUpdate, PermOrderDelete},
+	{PermProductView, PermProductManage},
+	{PermMaterialView, PermMaterialManage},
+	{PermPurchaseView, PermPurchaseManage},
+	{PermCustomerView, PermCustomerManage},
+}
+
+// NormalizeGrantedPermissions 校验并规整授权列表：只允许授予 grantableGroups 内的权限；
+// 组内存在任意非“查看”权限时自动补上该组“查看”权限（编辑隐含查看）。返回顺序稳定。
+func NormalizeGrantedPermissions(perms []string) ([]string, error) {
+	allowed := map[string]bool{}
+	for _, g := range grantableGroups {
+		for _, p := range g {
+			allowed[p] = true
+		}
+	}
+	set := map[string]bool{}
+	for _, p := range perms {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		if !allowed[p] {
+			return nil, fmt.Errorf("不允许的权限: %s", p)
+		}
+		set[p] = true
+	}
+	for _, g := range grantableGroups {
+		for _, p := range g[1:] {
+			if set[p] {
+				set[g[0]] = true
+				break
+			}
+		}
+	}
+	var result []string
+	for _, g := range grantableGroups {
+		for _, p := range g {
+			if set[p] {
+				result = append(result, p)
+			}
+		}
+	}
+	return result, nil
 }
 
 // PermissionsFor 返回用户拥有的权限集合
@@ -55,8 +107,16 @@ func PermissionsFor(u *models.User) map[string]bool {
 	if u == nil {
 		return perms
 	}
-	for _, p := range rolePermissions[u.Role] {
-		perms[p] = true
+	if u.Role == models.RoleAdmin {
+		for _, p := range allPermissions {
+			perms[p] = true
+		}
+		return perms
+	}
+	if ps, err := models.GetUserPermissions(u.ID); err == nil {
+		for _, p := range ps {
+			perms[p] = true
+		}
 	}
 	return perms
 }
@@ -66,12 +126,7 @@ func HasPermission(u *models.User, perm string) bool {
 	if u == nil {
 		return false
 	}
-	for _, p := range rolePermissions[u.Role] {
-		if p == perm {
-			return true
-		}
-	}
-	return false
+	return PermissionsFor(u)[perm]
 }
 
 // ============================================
@@ -201,6 +256,39 @@ func RequirePermission(perm string, next http.HandlerFunc) http.HandlerFunc {
 	}
 }
 
+// RequireAnyPermission 要求登录且拥有所列权限中的任意一个（用于跨模块共享引用的只读接口）。
+func RequireAnyPermission(perms ...string) func(http.HandlerFunc) http.HandlerFunc {
+	return func(next http.HandlerFunc) http.HandlerFunc {
+		return func(w http.ResponseWriter, r *http.Request) {
+			user := CurrentUser(r)
+			if user == nil {
+				if isAPIRequest(r) {
+					writeJSONError(w, http.StatusUnauthorized, "未登录或会话已过期，请先登录")
+				} else {
+					http.Redirect(w, r, "/login", http.StatusFound)
+				}
+				return
+			}
+			ok := false
+			for _, p := range perms {
+				if HasPermission(user, p) {
+					ok = true
+					break
+				}
+			}
+			if !ok {
+				if isAPIRequest(r) {
+					writeJSONError(w, http.StatusForbidden, "没有权限执行该操作")
+				} else {
+					http.Error(w, "没有权限访问该页面", http.StatusForbidden)
+				}
+				return
+			}
+			next(w, r)
+		}
+	}
+}
+
 // ============================================
 // 页面数据：模板中可用 .User / .Can / .PermsJSON / .UserJSON
 // ============================================
@@ -217,6 +305,19 @@ func (p PageData) Can(perm string) bool {
 		return false
 	}
 	return p.Perms[perm]
+}
+
+// CanAny 判断当前用户是否拥有所列权限中的任意一个。
+func (p PageData) CanAny(perms ...string) bool {
+	if p.Perms == nil {
+		return false
+	}
+	for _, perm := range perms {
+		if p.Perms[perm] {
+			return true
+		}
+	}
+	return false
 }
 
 // PageDataFor 根据当前请求构造页面数据
