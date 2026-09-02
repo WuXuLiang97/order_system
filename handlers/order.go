@@ -349,7 +349,7 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DeleteOrder 删除订单
+// DeleteOrder 删除订单（先归还创建订单时扣减的成品库存和原材料库存，再删除订单及明细）
 func DeleteOrder(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -362,14 +362,102 @@ func DeleteOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_, err = models.DB.Exec("DELETE FROM orders WHERE id = ?", id)
+	tx, err := models.DB.Begin()
 	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	// 锁定订单行并读取当前状态，避免并发删除/取消时库存被重复归还。
+	var status int
+	err = tx.QueryRow("SELECT status FROM orders WHERE id = ? FOR UPDATE", id).Scan(&status)
+	if err == sql.ErrNoRows {
+		http.Error(w, "Order not found", http.StatusNotFound)
+		return
+	}
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	// 已取消（status=4）的订单在取消时已归还过库存，删除时不再重复归还。
+	if status != 4 {
+		if err := restoreOrderStock(tx, id); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 删除订单明细与订单主记录。
+	if _, err := tx.Exec("DELETE FROM order_items WHERE order_id = ?", id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("DELETE FROM orders WHERE id = ?", id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{"message": "Order deleted successfully"})
+}
+
+// restoreOrderStock 归还指定订单扣减的成品库存，并按当前 BOM 归还对应原材料的库存。
+// 与创建订单时的扣减逻辑保持一致；供删除订单和取消订单共用。
+func restoreOrderStock(tx *sql.Tx, orderID int) error {
+	type orderItem struct {
+		ProductID int
+		Quantity  int
+	}
+
+	rows, err := tx.Query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", orderID)
+	if err != nil {
+		return fmt.Errorf("failed to load order items: %v", err)
+	}
+
+	var items []orderItem
+	for rows.Next() {
+		var it orderItem
+		if err := rows.Scan(&it.ProductID, &it.Quantity); err != nil {
+			rows.Close()
+			return fmt.Errorf("failed to read order item: %v", err)
+		}
+		items = append(items, it)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return fmt.Errorf("failed to iterate order items: %v", err)
+	}
+
+	rawMaterialReturns := make(map[int]float64)
+	for _, it := range items {
+		// 归还成品库存。
+		if _, err := tx.Exec("UPDATE products SET stock = stock + ? WHERE id = ?", it.Quantity, it.ProductID); err != nil {
+			return fmt.Errorf("failed to restore product ID %d: %v", it.ProductID, err)
+		}
+
+		// 归还该产品对应 BOM 的原材料库存。
+		boms, err := models.GetBOMByProduct(it.ProductID)
+		if err != nil {
+			return fmt.Errorf("failed to load BOM for product ID %d: %v", it.ProductID, err)
+		}
+		for _, bom := range boms {
+			rawMaterialReturns[bom.RawMaterialID] += bom.Quantity * float64(it.Quantity)
+		}
+	}
+
+	for rawMatID, qty := range rawMaterialReturns {
+		if _, err := tx.Exec("UPDATE raw_materials SET stock = stock + ? WHERE id = ?", qty, rawMatID); err != nil {
+			return fmt.Errorf("failed to restore raw material ID %d: %v", rawMatID, err)
+		}
+	}
+	return nil
 }
 
 // UpdateOrder 更新订单信息（不修改明细）

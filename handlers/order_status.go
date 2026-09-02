@@ -3,7 +3,6 @@ package handlers
 import (
 	"database/sql"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"order-system/models"
 )
@@ -51,59 +50,9 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 
 	// 取消订单且订单此前不是已取消状态时，归还成品和原材料库存。
 	if req.Status == 4 && currentStatus != 4 {
-		type orderItem struct {
-			ProductID int
-			Quantity  int
-		}
-
-		rows, err := tx.Query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", req.ID)
-		if err != nil {
+		if err := restoreOrderStock(tx, req.ID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
-		}
-
-		var items []orderItem
-		for rows.Next() {
-			var it orderItem
-			if err := rows.Scan(&it.ProductID, &it.Quantity); err != nil {
-				rows.Close()
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
-			}
-			items = append(items, it)
-		}
-		rows.Close()
-		if err := rows.Err(); err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
-		rawMaterialReturns := make(map[int]float64)
-		for _, it := range items {
-			// 归还成品库存。
-			_, err = tx.Exec("UPDATE products SET stock = stock + ? WHERE id = ?", it.Quantity, it.ProductID)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to restore product ID %d: %v", it.ProductID, err), http.StatusInternalServerError)
-				return
-			}
-
-			// 归还该产品对应 BOM 的原材料库存。
-			boms, err := models.GetBOMByProduct(it.ProductID)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to load BOM for product ID %d: %v", it.ProductID, err), http.StatusInternalServerError)
-				return
-			}
-			for _, bom := range boms {
-				rawMaterialReturns[bom.RawMaterialID] += bom.Quantity * float64(it.Quantity)
-			}
-		}
-
-		for rawMatID, qty := range rawMaterialReturns {
-			_, err = tx.Exec("UPDATE raw_materials SET stock = stock + ? WHERE id = ?", qty, rawMatID)
-			if err != nil {
-				http.Error(w, fmt.Sprintf("Failed to restore raw material ID %d: %v", rawMatID, err), http.StatusInternalServerError)
-				return
-			}
 		}
 	}
 
