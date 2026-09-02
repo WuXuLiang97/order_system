@@ -138,14 +138,19 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	freightRecovery := orderOptionDefault(req.FreightRecovery, "可回收")
 	transportMethod := orderOptionDefault(req.TransportMethod, "物流")
 
+	var createdBy interface{} = nil
+	if u := CurrentUser(r); u != nil {
+		createdBy = u.ID
+	}
+
 	result, err := tx.Exec(`
         INSERT INTO orders
         (order_no, customer_name, region, customer_address, customer_phone,
          order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-         prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method, remark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+         prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method, remark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
     `, orderNo, req.CustomerName, req.Region, req.CustomerAddress, req.CustomerPhone,
-		orderDate, expectedShippingDate, customerRequiredDate, logisticsDays, total, req.PaymentStatus, preparedBy, paymentSettlement,
+		orderDate, expectedShippingDate, customerRequiredDate, logisticsDays, total, req.PaymentStatus, preparedBy, createdBy, paymentSettlement,
 		freightPayment, freightRecovery, transportMethod, req.Remark)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -226,11 +231,14 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	statusStr := r.URL.Query().Get("status")
 	keyword := r.URL.Query().Get("keyword")
+	user := CurrentUser(r)
+	perms := PermissionsFor(user)
+	viewAll := perms[PermOrderViewAll] || perms[PermOrderEditAll]
 
 	query := `
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-               prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method,
+               prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
                created_at, COALESCE(remark, '') AS remark
         FROM orders
         WHERE 1=1
@@ -251,6 +259,15 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 		args = append(args, like, like, like)
 	}
 
+	if !viewAll {
+		if user != nil {
+			query += " AND created_by_user_id = ?"
+			args = append(args, user.ID)
+		} else {
+			query += " AND 1=0"
+		}
+	}
+
 	query += " ORDER BY id DESC"
 
 	rows, err := models.DB.Query(query, args...)
@@ -268,9 +285,10 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 		var deliveryDate sql.NullTime
 		var requiredDate sql.NullTime
 		var logisticsDays int
+		var createdByUser sql.NullInt64
 		err := rows.Scan(&o.ID, &o.OrderNo, &o.CustomerName, &o.Region, &o.CustomerAddress, &o.CustomerPhone,
 			&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &o.TotalAmount, &o.Status, &o.PaymentStatus,
-			&o.PreparedBy, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod, &o.CreatedAt, &o.Remark)
+			&o.PreparedBy, &createdByUser, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod, &o.CreatedAt, &o.Remark)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -285,6 +303,10 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 			o.CustomerRequiredDate = &requiredDate.Time
 		}
 		o.LogisticsDays = logisticsDays
+		if createdByUser.Valid {
+			uid := int(createdByUser.Int64)
+			o.CreatedByUserID = &uid
+		}
 		computeOrderWarning(&o, time.Now())
 		if deliveryDate.Valid {
 			o.DeliveryDate = &deliveryDate.Time
@@ -346,15 +368,17 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 	var deliveryDate sql.NullTime
 	var requiredDate sql.NullTime
 	var logisticsDays int
+	var createdByUser sql.NullInt64
+	user := CurrentUser(r)
 	err = models.DB.QueryRow(`
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-               prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method,
+               prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
                created_at, COALESCE(remark, '') AS remark
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
 		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
-		&order.PreparedBy, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
+		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -369,7 +393,15 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 		order.CustomerRequiredDate = &requiredDate.Time
 	}
 	order.LogisticsDays = logisticsDays
+	if createdByUser.Valid {
+		uid := int(createdByUser.Int64)
+		order.CreatedByUserID = &uid
+	}
 	computeOrderWarning(&order, time.Now())
+	if !canViewOrder(user, order.CreatedByUserID) {
+		http.Error(w, "Order not found", http.StatusNotFound)
+		return
+	}
 	if deliveryDate.Valid {
 		order.DeliveryDate = &deliveryDate.Time
 	}
@@ -630,10 +662,17 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	freightRecovery := orderOptionDefault(req.FreightRecovery, "可回收")
 	transportMethod := orderOptionDefault(req.TransportMethod, "物流")
 
-	var exists bool
-	err = models.DB.QueryRow("SELECT EXISTS(SELECT 1 FROM orders WHERE id = ?)", req.ID).Scan(&exists)
-	if err != nil || !exists {
+	var ownerID sql.NullInt64
+	err = models.DB.QueryRow("SELECT created_by_user_id FROM orders WHERE id = ?", req.ID).Scan(&ownerID)
+	if err == sql.ErrNoRows {
 		http.Error(w, "Order not found", http.StatusNotFound)
+		return
+	} else if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !canEditOrder(CurrentUser(r), nullIntPtr(ownerID)) {
+		writeJSONError(w, http.StatusForbidden, "没有权限修改该订单")
 		return
 	}
 
@@ -682,15 +721,17 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 	var deliveryDate sql.NullTime
 	var requiredDate sql.NullTime
 	var logisticsDays int
+	var createdByUser sql.NullInt64
+	user := CurrentUser(r)
 	err = models.DB.QueryRow(`
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-               prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method,
+               prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
                created_at, COALESCE(remark, '') AS remark
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
 		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
-		&order.PreparedBy, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
+		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -705,7 +746,15 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 		order.CustomerRequiredDate = &requiredDate.Time
 	}
 	order.LogisticsDays = logisticsDays
+	if createdByUser.Valid {
+		uid := int(createdByUser.Int64)
+		order.CreatedByUserID = &uid
+	}
 	computeOrderWarning(&order, time.Now())
+	if !canViewOrder(user, order.CreatedByUserID) {
+		http.Error(w, "Order not found", http.StatusNotFound)
+		return
+	}
 	if deliveryDate.Valid {
 		order.DeliveryDate = &deliveryDate.Time
 	}
@@ -831,4 +880,13 @@ func calendarDay(t time.Time) time.Time {
 // daysBetween 返回 a - b 相差的日历天数。
 func daysBetween(a, b time.Time) int {
 	return int(calendarDay(a).Sub(calendarDay(b)).Hours() / 24)
+}
+
+// nullIntPtr 将 sql.NullInt64 转为 *int（空值返回 nil）。
+func nullIntPtr(n sql.NullInt64) *int {
+	if !n.Valid {
+		return nil
+	}
+	v := int(n.Int64)
+	return &v
 }

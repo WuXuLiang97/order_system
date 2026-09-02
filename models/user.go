@@ -256,7 +256,10 @@ func EnsureUserPermissions() error {
     `); err != nil {
 		return err
 	}
-	return seedDefaultViewPermissions()
+	if err := seedDefaultViewPermissions(); err != nil {
+		return err
+	}
+	return migrateOrderPermissionsV2()
 }
 
 // seedDefaultViewPermissions 一次性迁移：给升级前已存在的普通用户补上原默认的模块查看权限。
@@ -281,7 +284,7 @@ func seedDefaultViewPermissions() error {
 	}
 
 	defaults := []string{
-		"order:view", "product:view", "material:view", "purchase:view", "customer:view",
+		"order:view_all", "product:view", "material:view", "purchase:view", "customer:view",
 	}
 	rows, err := DB.Query("SELECT id FROM users WHERE role <> 'admin'")
 	if err != nil {
@@ -342,4 +345,60 @@ func SetUserPermissions(userID int, perms []string) error {
 		}
 	}
 	return tx.Commit()
+}
+
+// migrateOrderPermissionsV2 将旧版订单权限迁移为新版“范围式”权限：
+//
+//	order:view -> order:view_all；order:create/update/delete（任一）-> order:edit_all。
+func migrateOrderPermissionsV2() error {
+	if _, err := DB.Exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            migration_name VARCHAR(100) PRIMARY KEY,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `); err != nil {
+		return err
+	}
+	var count int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE migration_name = 'order_permissions_v2'").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	rows, err := DB.Query("SELECT DISTINCT user_id FROM user_permissions WHERE permission IN ('order:create','order:update','order:delete')")
+	if err != nil {
+		return err
+	}
+	var editUserIDs []int
+	for rows.Next() {
+		var uid int
+		if err := rows.Scan(&uid); err != nil {
+			rows.Close()
+			return err
+		}
+		editUserIDs = append(editUserIDs, uid)
+	}
+	rows.Close()
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("DELETE FROM user_permissions WHERE permission IN ('order:create','order:update','order:delete')"); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("UPDATE user_permissions SET permission = 'order:view_all' WHERE permission = 'order:view'"); err != nil {
+		return err
+	}
+	for _, uid := range editUserIDs {
+		for _, p := range []string{"order:edit_all", "order:view_all"} {
+			if _, err := DB.Exec("INSERT IGNORE INTO user_permissions (user_id, permission) VALUES (?, ?)", uid, p); err != nil {
+				return err
+			}
+		}
+	}
+	if _, err := DB.Exec("INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('order_permissions_v2')"); err != nil {
+		return err
+	}
+	return nil
 }

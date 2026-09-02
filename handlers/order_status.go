@@ -46,13 +46,18 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	// 锁定订单行并读取当前状态；在同一事务内根据“当前状态 -> 目标状态”决定库存调整，
 	// 可避免并发取消/恢复时库存被重复归还或重复扣减。
 	var currentStatus int
-	err = tx.QueryRow("SELECT status FROM orders WHERE id = ? FOR UPDATE", req.ID).Scan(&currentStatus)
+	var ownerID sql.NullInt64
+	err = tx.QueryRow("SELECT status, created_by_user_id FROM orders WHERE id = ? FOR UPDATE", req.ID).Scan(&currentStatus, &ownerID)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !canEditOrder(CurrentUser(r), nullIntPtr(ownerID)) {
+		writeJSONError(w, http.StatusForbidden, "没有权限修改该订单状态")
 		return
 	}
 

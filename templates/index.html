@@ -1,7 +1,7 @@
 {{define "content"}}
-{{if .CanAny "order:view" "product:view" "material:view" "purchase:view" "customer:view"}}
+{{if .CanAny "order:view_all" "order:view_own" "product:view" "material:view" "purchase:view" "customer:view"}}
 <div class="row home-card">
-    {{if .Can "order:view"}}
+    {{if .CanAny "order:view_all" "order:view_own"}}
     <div class="col-md-4">
         <div class="card bg-info text-white mb-3">
             <div class="card-body">

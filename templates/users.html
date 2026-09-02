@@ -131,18 +131,49 @@
 {{define "scripts"}}
 <script>
 var PERM_MODULES = [
-    { key: 'order', name: '订单管理', view: 'order:view', edits: ['order:create', 'order:update', 'order:delete'] },
+    { key: 'order', name: '订单管理', select: true },
     { key: 'product', name: '库存管理', view: 'product:view', edits: ['product:manage'] },
     { key: 'material', name: '原材料管理', view: 'material:view', edits: ['material:manage'] },
     { key: 'purchase', name: '采购物料管理', view: 'purchase:view', edits: ['purchase:manage'] },
     { key: 'customer', name: '客户管理', view: 'customer:view', edits: ['customer:manage'] }
 ];
 
+// 订单管理授权档位（范围式：查看范围 x 编辑范围）
+var ORDER_LEVELS = [
+    { label: '无权限', perms: [] },
+    { label: '查看自己创建的', perms: ['order:view_own'] },
+    { label: '查看全部', perms: ['order:view_all'] },
+    { label: '查看全部 + 编辑自己创建的', perms: ['order:view_all', 'order:edit_own'] },
+    { label: '编辑全部（含删除）', perms: ['order:edit_all'] }
+];
+
+function orderLevelOf(perms) {
+    var has = {};
+    (perms || []).forEach(function (p) { has[p] = true; });
+    if (has['order:edit_all']) return 4;
+    if (has['order:view_all'] && has['order:edit_own']) return 3;
+    if (has['order:view_all']) return 2;
+    if (has['order:view_own']) return 1;
+    return 0;
+}
+
 function moduleRowsHtml(prefix, perms) {
     var has = {};
     (perms || []).forEach(function (p) { has[p] = true; });
     var rows = '';
     PERM_MODULES.forEach(function (m) {
+        if (m.select) {
+            var idx = orderLevelOf(perms);
+            var opts = '';
+            ORDER_LEVELS.forEach(function (lv, i) {
+                opts += `<option value="${i}" ${i === idx ? 'selected' : ''}>${lv.label}</option>`;
+            });
+            rows += `<tr>
+                <td>${m.name}</td>
+                <td colspan="2"><select class="form-select perm-order-select" id="${prefix}_order_level">${opts}</select></td>
+            </tr>`;
+            return;
+        }
         var view = !!has[m.view];
         var edit = m.edits.some(function (p) { return has[p]; });
         rows += `<tr>
@@ -161,6 +192,12 @@ function renderPermSection(containerId, prefix, perms) {
 function collectPerms(prefix) {
     var list = [];
     PERM_MODULES.forEach(function (m) {
+        if (m.select) {
+            var lv = parseInt($('#' + prefix + '_order_level').val()) || 0;
+            var lvPerms = ORDER_LEVELS[lv] ? ORDER_LEVELS[lv].perms : [];
+            lvPerms.forEach(function (p) { list.push(p); });
+            return;
+        }
         var view = $('#' + prefix + '_view_' + m.key).prop('checked');
         var edit = $('#' + prefix + '_edit_' + m.key).prop('checked');
         if (edit) {
@@ -178,7 +215,10 @@ function permSummary(perms) {
     var has = {};
     perms.forEach(function (p) { has[p] = true; });
     var parts = [];
+    var oi = orderLevelOf(perms);
+    if (oi > 0) parts.push('订单管理·' + ORDER_LEVELS[oi].label);
     PERM_MODULES.forEach(function (m) {
+        if (m.select) return;
         if (has[m.view]) {
             var edit = m.edits.some(function (p) { return has[p]; });
             parts.push(m.name + (edit ? '·编辑' : '·查看'));
@@ -186,7 +226,6 @@ function permSummary(perms) {
     });
     return parts.join('、') || '<span class="text-muted">—</span>';
 }
-
 $(document).on('change', '.perm-edit', function () {
     if ($(this).prop('checked')) {
         $('#' + $(this).data('prefix') + '_view_' + $(this).data('module')).prop('checked', true);

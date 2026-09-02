@@ -18,6 +18,7 @@ type Order struct {
 	Status               int        `json:"status"`
 	PaymentStatus        int        `json:"payment_status"`
 	PreparedBy           string     `json:"prepared_by"`
+	CreatedByUserID      *int       `json:"created_by_user_id"`
 	PaymentSettlement    string     `json:"payment_settlement"`
 	FreightPayment       string     `json:"freight_payment"`
 	FreightRecovery      string     `json:"freight_recovery"`

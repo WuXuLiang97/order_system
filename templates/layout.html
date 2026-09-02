@@ -79,7 +79,7 @@
                     <li class="nav-item">
                         <a class="nav-link" href="/"><i class="bi bi-house"></i> 系统首页</a>
                     </li>
-                    {{if .Can "order:view"}}
+                    {{if .CanAny "order:view_all" "order:view_own"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/orders"><i class="bi bi-cart"></i> 订单管理</a>
                     </li>

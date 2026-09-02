@@ -94,6 +94,9 @@ func ensureOrderColumns() error {
 	if err := ensureColumn("orders", "logistics_days", "INT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
+	if err := ensureColumn("orders", "created_by_user_id", "INT NULL"); err != nil {
+		return err
+	}
 	if err := ensureColumn("orders", "payment_status", "TINYINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
@@ -135,6 +138,9 @@ func ensureOrderColumns() error {
 		return err
 	}
 
+	if err := backfillOrderCreatedBy(); err != nil {
+		return err
+	}
 	return migrateOrderStatusV2()
 }
 
@@ -166,6 +172,30 @@ func migrateOrderStatusV2() error {
 		return err
 	}
 	if _, err := DB.Exec("INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('order_status_v2')"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// backfillOrderCreatedBy 按制单人姓名/用户名回填订单创建人（created_by_user_id），一次性执行。
+func backfillOrderCreatedBy() error {
+	var count int
+	if err := DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE migration_name = 'order_created_by_backfill'").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err := DB.Exec(`
+        UPDATE orders o
+        LEFT JOIN users u ON u.username = o.prepared_by OR (u.display_name <> '' AND u.display_name = o.prepared_by)
+        SET o.created_by_user_id = u.id
+        WHERE o.created_by_user_id IS NULL
+    `)
+	if err != nil {
+		return err
+	}
+	if _, err := DB.Exec("INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('order_created_by_backfill')"); err != nil {
 		return err
 	}
 	return nil

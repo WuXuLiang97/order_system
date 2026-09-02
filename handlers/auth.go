@@ -16,22 +16,22 @@ import (
 // ============================================
 // 权限定义与判断：
 //   - admin 角色拥有全部权限；
-//   - 普通用户按 user_permissions 表按用户授权（勾选“编辑”会自动补上该模块“查看”）。
+//   - 普通用户按 user_permissions 表按用户授权。
 //
-// 用户管理可授予的模块（查看 / 编辑）：
+// 库存/原材料/采购/客户管理：查看 / 编辑（编辑=manage，隐含查看）。
+// 订单管理：按“查看范围 × 编辑范围”授权：
 //
-//	订单管理: order:view / order:create+order:update+order:delete
-//	库存管理: product:view / product:manage
-//	原材料管理: material:view / material:manage
-//	采购物料管理: purchase:view / purchase:manage
-//	客户管理: customer:view / customer:manage
+//	order:view_own   查看自己创建的
+//	order:view_all   查看全部
+//	order:edit_own   编辑自己创建的（含新建/修改/状态流转；不含删除）
+//	order:edit_all   编辑全部（含删除），隐含 view_all
 //
 // ============================================
 const (
-	PermOrderView      = "order:view"
-	PermOrderCreate    = "order:create"
-	PermOrderUpdate    = "order:update"
-	PermOrderDelete    = "order:delete"
+	PermOrderViewOwn   = "order:view_own"
+	PermOrderViewAll   = "order:view_all"
+	PermOrderEditOwn   = "order:edit_own"
+	PermOrderEditAll   = "order:edit_all"
 	PermProductView    = "product:view"
 	PermProductManage  = "product:manage"
 	PermMaterialView   = "material:view"
@@ -45,7 +45,7 @@ const (
 
 // allPermissions 系统全部权限（admin 拥有，普通用户按授权表）。
 var allPermissions = []string{
-	PermOrderView, PermOrderCreate, PermOrderUpdate, PermOrderDelete,
+	PermOrderViewOwn, PermOrderViewAll, PermOrderEditOwn, PermOrderEditAll,
 	PermProductView, PermProductManage,
 	PermMaterialView, PermMaterialManage,
 	PermPurchaseView, PermPurchaseManage,
@@ -53,9 +53,10 @@ var allPermissions = []string{
 	PermUserManage,
 }
 
-// grantableGroups 用户管理中可逐用户授予的权限分组，每组第 0 个为该模块“查看”权限。
+// grantableGroups 用户管理中可授予的权限分组，组内非首权限会自动补上首权限（编辑隐含查看）。
 var grantableGroups = [][]string{
-	{PermOrderView, PermOrderCreate, PermOrderUpdate, PermOrderDelete},
+	{PermOrderViewOwn, PermOrderEditOwn},
+	{PermOrderViewAll, PermOrderEditAll},
 	{PermProductView, PermProductManage},
 	{PermMaterialView, PermMaterialManage},
 	{PermPurchaseView, PermPurchaseManage},
@@ -127,6 +128,36 @@ func HasPermission(u *models.User, perm string) bool {
 		return false
 	}
 	return PermissionsFor(u)[perm]
+}
+
+// canViewOrder 判断用户能否查看指定订单（编辑全部/查看全部=true；仅本人需为创建人）。
+func canViewOrder(u *models.User, ownerID *int) bool {
+	if u == nil {
+		return false
+	}
+	perms := PermissionsFor(u)
+	if perms[PermOrderViewAll] || perms[PermOrderEditAll] {
+		return true
+	}
+	if perms[PermOrderViewOwn] || perms[PermOrderEditOwn] {
+		return ownerID != nil && *ownerID == u.ID
+	}
+	return false
+}
+
+// canEditOrder 判断用户能否编辑指定订单（编辑全部=true；编辑仅本人需为创建人，且不含删除）。
+func canEditOrder(u *models.User, ownerID *int) bool {
+	if u == nil {
+		return false
+	}
+	perms := PermissionsFor(u)
+	if perms[PermOrderEditAll] {
+		return true
+	}
+	if perms[PermOrderEditOwn] {
+		return ownerID != nil && *ownerID == u.ID
+	}
+	return false
 }
 
 // ============================================

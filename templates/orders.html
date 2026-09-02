@@ -4,7 +4,7 @@
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                 <h4 class="mb-0"><i class="bi bi-cart"></i> 订单管理</h4>
-                {{if .Can "order:create"}}
+                {{if .CanAny "order:edit_all" "order:edit_own"}}
                 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createOrderModal">
                     <i class="bi bi-plus-circle"></i> 创建订单
                 </button>
@@ -487,6 +487,11 @@ function loadOrders(status, keyword) {
                 <option value="4">已取消</option>
             `;
 
+
+            var P = window.PERMS || {};
+            var canEditAll = !!P['order:edit_all'];
+            var canEditOwn = !!P['order:edit_own'];
+            var isMine = function(order) { var cu = window.CURRENT_USER; return !!cu && !!order.created_by_user_id && order.created_by_user_id === cu.id; };
             data.forEach(function(order) {
                 var items = order.items && order.items.length ? order.items : [];
                 if (items.length === 0) {
@@ -497,16 +502,23 @@ function loadOrders(status, keyword) {
                     var payment = order.payment_status === 1
                         ? '<span class="badge bg-success">是</span>'
                         : '<span class="badge bg-secondary">否</span>';
+                    var canEditThis = canEditAll || (canEditOwn && isMine(order));
                     var actions = '';
                     actions += `<button class="btn btn-info btn-sm me-1" onclick="viewOrder(${order.id})">查看</button>`;
-                    if (window.PERMS && window.PERMS['order:update']) {
+                    if (canEditThis) {
                         actions += `<button class="btn btn-warning btn-sm me-1" onclick="editOrder(${order.id})">编辑</button>`;
                     }
-                    if (window.PERMS && window.PERMS['order:delete']) {
+                    if (canEditAll) {
                         actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
                     }
-                    var statusSelect = `<select class="form-select form-select-sm" onchange="updateStatus(${order.id}, this.value)">${statusOptions}</select>`;
-                    statusSelect = statusSelect.replace(`value="${order.status}"`, `value="${order.status}" selected`);
+                    var statusCell;
+                    if (canEditThis) {
+                        statusCell = `<select class="form-select form-select-sm" onchange="updateStatus(${order.id}, this.value)">${statusOptions}</select>`;
+                        statusCell = statusCell.replace(`value="${order.status}"`, `value="${order.status}" selected`);
+                    } else {
+                        var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[order.status] || '未知';
+                        statusCell = `<span class="badge ${statusBadge(order.status)}">${st}</span>`;
+                    }
 
                     var row = `
                         <tr>
@@ -523,7 +535,7 @@ function loadOrders(status, keyword) {
                             <td>${formatDate(order.expected_shipping_date)}</td>
                             <td>${formatDate(order.customer_required_date)}</td>
                             <td>${warnHtml(order.warning_level, order.warning_label)}</td>
-                            <td>${statusSelect}</td>
+                            <td>${statusCell}</td>
                             <td>${payment}</td>
                             <td>${order.remark || '-'}</td>
                             <td>${actions}</td>
@@ -547,6 +559,10 @@ function resetFilter() {
     $('#filterStatus').val('');
     $('#searchKeyword').val('');
     loadOrders();
+}
+
+function statusBadge(s) {
+    return {0:'bg-warning text-dark',1:'bg-info text-dark',2:'bg-primary',3:'bg-success',4:'bg-secondary'}[s] || 'bg-secondary';
 }
 
 function updateStatus(id, status) {
