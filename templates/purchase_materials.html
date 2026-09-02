@@ -245,14 +245,14 @@
 
 <!-- 查看支付水单 -->
 <div class="modal fade" id="viewReceiptModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+    <div class="modal-dialog">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">支付水单</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body text-center">
-                <img id="viewReceiptImage" src="" class="img-fluid">
+                <img id="viewReceiptImage" src="" alt="支付水单">
             </div>
         </div>
     </div>
@@ -328,8 +328,18 @@ function uploadReceiptFile(input, prefix) {
 }
 
 function viewReceipt(url) {
-    $('#viewReceiptImage').attr('src', url);
-    $('#viewReceiptModal').modal('show');
+    var img = $('#viewReceiptImage');
+    var modal = $('#viewReceiptModal');
+    img.off('load.receipt error.receipt');
+    img.attr('src', url);
+    // 图片加载完成后再弹出，窗口按图片实际大小自适应
+    if (img[0].complete) {
+        modal.modal('show');
+    } else {
+        img.on('load.receipt error.receipt', function () {
+            modal.modal('show');
+        });
+    }
 }
 
 function currentMonth() {

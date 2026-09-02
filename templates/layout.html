@@ -25,6 +25,29 @@
             border-radius: 20px;
             font-size: 12px;
         }
+
+        /* 查看支付水单：窗口自适应图片实际大小（超出屏幕时等比缩放完整显示） */
+        #viewReceiptModal .modal-dialog {
+            width: fit-content;
+            max-width: 96vw;
+            margin: 1.75rem auto;
+        }
+        #viewReceiptModal .modal-content {
+            width: fit-content;
+            max-width: 96vw;
+        }
+        #viewReceiptModal .modal-body {
+            padding: 0.5rem;
+            overflow: auto;
+        }
+        #viewReceiptModal #viewReceiptImage {
+            display: block;
+            max-width: 92vw;
+            max-height: calc(100vh - 9rem);
+            width: auto;
+            height: auto;
+            margin: 0 auto;
+        }
     </style>
 </head>
 <body>
