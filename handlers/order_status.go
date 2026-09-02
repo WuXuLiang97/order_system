@@ -7,8 +7,15 @@ import (
 	"order-system/models"
 )
 
-// UpdateOrderStatus 更新订单状态。
-// 当订单被取消（status=4）时，自动归还创建订单时扣减的成品库存和原材料库存。
+// UpdateOrderStatus 更新订单状态，并按状态流转自动调整库存。
+//
+// 库存占用原则：订单创建（status=0 待生产）时即扣减成品与原材料库存；
+// 只要订单处于有效状态（0 待生产 / 1 生产中 / 2 待发货 / 3 已发货），库存保持被占用。
+//
+// 状态流转对库存的影响：
+//   - 有效状态 -> 取消（status=4）：归还成品与原材料库存（取消已归还过，删除时不再归还）。
+//   - 取消(4) -> 有效状态（例如改为待发货）：重新扣减成品与原材料库存。
+//   - 其它流转（有效状态之间、取消->取消）：库存不变。
 func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -36,7 +43,8 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// 锁定订单行并读取当前状态，避免并发取消时重复归还库存。
+	// 锁定订单行并读取当前状态；在同一事务内根据“当前状态 -> 目标状态”决定库存调整，
+	// 可避免并发取消/恢复时库存被重复归还或重复扣减。
 	var currentStatus int
 	err = tx.QueryRow("SELECT status FROM orders WHERE id = ? FOR UPDATE", req.ID).Scan(&currentStatus)
 	if err == sql.ErrNoRows {
@@ -48,9 +56,18 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 取消订单且订单此前不是已取消状态时，归还成品和原材料库存。
+	// 1) 取消订单（且此前不是取消状态）：归还成品与原材料库存。
 	if req.Status == 4 && currentStatus != 4 {
 		if err := restoreOrderStock(tx, req.ID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	// 2) 已取消订单恢复为有效状态（例如改为待发货）：重新扣减成品与原材料库存，
+	//    否则取消时归还的库存会一直“空放着”，在途订单将不再占用库存。
+	if req.Status != 4 && currentStatus == 4 {
+		if err := deductOrderStock(tx, req.ID); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}

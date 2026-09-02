@@ -48,6 +48,12 @@ type orderListRow struct {
 	Items []orderItemView `json:"items"`
 }
 
+// orderStockItem 需要调整库存的订单明细行（产品与数量）。
+type orderStockItem struct {
+	ProductID int
+	Quantity  int
+}
+
 // CreateOrder 创建订单（允许负库存，扣减成品和原材料）
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -160,13 +166,19 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		// 获取产品BOM并累加原材料扣减量
+		// 获取产品BOM：累加原材料扣减量，并把用量写入订单BOM快照，
+		// 供取消/恢复/删除订单时按快照归还或扣减（避免后续修改BOM影响历史订单）。
 		boms, err := models.GetBOMByProduct(item.ProductID)
 		if err != nil {
 			continue
 		}
 		for _, bom := range boms {
-			rawMaterialDeductions[bom.RawMaterialID] += bom.Quantity * float64(item.Quantity)
+			usage := bom.Quantity * float64(item.Quantity)
+			rawMaterialDeductions[bom.RawMaterialID] += usage
+			if _, err := tx.Exec("INSERT INTO order_bom_snapshot (order_id, product_id, raw_material_id, quantity) VALUES (?, ?, ?, ?)", orderID, item.ProductID, bom.RawMaterialID, usage); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -408,56 +420,116 @@ func DeleteOrder(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "Order deleted successfully"})
 }
 
-// restoreOrderStock 归还指定订单扣减的成品库存，并按当前 BOM 归还对应原材料的库存。
-// 与创建订单时的扣减逻辑保持一致；供删除订单和取消订单共用。
+// restoreOrderStock 归还指定订单占用/扣减的成品库存，并按订单BOM快照归还对应原材料的库存。
+// 供删除订单和取消订单共用；按快照归还可保证与下单时的扣减口径一致。
 func restoreOrderStock(tx *sql.Tx, orderID int) error {
-	type orderItem struct {
-		ProductID int
-		Quantity  int
-	}
-
-	rows, err := tx.Query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", orderID)
+	items, err := loadOrderStockItems(tx, orderID)
 	if err != nil {
-		return fmt.Errorf("failed to load order items: %v", err)
+		return err
 	}
 
-	var items []orderItem
-	for rows.Next() {
-		var it orderItem
-		if err := rows.Scan(&it.ProductID, &it.Quantity); err != nil {
-			rows.Close()
-			return fmt.Errorf("failed to read order item: %v", err)
-		}
-		items = append(items, it)
-	}
-	rows.Close()
-	if err := rows.Err(); err != nil {
-		return fmt.Errorf("failed to iterate order items: %v", err)
-	}
-
-	rawMaterialReturns := make(map[int]float64)
+	// 归还成品库存。
 	for _, it := range items {
-		// 归还成品库存。
 		if _, err := tx.Exec("UPDATE products SET stock = stock + ? WHERE id = ?", it.Quantity, it.ProductID); err != nil {
 			return fmt.Errorf("failed to restore product ID %d: %v", it.ProductID, err)
 		}
-
-		// 归还该产品对应 BOM 的原材料库存。
-		boms, err := models.GetBOMByProduct(it.ProductID)
-		if err != nil {
-			return fmt.Errorf("failed to load BOM for product ID %d: %v", it.ProductID, err)
-		}
-		for _, bom := range boms {
-			rawMaterialReturns[bom.RawMaterialID] += bom.Quantity * float64(it.Quantity)
-		}
 	}
 
+	// 归还该订单占用的原材料库存（按下单时BOM快照；历史订单无快照时按当前BOM）。
+	rawMaterialReturns, err := orderRawMaterialUsage(tx, orderID, items)
+	if err != nil {
+		return err
+	}
 	for rawMatID, qty := range rawMaterialReturns {
 		if _, err := tx.Exec("UPDATE raw_materials SET stock = stock + ? WHERE id = ?", qty, rawMatID); err != nil {
 			return fmt.Errorf("failed to restore raw material ID %d: %v", rawMatID, err)
 		}
 	}
 	return nil
+}
+
+// deductOrderStock 重新扣减指定订单的成品库存，并按订单BOM快照扣减对应原材料的库存。
+// 与 restoreOrderStock 互逆：当已取消（status=4）的订单被重新置为有效状态
+// （待生产/生产中/待发货/已发货）时调用，恢复“订单占用库存”，
+// 扣减口径与创建订单时保持一致。
+func deductOrderStock(tx *sql.Tx, orderID int) error {
+	items, err := loadOrderStockItems(tx, orderID)
+	if err != nil {
+		return err
+	}
+
+	// 扣减成品库存（允许负数，与创建订单时一致）。
+	for _, it := range items {
+		if _, err := tx.Exec("UPDATE products SET stock = stock - ? WHERE id = ?", it.Quantity, it.ProductID); err != nil {
+			return fmt.Errorf("failed to deduct product ID %d: %v", it.ProductID, err)
+		}
+	}
+
+	// 扣减该订单占用的原材料库存（按下单时BOM快照；历史订单无快照时按当前BOM）。
+	rawMaterialDeductions, err := orderRawMaterialUsage(tx, orderID, items)
+	if err != nil {
+		return err
+	}
+	for rawMatID, qty := range rawMaterialDeductions {
+		if _, err := tx.Exec("UPDATE raw_materials SET stock = stock - ? WHERE id = ?", qty, rawMatID); err != nil {
+			return fmt.Errorf("failed to deduct raw material ID %d: %v", rawMatID, err)
+		}
+	}
+	return nil
+}
+
+// loadOrderStockItems 读取订单明细中需要调整库存的产品行。
+func loadOrderStockItems(tx *sql.Tx, orderID int) ([]orderStockItem, error) {
+	rows, err := tx.Query("SELECT product_id, quantity FROM order_items WHERE order_id = ?", orderID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load order items: %v", err)
+	}
+	defer rows.Close()
+
+	var items []orderStockItem
+	for rows.Next() {
+		var it orderStockItem
+		if err := rows.Scan(&it.ProductID, &it.Quantity); err != nil {
+			return nil, fmt.Errorf("failed to read order item: %v", err)
+		}
+		items = append(items, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate order items: %v", err)
+	}
+	return items, nil
+}
+
+// orderRawMaterialUsage 汇总指定订单占用的原材料数量（按原材料ID）。
+//
+// 优先使用下单时写入的 BOM 快照（order_bom_snapshot）：即使之后产品 BOM 被修改，
+// 取消/恢复/删除订单时归还或扣减的原材料数量仍与下单时一致；
+// 历史订单没有快照时回退到当前 BOM（与原逻辑一致）。
+func orderRawMaterialUsage(tx *sql.Tx, orderID int, items []orderStockItem) (map[int]float64, error) {
+	usage := make(map[int]float64)
+
+	snapshots, err := models.GetOrderBOMSnapshot(tx, orderID)
+	if err != nil {
+		return nil, err
+	}
+	if len(snapshots) > 0 {
+		for _, s := range snapshots {
+			usage[s.RawMaterialID] += s.Quantity
+		}
+		return usage, nil
+	}
+
+	// 历史订单无快照：按当前 BOM 计算。
+	for _, it := range items {
+		boms, err := models.GetBOMByProduct(it.ProductID)
+		if err != nil {
+			return nil, fmt.Errorf("failed to load BOM for product ID %d: %v", it.ProductID, err)
+		}
+		for _, bom := range boms {
+			usage[bom.RawMaterialID] += bom.Quantity * float64(it.Quantity)
+		}
+	}
+	return usage, nil
 }
 
 // UpdateOrder 更新订单信息（不修改明细）

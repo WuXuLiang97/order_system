@@ -16,6 +16,7 @@ CREATE DATABASE IF NOT EXISTS order_system
 USE order_system;
 
 -- 2. 删除已存在的表（按依赖顺序倒序删除）
+DROP TABLE IF EXISTS order_bom_snapshot;
 DROP TABLE IF EXISTS product_bom;
 DROP TABLE IF EXISTS order_items;
 DROP TABLE IF EXISTS orders;
@@ -128,7 +129,23 @@ CREATE TABLE product_bom (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='产品BOM表';
 
 -- =============================================
+-- 7.2 创建订单BOM快照表
+--    下单时按当前BOM写入快照；取消/恢复/删除订单时按快照归还或扣减原材料库存，
+--    避免之后修改产品BOM影响历史订单的库存账目。
 -- =============================================
+CREATE TABLE order_bom_snapshot (
+    id              INT AUTO_INCREMENT PRIMARY KEY COMMENT '快照ID',
+    order_id        INT NOT NULL COMMENT '订单ID',
+    product_id      INT NOT NULL COMMENT '产品ID',
+    raw_material_id INT NOT NULL COMMENT '原材料ID',
+    quantity        DECIMAL(10,3) NOT NULL COMMENT '该订单需耗用的原材料数量（按下单时BOM计算）',
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    KEY idx_order_bom_snapshot_order_id (order_id),
+    FOREIGN KEY (order_id)        REFERENCES orders(id) ON DELETE CASCADE,
+    FOREIGN KEY (product_id)      REFERENCES products(id) ON DELETE CASCADE,
+    FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单BOM快照表';
+
 -- 7.5 创建系统用户表（登录鉴权）
 --     角色：admin-管理员（全部权限），user-普通用户（仅查看）
 -- =============================================

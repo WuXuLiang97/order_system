@@ -34,6 +34,9 @@ func InitDB(dataSourceName string) {
 	if err = ensureOrderColumns(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureOrderBOMSnapshotTable(); err != nil {
+		log.Fatal(err)
+	}
 	log.Println("Database connected")
 }
 
