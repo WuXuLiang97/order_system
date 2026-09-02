@@ -1,0 +1,239 @@
+{{define "content"}}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                <h4 class="mb-0"><i class="bi bi-people"></i> 客户管理</h4>
+                {{if .Can "customer:manage"}}
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addCustomerModal">
+                    <i class="bi bi-plus-circle"></i> 添加客户
+                </button>
+                {{end}}
+            </div>
+            <div class="card-body">
+                <div class="mb-3">
+                    <input type="text" id="searchCustomer" class="form-control" placeholder="搜索客户名称或电话号码...">
+                </div>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="customerTable">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>客户名称</th>
+                                <th>电话号码</th>
+                                <th>收货地址</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="customerTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加客户 -->
+<div class="modal fade" id="addCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加客户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addCustomerForm">
+                    <div class="mb-3">
+                        <label class="form-label">客户名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="addName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">电话号码</label>
+                        <input type="text" class="form-control" id="addPhone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">收货地址</label>
+                        <input type="text" class="form-control" id="addAddress">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="addCustomer()">确认添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑客户 -->
+<div class="modal fade" id="editCustomerModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑客户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editCustomerForm">
+                    <input type="hidden" id="editId">
+                    <div class="mb-3">
+                        <label class="form-label">客户名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="editName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">电话号码</label>
+                        <input type="text" class="form-control" id="editPhone">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">收货地址</label>
+                        <input type="text" class="form-control" id="editAddress">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="updateCustomer()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+function loadCustomers() {
+    $.ajax({
+        url: '/api/customers',
+        method: 'GET',
+        success: function(data) {
+            var tbody = $('#customerTableBody');
+            tbody.empty();
+            data.forEach(function(c, index) {
+                var actions = '';
+                if (window.PERMS && window.PERMS['customer:manage']) {
+                    actions = `<button class="btn btn-warning btn-sm me-1" onclick="editCustomer(${c.id})">编辑</button>
+                               <button class="btn btn-danger btn-sm" onclick="deleteCustomer(${c.id})">删除</button>`;
+                }
+                var row = `
+                    <tr>
+                        <td>${index + 1}</td>
+                        <td><strong>${c.name}</strong></td>
+                        <td>${c.phone || '-'}</td>
+                        <td>${c.address || '-'}</td>
+                        <td>${new Date(c.created_at).toLocaleString()}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+            applyCustomerSearch();
+        },
+        error: function(xhr) {
+            alert('加载客户失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function applyCustomerSearch() {
+    var searchText = $('#searchCustomer').val().toLowerCase();
+    $('#customerTableBody tr').each(function() {
+        var name = $(this).find('td:eq(1)').text().toLowerCase();
+        var phone = $(this).find('td:eq(2)').text().toLowerCase();
+        $(this).toggle(name.indexOf(searchText) > -1 || phone.indexOf(searchText) > -1);
+    });
+}
+
+$(document).ready(function() {
+    loadCustomers();
+    $('#searchCustomer').on('keyup', applyCustomerSearch);
+});
+
+function addCustomer() {
+    var name = $('#addName').val().trim();
+    if (!name) {
+        alert('请输入客户名称');
+        return;
+    }
+    $.ajax({
+        url: '/api/customers/add',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            name: name,
+            phone: $('#addPhone').val().trim(),
+            address: $('#addAddress').val().trim()
+        }),
+        success: function() {
+            alert('添加成功');
+            $('#addCustomerModal').modal('hide');
+            $('#addCustomerForm')[0].reset();
+            loadCustomers();
+        },
+        error: function(xhr) {
+            alert('添加失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function editCustomer(id) {
+    $.ajax({
+        url: `/api/customers/get?id=${id}`,
+        method: 'GET',
+        success: function(data) {
+            $('#editId').val(data.id);
+            $('#editName').val(data.name);
+            $('#editPhone').val(data.phone || '');
+            $('#editAddress').val(data.address || '');
+            $('#editCustomerModal').modal('show');
+        },
+        error: function(xhr) {
+            alert('加载客户失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function updateCustomer() {
+    var id = parseInt($('#editId').val());
+    var name = $('#editName').val().trim();
+    if (!name) {
+        alert('请输入客户名称');
+        return;
+    }
+    $.ajax({
+        url: '/api/customers/update',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            id: id,
+            name: name,
+            phone: $('#editPhone').val().trim(),
+            address: $('#editAddress').val().trim()
+        }),
+        success: function() {
+            alert('更新成功');
+            $('#editCustomerModal').modal('hide');
+            loadCustomers();
+        },
+        error: function(xhr) {
+            alert('更新失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function deleteCustomer(id) {
+    if (!confirm('确定要删除该客户吗？')) return;
+    $.ajax({
+        url: `/api/customers/delete?id=${id}`,
+        method: 'POST',
+        success: function() {
+            alert('删除成功');
+            loadCustomers();
+        },
+        error: function(xhr) {
+            alert('删除失败: ' + xhr.responseText);
+        }
+    });
+}
+</script>
+{{end}}

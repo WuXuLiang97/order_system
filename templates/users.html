@@ -1,0 +1,223 @@
+{{define "content"}}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                <h4 class="mb-0"><i class="bi bi-people"></i> 用户管理</h4>
+                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addUserModal">
+                    <i class="bi bi-plus-circle"></i> 添加用户
+                </button>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="userTable">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>用户名</th>
+                                <th>显示名称</th>
+                                <th>角色</th>
+                                <th>创建时间</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="userTableBody">
+                            <!-- 由 JavaScript 动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加用户模态框 -->
+<div class="modal fade" id="addUserModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加用户</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addUserForm">
+                    <div class="mb-3">
+                        <label class="form-label">用户名 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="addUsername" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">显示名称</label>
+                        <input type="text" class="form-control" id="addDisplayName" placeholder="可选">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">密码 <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="addPassword" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">角色 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="addRole">
+                            <option value="user">普通用户（仅查看）</option>
+                            <option value="admin">管理员（全部权限）</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="addUser()">确认添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 重置密码模态框 -->
+<div class="modal fade" id="resetPwdModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">重置密码</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p>将重置用户 <strong id="resetPwdUser"></strong> 的密码</p>
+                <form id="resetPwdForm">
+                    <input type="hidden" id="resetPwdId">
+                    <div class="mb-3">
+                        <label class="form-label">新密码 <span class="text-danger">*</span></label>
+                        <input type="password" class="form-control" id="resetPwdValue" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" onclick="confirmResetPwd()">确认重置</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+function loadUsers() {
+    $.ajax({
+        url: '/api/users',
+        method: 'GET',
+        success: function (data) {
+            var tbody = $('#userTableBody');
+            tbody.empty();
+            if (!data || data.length === 0) {
+                tbody.append('<tr><td colspan="6" class="text-center text-muted">暂无用户</td></tr>');
+                return;
+            }
+            var currentId = window.CURRENT_USER ? window.CURRENT_USER.id : null;
+            data.forEach(function (u) {
+                var roleLabel = u.role === 'admin'
+                    ? '<span class="badge bg-danger">管理员</span>'
+                    : '<span class="badge bg-secondary">普通用户</span>';
+                var actions = `<button class="btn btn-warning btn-sm me-1" onclick="showResetPwd(${u.id}, '${u.username}')">重置密码</button>`;
+                if (currentId !== u.id) {
+                    actions += `<button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.username}')">删除</button>`;
+                } else {
+                    actions += '<span class="text-muted small">当前账号</span>';
+                }
+                var row = `
+                    <tr>
+                        <td>${u.id}</td>
+                        <td><strong>${u.username}</strong></td>
+                        <td>${u.display_name || '-'}</td>
+                        <td>${roleLabel}</td>
+                        <td>${new Date(u.created_at).toLocaleString()}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+        },
+        error: function (xhr) {
+            alert('加载用户失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function addUser() {
+    var username = $('#addUsername').val().trim();
+    var password = $('#addPassword').val();
+    var displayName = $('#addDisplayName').val().trim();
+    var role = $('#addRole').val();
+    if (!username || !password) {
+        alert('请输入用户名和密码');
+        return;
+    }
+    $.ajax({
+        url: '/api/users',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ username: username, password: password, display_name: displayName, role: role }),
+        success: function (res) {
+            alert(res.message || '添加成功');
+            $('#addUserModal').modal('hide');
+            $('#addUserForm')[0].reset();
+            loadUsers();
+        },
+        error: function (xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('添加失败: ' + msg);
+        }
+    });
+}
+
+function showResetPwd(id, username) {
+    $('#resetPwdId').val(id);
+    $('#resetPwdUser').text(username);
+    $('#resetPwdValue').val('');
+    $('#resetPwdModal').modal('show');
+}
+
+function confirmResetPwd() {
+    var id = parseInt($('#resetPwdId').val());
+    var newPassword = $('#resetPwdValue').val();
+    if (!newPassword) {
+        alert('请输入新密码');
+        return;
+    }
+    $.ajax({
+        url: '/api/users/reset-password',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({ id: id, new_password: newPassword }),
+        success: function (res) {
+            alert(res.message || '密码重置成功');
+            $('#resetPwdModal').modal('hide');
+        },
+        error: function (xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('重置失败: ' + msg);
+        }
+    });
+}
+
+function deleteUser(id, username) {
+    if (!confirm(`确定要删除用户“${username}”吗？`)) return;
+    $.ajax({
+        url: `/api/users/delete?id=${id}`,
+        method: 'POST',
+        success: function (res) {
+            alert(res.message || '删除成功');
+            loadUsers();
+        },
+        error: function (xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('删除失败: ' + msg);
+        }
+    });
+}
+
+$(document).ready(function () {
+    loadUsers();
+});
+</script>
+{{end}}

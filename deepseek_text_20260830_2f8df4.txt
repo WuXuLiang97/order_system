@@ -1,0 +1,32 @@
+order-system/
+├── main.go                          -- 入口文件（路由注册、服务启动）
+├── go.mod                           -- Go模块定义
+├── go.sum                           -- 依赖版本锁定
+│
+├── handlers/                        -- 业务处理层
+│   ├── order.go                     -- 订单相关：创建、列表、详情、状态更新、删除、编辑、详情页渲染
+│   ├── product.go                   -- 产品相关：列表、详情、添加、更新、删除、生产入库
+│   └── raw_material.go              -- 原材料相关：列表、详情、添加、更新、删除、入库、出库、预警
+│
+├── models/                          -- 数据模型层
+│   ├── db.go                        -- 数据库连接
+│   ├── order.go                     -- 订单结构体定义
+│   ├── product.go                   -- 产品结构体定义 + CRUD
+│   ├── raw_material.go              -- 原材料结构体定义 + CRUD
+│   └── bom.go                       -- BOM结构体定义 + GetBOMByProduct + ReplaceBOM
+│
+├── utils/                           -- 工具包
+│   └── template_funcs.go            -- 自定义模板函数（add, multiply）
+│
+├── templates/                       -- 前端模板
+│   ├── layout.html                  -- 布局模板（导航栏、页脚）
+│   ├── index.html                   -- 首页
+│   ├── orders.html                  -- 订单管理页面（创建、编辑、筛选、搜索）
+│   ├── products.html                -- 产品管理页面（添加、编辑、BOM配置、生产入库）
+│   ├── raw_materials.html           -- 原材料管理页面（添加、编辑、入库、出库、预警）
+│   └── order_detail.html            -- 订单详情页（独立页面，支持打印A4纸）
+│
+├── static/                          -- 静态资源
+│   └── style.css                    -- 自定义样式
+│
+└── README.md                        -- 项目说明（可选）

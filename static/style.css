@@ -1,0 +1,147 @@
+/* ===== 原有样式 ===== */
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+.container {
+    flex: 1;
+}
+.footer {
+    margin-top: auto;
+}
+.table-hover tbody tr:hover {
+    background-color: rgba(0,0,0,.075);
+    cursor: pointer;
+}
+.badge {
+    font-size: 12px;
+    padding: 5px 10px;
+}
+.btn-group-sm .btn {
+    margin-right: 2px;
+}
+.modal-content {
+    border-radius: 10px;
+}
+.card {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+.card-header {
+    border-radius: 10px 10px 0 0;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+}
+.card-header.bg-primary {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+.card-header.bg-success {
+    background: linear-gradient(135deg, #11998e 0%, #38ef7d 100%);
+}
+.card-header.bg-info {
+    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+}
+.card-header.bg-warning {
+    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+}
+.status-badge {
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* ===== 移动端优化 ===== */
+@media (max-width: 768px) {
+    /* 表格字体缩小 */
+    .table {
+        font-size: 12px;
+    }
+    .table td, .table th {
+        padding: 0.4rem 0.3rem;
+    }
+    /* 按钮组换行 */
+    .btn-group-sm {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 3px;
+    }
+    .btn-group-sm .btn {
+        margin-right: 0;
+        flex: 0 0 auto;
+        border-radius: 0.2rem !important;
+    }
+    /* 首页卡片在移动端占满宽度 */
+    .home-card .col-md-4 {
+        flex: 0 0 100%;
+        max-width: 100%;
+    }
+    /* 搜索/筛选栏堆叠 */
+    .filter-row .col-md-3,
+    .filter-row .col-md-5,
+    .filter-row .col-md-2 {
+        margin-bottom: 6px;
+    }
+    /* 模态框内边距 */
+    .modal-body {
+        padding: 1rem;
+    }
+    /* 卡片标题字号 */
+    .card-header h4 {
+        font-size: 1.1rem;
+    }
+    /* 操作按钮文字精简（可选） */
+    .btn-sm {
+        font-size: 0.7rem;
+        padding: 0.2rem 0.4rem;
+    }
+    /* 生产入库按钮保持可见 */
+    .card-header .btn {
+        margin-bottom: 2px;
+    }
+    /* 搜索框宽度适应 */
+    .search-input {
+        width: 100%;
+    }
+    /* 模态框按钮适应移动端 */
+    .modal-footer .btn {
+        flex: 1;
+        margin: 2px;
+    }
+    /* 筛选搜索栏按钮宽度适应 */
+    .filter-row .btn {
+        font-size: 0.8rem;
+        padding: 0.3rem 0.5rem;
+    }
+}
+
+@media (max-width: 576px) {
+    /* 极窄屏下，表格更小 */
+    .table {
+        font-size: 11px;
+    }
+    .table td, .table th {
+        padding: 0.2rem 0.2rem;
+    }
+    /* 模态框全屏 */
+    .modal-dialog {
+        margin: 0.5rem;
+        max-width: 100%;
+    }
+    /* 按钮组垂直排列（对于一组按钮） */
+    .btn-group-sm {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .btn-group-sm .btn {
+        border-radius: 0.2rem !important;
+        margin-bottom: 2px;
+        width: 100%;
+    }
+    /* 操作列宽度增加 */
+    .table td:last-child {
+        min-width: 120px;
+    }
+}

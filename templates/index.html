@@ -1,0 +1,32 @@
+{{define "content"}}
+<div class="row home-card">
+    <div class="col-md-4">
+        <div class="card bg-info text-white mb-3">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-cart"></i> 订单管理</h5>
+                <p class="card-text">管理客户订单，查看订单状态</p>
+                <a href="/orders" class="btn btn-light btn-sm">进入 <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-success text-white mb-3">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-box"></i> 库存管理</h5>
+                <p class="card-text">管理成品库存，实时监控库存水平</p>
+                <a href="/products" class="btn btn-light btn-sm">进入 <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card bg-warning text-white mb-3">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-cubes"></i> 原材料管理</h5>
+                <p class="card-text">管理原材料库存，支持入库出库操作</p>
+                <a href="/raw-materials" class="btn btn-light btn-sm">进入 <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+{{define "scripts"}}{{end}}

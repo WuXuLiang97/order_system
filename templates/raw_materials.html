@@ -1,0 +1,465 @@
+{{define "content"}}
+<div class="row">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                <h4 class="mb-0">原材料管理</h4>
+                <div>
+                    <button class="btn btn-warning btn-sm me-2" onclick="checkLowStock()">
+                        <i class="bi bi-exclamation-triangle"></i> 库存预警
+                    </button>
+                    {{if .Can "material:manage"}}
+                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addMaterialModal">
+                        <i class="bi bi-plus-circle"></i> 添加原材料
+                    </button>
+                    {{end}}
+                </div>
+            </div>
+            <div class="card-body">
+                <!-- 搜索和筛选 -->
+                <div class="row mb-3">
+                    <div class="col-md-6">
+                        <input type="text" id="searchInput" class="form-control" placeholder="搜索原材料名称...">
+                    </div>
+                </div>
+                
+                <!-- 原材料列表 -->
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover" id="materialTable">
+                        <thead>
+                            <tr>
+                                <th>序号</th>
+                                <th>名称</th>
+                                <th>规格型号</th>
+                                <th>库存</th>
+                                <th>单位</th>
+                                <th>最低库存</th>
+                                <th>单价</th>
+                                <th>状态</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="materialTableBody">
+                            <!-- 数据由JavaScript动态加载 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+                <!-- 分页或统计信息 -->
+                <div class="mt-3">
+                    <span id="totalCount" class="text-muted">共 0 条记录</span>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 添加原材料模态框 -->
+<div class="modal fade" id="addMaterialModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">添加原材料</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="addMaterialForm">
+                    <div class="mb-3">
+                        <label class="form-label">名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="addName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">规格型号</label>
+                        <input type="text" class="form-control" id="addSpec">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">库存</label>
+                        <input type="number" class="form-control" id="addStock" value="0" step="any">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">单位</label>
+                        <input type="text" class="form-control" id="addUnit" value="个">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">最低库存预警</label>
+                        <input type="number" class="form-control" id="addMinStock" value="10" step="any">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">单价</label>
+                        <input type="number" class="form-control" id="addPrice" value="0" min="0" step="0.01">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="addMaterial()">确认添加</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 编辑原材料模态框 -->
+<div class="modal fade" id="editMaterialModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">编辑原材料</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="editMaterialForm">
+                    <input type="hidden" id="editId">
+                    <div class="mb-3">
+                        <label class="form-label">名称 <span class="text-danger">*</span></label>
+                        <input type="text" class="form-control" id="editName" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">规格型号</label>
+                        <input type="text" class="form-control" id="editSpec">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">库存</label>
+                        <input type="number" class="form-control" id="editStock" step="any">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">单位</label>
+                        <input type="text" class="form-control" id="editUnit">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">最低库存预警</label>
+                        <input type="number" class="form-control" id="editMinStock" step="any">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">单价</label>
+                        <input type="number" class="form-control" id="editPrice" min="0" step="0.01">
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="updateMaterial()">保存修改</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 入库/出库模态框 -->
+<div class="modal fade" id="stockModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stockModalTitle">库存操作</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="stockForm">
+                    <input type="hidden" id="stockMaterialId">
+                    <input type="hidden" id="stockOperation">
+                    <div class="mb-3">
+                        <label class="form-label">当前库存</label>
+                        <input type="text" class="form-control" id="currentStock" readonly>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">数量 <span class="text-danger">*</span></label>
+                        <input type="number" class="form-control" id="stockQuantity" step="any" required>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="confirmStockOperation()">确认操作</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 库存预警模态框 -->
+<div class="modal fade" id="lowStockModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">库存预警</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div id="lowStockList"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+// 加载原材料列表
+function loadMaterials() {
+    $.ajax({
+        url: '/api/raw-materials',
+        method: 'GET',
+        success: function(data) {
+            var tbody = $('#materialTableBody');
+            tbody.empty();
+            
+            data.forEach(function(m, index) {
+                var status = '';
+                var statusClass = '';
+                if (m.stock <= m.min_stock) {
+                    status = '<span class="badge bg-danger">库存不足</span>';
+                    statusClass = 'table-danger';
+                } else if (m.stock <= m.min_stock * 2) {
+                    status = '<span class="badge bg-warning">库存偏低</span>';
+                    statusClass = 'table-warning';
+                } else {
+                    status = '<span class="badge bg-success">充足</span>';
+                }
+                
+                var actions = '';
+                if (window.PERMS && window.PERMS['material:manage']) {
+                    actions = `<div class="btn-group-sm" role="group">
+                                <button class="btn btn-primary btn-sm" onclick="editMaterial(${m.id})">编辑</button>
+                                <button class="btn btn-success btn-sm" onclick="showStockModal(${m.id}, 'inbound')">入库</button>
+                                <button class="btn btn-warning btn-sm" onclick="showStockModal(${m.id}, 'outbound')">出库</button>
+                                <button class="btn btn-danger btn-sm" onclick="deleteMaterial(${m.id})">删除</button>
+                            </div>`;
+                }
+                var row = `
+                    <tr class="${statusClass}">
+                        <td>${index + 1}</td>
+                        <td><strong>${m.name}</strong></td>
+                        <td>${m.spec || '-'}</td>
+                        <td>${m.stock}</td>
+                        <td>${m.unit || '-'}</td>
+                        <td>${m.min_stock}</td>
+                        <td>¥${m.price.toFixed(2)}</td>
+                        <td>${status}</td>
+                        <td>${actions}</td>
+                    </tr>
+                `;
+                tbody.append(row);
+            });
+            
+            $('#totalCount').text(`共 ${data.length} 条记录`);
+            
+            // 应用搜索过滤
+            applySearch();
+        },
+        error: function(xhr) {
+            alert('加载数据失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 搜索功能
+function applySearch() {
+    var searchText = $('#searchInput').val().toLowerCase();
+    $('#materialTableBody tr').each(function() {
+        var name = $(this).find('td:eq(1)').text().toLowerCase();
+        $(this).toggle(name.indexOf(searchText) > -1);
+    });
+}
+
+// 搜索输入监听
+$(document).ready(function() {
+    $('#searchInput').on('keyup', applySearch);
+    loadMaterials();
+});
+
+// 添加原材料
+function addMaterial() {
+    var data = {
+        name: $('#addName').val().trim(),
+        spec: $('#addSpec').val().trim(),
+        stock: parseFloat($('#addStock').val()) || 0,
+        unit: $('#addUnit').val().trim(),
+        min_stock: parseFloat($('#addMinStock').val()) || 0,
+        price: parseFloat($('#addPrice').val()) || 0
+    };
+    
+    if (!data.name) {
+        alert('请输入原材料名称');
+        return;
+    }
+    
+    $.ajax({
+        url: '/api/raw-materials/add',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            alert('添加成功');
+            $('#addMaterialModal').modal('hide');
+            $('#addMaterialForm')[0].reset();
+            loadMaterials();
+        },
+        error: function(xhr) {
+            alert('添加失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 编辑原材料（加载数据）
+function editMaterial(id) {
+    $.ajax({
+        url: `/api/raw-materials/get?id=${id}`,
+        method: 'GET',
+        success: function(data) {
+            $('#editId').val(data.id);
+            $('#editName').val(data.name);
+            $('#editSpec').val(data.spec || '');
+            $('#editStock').val(data.stock);
+            $('#editUnit').val(data.unit);
+            $('#editMinStock').val(data.min_stock);
+            $('#editPrice').val(data.price);
+            $('#editMaterialModal').modal('show');
+        },
+        error: function(xhr) {
+            alert('加载数据失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 更新原材料
+function updateMaterial() {
+    var data = {
+        id: parseInt($('#editId').val()),
+        name: $('#editName').val().trim(),
+        spec: $('#editSpec').val().trim(),
+        stock: parseFloat($('#editStock').val()) || 0,
+        unit: $('#editUnit').val().trim(),
+        min_stock: parseFloat($('#editMinStock').val()) || 0,
+        price: parseFloat($('#editPrice').val()) || 0
+    };
+    
+    if (!data.name) {
+        alert('请输入原材料名称');
+        return;
+    }
+    
+    $.ajax({
+        url: '/api/raw-materials/update',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            alert('更新成功');
+            $('#editMaterialModal').modal('hide');
+            loadMaterials();
+        },
+        error: function(xhr) {
+            alert('更新失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 显示库存操作模态框
+function showStockModal(id, operation) {
+    // 先获取当前库存信息
+    $.ajax({
+        url: `/api/raw-materials/get?id=${id}`,
+        method: 'GET',
+        success: function(data) {
+            $('#stockMaterialId').val(id);
+            $('#stockOperation').val(operation);
+            $('#currentStock').val(data.stock);
+            $('#stockQuantity').val(1);
+            
+            var title = operation === 'inbound' ? '原材料入库' : '原材料出库';
+            $('#stockModalTitle').text(title);
+            $('#stockModal').modal('show');
+        },
+        error: function(xhr) {
+            alert('加载数据失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 确认库存操作
+function confirmStockOperation() {
+    var id = parseInt($('#stockMaterialId').val());
+    var operation = $('#stockOperation').val();
+    var quantity = parseFloat($('#stockQuantity').val());
+    
+    if (!quantity || quantity <= 0) {
+        alert('请输入有效的数量');
+        return;
+    }
+    
+    var url = operation === 'inbound' ? '/api/raw-materials/inbound' : '/api/raw-materials/outbound';
+    var data = {
+        id: id,
+        quantity: quantity
+    };
+    
+    $.ajax({
+        url: url,
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(data),
+        success: function(response) {
+            alert(response.message);
+            $('#stockModal').modal('hide');
+            loadMaterials();
+        },
+        error: function(xhr) {
+            alert('操作失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 删除原材料
+function deleteMaterial(id) {
+    if (!confirm('确定要删除该原材料吗？')) {
+        return;
+    }
+    
+    $.ajax({
+        url: `/api/raw-materials/delete?id=${id}`,
+        method: 'POST',
+        success: function(response) {
+            alert('删除成功');
+            loadMaterials();
+        },
+        error: function(xhr) {
+            alert('删除失败: ' + xhr.responseText);
+        }
+    });
+}
+
+// 检查低库存
+function checkLowStock() {
+    $.ajax({
+        url: '/api/raw-materials/low-stock',
+        method: 'GET',
+        success: function(data) {
+            var html = '';
+            if (data.length === 0) {
+                html = '<div class="alert alert-success">所有原材料库存充足！</div>';
+            } else {
+                html = '<div class="alert alert-danger"><strong>以下原材料库存偏低，请及时补货：</strong></div>';
+                html += '<table class="table table-bordered">';
+                html += '<thead><tr><th>名称</th><th>规格型号</th><th>当前库存</th><th>最低库存</th><th>单位</th></tr></thead>';
+                html += '<tbody>';
+                data.forEach(function(m) {
+                    html += `<tr>
+                        <td><strong>${m.name}</strong></td>
+                        <td>${m.spec || '-'}</td>
+                        <td class="text-danger">${m.stock}</td>
+                        <td>${m.min_stock}</td>
+                        <td>${m.unit || '-'}</td>
+                    </tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            $('#lowStockList').html(html);
+            $('#lowStockModal').modal('show');
+        },
+        error: function(xhr) {
+            alert('加载预警数据失败: ' + xhr.responseText);
+        }
+    });
+}
+</script>
+{{end}}

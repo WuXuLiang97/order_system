@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>生产进销存管理系统</title>
+    <link rel="icon" href="/static/favicon.ico" type="image/x-icon">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css">
+    <style>
+        body {
+            background-color: #f8f9fa;
+        }
+        .navbar-brand {
+            font-weight: bold;
+        }
+        .card {
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .table th {
+            background-color: #f8f9fa;
+        }
+        .status-badge {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
+        <div class="container">
+            <a class="navbar-brand" href="/">
+                <i class="bi bi-box-seam"></i> 生产进销存系统
+            </a>
+            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarNav">
+                <span class="navbar-toggler-icon"></span>
+            </button>
+            <div class="collapse navbar-collapse" id="navbarNav">
+                <ul class="navbar-nav me-auto">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/"><i class="bi bi-house"></i> 系统首页</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/orders"><i class="bi bi-cart"></i> 订单管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/products"><i class="bi bi-box"></i> 库存管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/raw-materials"><i class="bi bi-cubes"></i> 原材料管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/purchase-materials"><i class="bi bi-cart-plus"></i> 采购物料管理</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" href="/customers"><i class="bi bi-people"></i> 客户管理</a>
+                    </li>
+                    {{if .Can "user:manage"}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/users"><i class="bi bi-people"></i> 用户管理</a>
+                    </li>
+                    {{end}}
+                </ul>
+                {{if .User}}
+                <ul class="navbar-nav">
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="bi bi-person-circle"></i>
+                            {{if .User.DisplayName}}{{.User.DisplayName}}{{else}}{{.User.Username}}{{end}}
+                            {{if .User.IsAdmin}}<span class="badge bg-danger">管理员</span>{{else}}<span class="badge bg-secondary">普通用户</span>{{end}}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end" aria-labelledby="userDropdown">
+                            <li><span class="dropdown-item-text small text-muted">用户名：{{.User.Username}}</span></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" onclick="openChangePwd()"><i class="bi bi-key"></i> 修改密码</a></li>
+                            <li><a class="dropdown-item" href="#" onclick="openChangeName()"><i class="bi bi-person-badge"></i> 修改名称</a></li>
+                            {{if .Can "user:manage"}}
+                            <li><a class="dropdown-item" href="/users"><i class="bi bi-people"></i> 用户管理</a></li>
+                            {{end}}
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item text-danger" href="#" onclick="logout()"><i class="bi bi-box-arrow-right"></i> 退出登录</a></li>
+                        </ul>
+                    </li>
+                </ul>
+                {{else}}
+                <ul class="navbar-nav">
+                    <li class="nav-item">
+                        <a class="nav-link" href="/login"><i class="bi bi-box-arrow-in-right"></i> 登录</a>
+                    </li>
+                </ul>
+                {{end}}
+            </div>
+        </div>
+    </nav>
+    
+    <div class="container mt-4">
+        {{template "content" .}}
+    </div>
+    
+    <footer class="footer mt-5 py-3 bg-light">
+        <div class="container text-center">
+            <span class="text-muted">© 2026 生产进销存管理系统</span>
+        </div>
+    </footer>
+
+    <!-- 修改名称模态框 -->
+    <div class="modal fade" id="changeNameModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改显示名称</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="changeNameForm">
+                        <div class="mb-3">
+                            <label class="form-label">显示名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="newDisplayName" maxlength="100" autocomplete="off" required>
+                            <div class="form-text">此名称将显示在系统右上角用户菜单中。</div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="changeName()">确认修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 修改密码模态框 -->
+    <div class="modal fade" id="changePwdModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">修改密码</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="changePwdForm">
+                        <div class="mb-3">
+                            <label class="form-label">原密码 <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="oldPassword" autocomplete="current-password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">新密码 <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="newPassword" autocomplete="new-password" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">确认新密码 <span class="text-danger">*</span></label>
+                            <input type="password" class="form-control" id="confirmPassword" autocomplete="new-password" required>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                    <button type="button" class="btn btn-primary" onclick="changePassword()">确认修改</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        // 全局用户与权限信息（服务端注入）
+        window.PERMS = {{.PermsJSON}};
+        window.CURRENT_USER = {{.UserJSON}};
+
+        // 打开修改名称弹窗
+        function openChangeName() {
+            var current = window.CURRENT_USER;
+            $("#newDisplayName").val(current && current.display_name ? current.display_name : "");
+            $("#changeNameModal").modal("show");
+        }
+
+        // 提交修改名称
+        function changeName() {
+            var name = $("#newDisplayName").val().trim();
+            if (!name) {
+                alert("请输入显示名称");
+                return;
+            }
+            $.ajax({
+                url: "/api/change-name",
+                method: "POST",
+                contentType: "application/json",
+                data: JSON.stringify({ display_name: name }),
+                success: function (res) {
+                    alert(res.message || "名称修改成功");
+                    $("#changeNameModal").modal("hide");
+                    window.location.reload();
+                },
+                error: function (xhr) {
+                    var msg = xhr.responseText;
+                    try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+                    alert("修改失败: " + msg);
+                }
+            });
+        }
+
+        // 打开修改密码弹窗
+        function openChangePwd() {
+            $('#changePwdForm')[0].reset();
+            $('#changePwdModal').modal('show');
+        }
+
+        // 提交修改密码
+        function changePassword() {
+            var oldPwd = $('#oldPassword').val();
+            var newPwd = $('#newPassword').val();
+            var confirmPwd = $('#confirmPassword').val();
+            if (!oldPwd || !newPwd) {
+                alert('请输入原密码和新密码');
+                return;
+            }
+            if (newPwd !== confirmPwd) {
+                alert('两次输入的新密码不一致');
+                return;
+            }
+            $.ajax({
+                url: '/api/change-password',
+                method: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify({ old_password: oldPwd, new_password: newPwd }),
+                success: function (res) {
+                    alert(res.message || '密码修改成功');
+                    $('#changePwdModal').modal('hide');
+                    $('#changePwdForm')[0].reset();
+                },
+                error: function (xhr) {
+                    var msg = xhr.responseText;
+                    try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+                    alert('修改失败: ' + msg);
+                }
+            });
+        }
+
+        // 退出登录
+        function logout() {
+            if (!confirm('确定要退出登录吗？')) return;
+            $.ajax({
+                url: '/api/logout',
+                method: 'POST',
+                success: function () { window.location.href = '/login'; },
+                error: function () { window.location.href = '/login'; }
+            });
+        }
+    </script>
+    {{template "scripts" .}}
+</body>
+</html>

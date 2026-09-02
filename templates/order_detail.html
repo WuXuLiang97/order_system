@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>订单详情 - {{.Order.OrderNo}}</title>
+    <style>
+        /* 打印样式 */
+        @media print {
+            body { margin: 0.5in; }
+            .no-print { display: none; }
+            .print-only { display: block; }
+            table { page-break-inside: auto; }
+            tr { page-break-inside: avoid; }
+        }
+        body {
+            font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+            padding: 20px;
+            background: #fff;
+            color: #333;
+        }
+        .container {
+            max-width: 1100px;
+            margin: 0 auto;
+        }
+        .header {
+            text-align: center;
+            border-bottom: 3px double #333;
+            padding-bottom: 15px;
+            margin-bottom: 25px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 28px;
+            letter-spacing: 4px;
+        }
+        .header .order-no {
+            font-size: 18px;
+            color: #555;
+            margin-top: 5px;
+        }
+        .info-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-between;
+            margin-bottom: 20px;
+            background: #f9f9f9;
+            padding: 15px;
+            border-radius: 4px;
+        }
+        .info-item {
+            flex: 1 1 30%;
+            margin-bottom: 8px;
+        }
+        .info-item strong {
+            display: inline-block;
+            width: 80px;
+            color: #555;
+        }
+        .info-item span {
+            color: #000;
+        }
+        .status-badge {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #fff;
+        }
+        .status-0 { background: #f0ad4e; }
+        .status-1 { background: #5cb85c; }
+        .status-2 { background: #17a2b8; }
+.status-3 { background: #5cb85c; }
+.status-4 { background: #d9534f; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        table th {
+            background: #f2f2f2;
+            border: 1px solid #ddd;
+            padding: 10px;
+            text-align: center;
+        }
+        table td {
+            border: 1px solid #ddd;
+            padding: 8px 10px;
+            text-align: center;
+        }
+        table .text-left { text-align: left; }
+        .total-row {
+            font-weight: bold;
+            background: #f9f9f9;
+        }
+        .total-row td {
+            border-top: 2px solid #333;
+        }
+        .footer {
+            margin-top: 30px;
+            text-align: center;
+            font-size: 12px;
+            color: #999;
+            border-top: 1px solid #ddd;
+            padding-top: 15px;
+        }
+        .btn-print {
+            background: #007bff;
+            color: #fff;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 0;
+        }
+        .btn-print:hover { background: #0056b3; }
+        .btn-back {
+            background: #6c757d;
+            color: #fff;
+            border: none;
+            padding: 10px 30px;
+            border-radius: 4px;
+            font-size: 16px;
+            cursor: pointer;
+            margin: 10px 10px;
+        }
+        .btn-back:hover { background: #5a6268; }
+        .actions {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        @media print {
+            .actions { display: none; }
+        }
+        .remark-box {
+            margin-top: 15px;
+            padding: 12px;
+            background: #fef9e7;
+            border-left: 4px solid #f39c12;
+            border-radius: 4px;
+        }
+        .remark-box strong {
+            color: #e67e22;
+        }
+        .remark-box .remark-content {
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+        .total-summary td {
+            font-size: 16px;
+        }
+        .total-summary .label {
+            text-align: right;
+            color: #555;
+        }
+        .total-summary .value {
+            text-align: center;
+            font-size: 16px;
+        }
+        .total-summary .value-amount {
+            color: #d9534f;
+            font-weight: bold;
+            font-size: 17px;
+        }
+        .total-summary .value-qty {
+            color: #337ab7;
+            font-weight: bold;
+            font-size: 17px;
+        }
+        .system-note {
+            margin: 10px 0 0 0;
+            font-size: 13px;
+            color: #888;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- 操作按钮（打印时隐藏） -->
+        <div class="actions no-print">
+            <button class="btn-print" onclick="window.print()">🖨️ 打印 / 导出PDF</button>
+            <button class="btn-back" onclick="window.close()">关闭</button>
+        </div>
+
+        <!-- 订单标题 -->
+        <div class="header">
+            <h1>订 单 详 情</h1>
+            <div class="order-no">订单号：{{.Order.OrderNo}}</div>
+        </div>
+
+        <!-- 客户信息 -->
+        <div class="info-row">
+            <div class="info-item"><strong>客户名称：</strong><span>{{.Order.CustomerName}}</span></div>
+            <div class="info-item"><strong>地区：</strong><span>{{if .Order.Region}}{{.Order.Region}}{{else}}未填写{{end}}</span></div>
+            <div class="info-item"><strong>联系电话：</strong><span>{{if .Order.CustomerPhone}}{{.Order.CustomerPhone}}{{else}}未填写{{end}}</span></div>
+            <div class="info-item"><strong>客户地址：</strong><span>{{if .Order.CustomerAddress}}{{.Order.CustomerAddress}}{{else}}未填写{{end}}</span></div>
+            <div class="info-item"><strong>下单日期：</strong><span>{{if .Order.OrderDate}}{{.Order.OrderDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
+            <div class="info-item"><strong>预计发货：</strong><span>{{if .Order.ExpectedShippingDate}}{{.Order.ExpectedShippingDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
+            <div class="info-item"><strong>回款状态：</strong><span>{{if eq .Order.PaymentStatus 1}}是{{else}}否{{end}}</span></div>
+            <div class="info-item"><strong>订单状态：</strong>
+                <span class="status-badge status-{{.Order.Status}}">
+                    {{if eq .Order.Status 0}}待生产{{else if eq .Order.Status 1}}生产中{{else if eq .Order.Status 2}}待发货{{else if eq .Order.Status 3}}已发货{{else if eq .Order.Status 4}}已取消{{else}}未知{{end}}
+                </span>
+            </div>
+            <div class="info-item"><strong>制单：</strong><span>{{if .Order.PreparedBy}}{{.Order.PreparedBy}}{{else}}未填写{{end}}</span></div>
+            <div class="info-item"><strong>货款结算：</strong><span>{{if .Order.PaymentSettlement}}{{.Order.PaymentSettlement}}{{else}}现付{{end}}</span></div>
+            <div class="info-item"><strong>运费支付：</strong><span>{{if .Order.FreightPayment}}{{.Order.FreightPayment}}{{else}}现付{{end}}</span></div>
+            <div class="info-item"><strong>运费回收：</strong><span>{{if .Order.FreightRecovery}}{{.Order.FreightRecovery}}{{else}}可回收{{end}}</span></div>
+            <div class="info-item"><strong>运输方式：</strong><span>{{if .Order.TransportMethod}}{{.Order.TransportMethod}}{{else}}物流{{end}}</span></div>
+            <div class="info-item"><strong>创建时间：</strong><span>{{.Order.CreatedAt.Format "2006-01-02 15:04:05"}}</span></div>
+        </div>
+
+        <!-- 客户备注（只显示一次） -->
+        {{if .Order.Remark}}
+        <div class="remark-box">
+            <strong>📝 备注：</strong>
+            <div class="remark-content">{{.Order.Remark}}</div>
+        </div>
+        {{else}}
+        <div style="margin: 10px 0; color: #999; font-size: 13px;">（无备注）</div>
+        {{end}}
+
+        <!-- 明细表格 -->
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:6%;">序号</th>
+                    <th style="width:24%;" class="text-left">产品名称</th>
+                    <th style="width:14%;" class="text-left">规格型号</th>
+                    <th style="width:10%;">单位</th>
+                    <th style="width:12%;">单价</th>
+                    <th style="width:10%;">数量</th>
+                    <th style="width:14%;">小计</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $index, $item := .Items}}
+                <tr>
+                    <td>{{add $index 1}}</td>
+                    <td class="text-left">{{$item.ProductName}}</td>
+                    <td class="text-left">{{$item.Spec}}</td>
+                    <td>{{$item.Unit}}</td>
+                    <td>¥{{printf "%.2f" $item.Price}}</td>
+                    <td>{{$item.Quantity}}</td>
+                    <td>¥{{printf "%.2f" (multiply $item.Price $item.Quantity)}}</td>
+                </tr>
+                {{end}}
+                <!-- 汇总行：总数量和总金额在同一行 -->
+                <tr class="total-row total-summary">
+                    <td colspan="5" style="text-align:right; border-right: none;">
+                        <span style="font-size:15px;">总数量：</span>
+                    </td>
+                    <td style="text-align:center; border-left: none; border-right: none;">
+                        <span class="value-qty">{{.TotalQuantity}}</span>
+                    </td>
+                    <td style="text-align:center; border-left: none;">
+                        <span style="font-size:15px; color:#555;">总金额：</span>
+                        <span class="value-amount">¥{{printf "%.2f" .Order.TotalAmount}}</span>
+                    </td>
+                </tr>
+            </tbody>
+        </table>
+
+        <!-- 系统说明（移至页脚上方，不重复备注） -->
+        <div class="system-note">
+            * 本订单所有产品库存已相应扣减，若库存为负数表示需要补货。
+        </div>
+
+        <div class="footer">
+            打印日期：{{.Now.Format "2006-01-02 15:04:05"}} &nbsp;|&nbsp; 系统自动生成
+        </div>
+    </div>
+
+    <script>
+        // 页面加载后自动打印（可选），取消注释即可
+        // window.onload = function() { window.print(); };
+    </script>
+</body>
+</html>

@@ -1,0 +1,160 @@
+package models
+
+import (
+	"database/sql"
+	"fmt"
+	"log"
+
+	_ "github.com/go-sql-driver/mysql"
+)
+
+var DB *sql.DB
+
+func InitDB(dataSourceName string) {
+	var err error
+	DB, err = sql.Open("mysql", dataSourceName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if err = DB.Ping(); err != nil {
+		log.Fatal(err)
+	}
+	if err = EnsureUsersTable(); err != nil {
+		log.Fatal(err)
+	}
+	if err = ensureProductAndMaterialColumns(); err != nil {
+		log.Fatal(err)
+	}
+	if err = EnsurePurchaseMaterialsTable(); err != nil {
+		log.Fatal(err)
+	}
+	if err = EnsureCustomersTable(); err != nil {
+		log.Fatal(err)
+	}
+	if err = ensureOrderColumns(); err != nil {
+		log.Fatal(err)
+	}
+	log.Println("Database connected")
+}
+
+// ensureColumn 检查当前数据库的指定表是否包含指定列，若不存在则添加。
+func ensureColumn(table, column, definition string) error {
+	var count int
+	err := DB.QueryRow(`
+        SELECT COUNT(*)
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND COLUMN_NAME = ?
+    `, table, column).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err = DB.Exec(fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s", table, column, definition))
+	return err
+}
+
+// ensureProductAndMaterialColumns 为成品和原材料表补充规格型号、单位等字段。
+func ensureProductAndMaterialColumns() error {
+	if err := ensureColumn("products", "spec", "VARCHAR(100) NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn("products", "unit", "VARCHAR(20) NOT NULL DEFAULT '个'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("raw_materials", "spec", "VARCHAR(100) NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	return nil
+}
+
+// ensureOrderColumns 为订单表补充重新设计后的字段，并迁移旧状态值。
+func ensureOrderColumns() error {
+	if err := ensureColumn("orders", "region", "VARCHAR(100) NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "order_date", "DATE NULL"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "expected_shipping_date", "DATE NULL"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "payment_status", "TINYINT NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "prepared_by", "VARCHAR(100) NOT NULL DEFAULT ''"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "payment_settlement", "VARCHAR(50) NOT NULL DEFAULT '现付'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "freight_payment", "VARCHAR(50) NOT NULL DEFAULT '现付'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "freight_recovery", "VARCHAR(20) NOT NULL DEFAULT '可回收'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "transport_method", "VARCHAR(50) NOT NULL DEFAULT '物流'"); err != nil {
+		return err
+	}
+	// 历史订单空值回填为默认值（早期版本可能写入空字符串）
+	if _, err := DB.Exec("UPDATE orders SET payment_settlement = '现付' WHERE payment_settlement IS NULL OR payment_settlement = ''"); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("UPDATE orders SET freight_payment = '现付' WHERE freight_payment IS NULL OR freight_payment = ''"); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("UPDATE orders SET freight_recovery = '可回收' WHERE freight_recovery IS NULL OR freight_recovery = ''"); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("UPDATE orders SET transport_method = '物流' WHERE transport_method IS NULL OR transport_method = ''"); err != nil {
+		return err
+	}
+
+	// 旧字段 delivery_date 作为历史数据回填到预计发货日期。
+	if _, err := DB.Exec("UPDATE orders SET expected_shipping_date = delivery_date WHERE expected_shipping_date IS NULL AND delivery_date IS NOT NULL"); err != nil {
+		return err
+	}
+	// 下单日期为空时，使用创建时间日期回填。
+	if _, err := DB.Exec("UPDATE orders SET order_date = DATE(created_at) WHERE order_date IS NULL"); err != nil {
+		return err
+	}
+
+	return migrateOrderStatusV2()
+}
+
+// migrateOrderStatusV2 将旧订单状态（0待处理/1已完成/2已取消）迁移为新状态。
+func migrateOrderStatusV2() error {
+	_, err := DB.Exec(`
+        CREATE TABLE IF NOT EXISTS schema_migrations (
+            migration_name VARCHAR(100) PRIMARY KEY,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `)
+	if err != nil {
+		return err
+	}
+
+	var count int
+	err = DB.QueryRow("SELECT COUNT(*) FROM schema_migrations WHERE migration_name = 'order_status_v2'").Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+
+	if _, err := DB.Exec("UPDATE orders SET status = 3 WHERE status = 1"); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("UPDATE orders SET status = 4 WHERE status = 2"); err != nil {
+		return err
+	}
+	if _, err := DB.Exec("INSERT IGNORE INTO schema_migrations (migration_name) VALUES ('order_status_v2')"); err != nil {
+		return err
+	}
+	return nil
+}
