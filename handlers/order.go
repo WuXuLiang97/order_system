@@ -21,6 +21,8 @@ type OrderCreateRequest struct {
 	CustomerPhone        string `json:"customer_phone"`
 	OrderDate            string `json:"order_date"`
 	ExpectedShippingDate string `json:"expected_shipping_date"`
+	CustomerRequiredDate string `json:"customer_required_date"`
+	LogisticsDays        int    `json:"logistics_days"`
 	PaymentStatus        int    `json:"payment_status"`
 	PreparedBy           string `json:"prepared_by"`
 	PaymentSettlement    string `json:"payment_settlement"`
@@ -84,6 +86,16 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	if orderDate == nil {
 		orderDate = time.Now()
 	}
+	customerRequiredDate, err := parsePurchaseDate(req.CustomerRequiredDate)
+	if err != nil {
+		http.Error(w, "客户需求到货日格式不正确", http.StatusBadRequest)
+		return
+	}
+	logisticsDays := req.LogisticsDays
+	if logisticsDays < 0 {
+		logisticsDays = 0
+	}
+
 	expectedShippingDate, err := parsePurchaseDate(req.ExpectedShippingDate)
 	if err != nil {
 		http.Error(w, "预计发货日期格式不正确", http.StatusBadRequest)
@@ -129,11 +141,11 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	result, err := tx.Exec(`
         INSERT INTO orders
         (order_no, customer_name, region, customer_address, customer_phone,
-         order_date, expected_shipping_date, delivery_date, total_amount, status, payment_status,
+         order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
          prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method, remark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?)
     `, orderNo, req.CustomerName, req.Region, req.CustomerAddress, req.CustomerPhone,
-		orderDate, expectedShippingDate, total, req.PaymentStatus, preparedBy, paymentSettlement,
+		orderDate, expectedShippingDate, customerRequiredDate, logisticsDays, total, req.PaymentStatus, preparedBy, paymentSettlement,
 		freightPayment, freightRecovery, transportMethod, req.Remark)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -217,7 +229,7 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	query := `
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
-               order_date, expected_shipping_date, delivery_date, total_amount, status, payment_status,
+               order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
                prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method,
                created_at, COALESCE(remark, '') AS remark
         FROM orders
@@ -254,8 +266,10 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 		var orderDate sql.NullTime
 		var expectedDate sql.NullTime
 		var deliveryDate sql.NullTime
+		var requiredDate sql.NullTime
+		var logisticsDays int
 		err := rows.Scan(&o.ID, &o.OrderNo, &o.CustomerName, &o.Region, &o.CustomerAddress, &o.CustomerPhone,
-			&orderDate, &expectedDate, &deliveryDate, &o.TotalAmount, &o.Status, &o.PaymentStatus,
+			&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &o.TotalAmount, &o.Status, &o.PaymentStatus,
 			&o.PreparedBy, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod, &o.CreatedAt, &o.Remark)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -267,6 +281,11 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 		if expectedDate.Valid {
 			o.ExpectedShippingDate = &expectedDate.Time
 		}
+		if requiredDate.Valid {
+			o.CustomerRequiredDate = &requiredDate.Time
+		}
+		o.LogisticsDays = logisticsDays
+		computeOrderWarning(&o, time.Now())
 		if deliveryDate.Valid {
 			o.DeliveryDate = &deliveryDate.Time
 		}
@@ -325,14 +344,16 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 	var orderDate sql.NullTime
 	var expectedDate sql.NullTime
 	var deliveryDate sql.NullTime
+	var requiredDate sql.NullTime
+	var logisticsDays int
 	err = models.DB.QueryRow(`
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
-               order_date, expected_shipping_date, delivery_date, total_amount, status, payment_status,
+               order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
                prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method,
                created_at, COALESCE(remark, '') AS remark
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
-		&orderDate, &expectedDate, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
+		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
 		&order.PreparedBy, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
@@ -344,6 +365,11 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 	if expectedDate.Valid {
 		order.ExpectedShippingDate = &expectedDate.Time
 	}
+	if requiredDate.Valid {
+		order.CustomerRequiredDate = &requiredDate.Time
+	}
+	order.LogisticsDays = logisticsDays
+	computeOrderWarning(&order, time.Now())
 	if deliveryDate.Valid {
 		order.DeliveryDate = &deliveryDate.Time
 	}
@@ -545,6 +571,8 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		Region               string `json:"region"`
 		OrderDate            string `json:"order_date"`
 		ExpectedShippingDate string `json:"expected_shipping_date"`
+		CustomerRequiredDate string `json:"customer_required_date"`
+		LogisticsDays        int    `json:"logistics_days"`
 		PaymentStatus        int    `json:"payment_status"`
 		PreparedBy           string `json:"prepared_by"`
 		PaymentSettlement    string `json:"payment_settlement"`
@@ -572,6 +600,16 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "下单日期格式不正确", http.StatusBadRequest)
 		return
 	}
+	customerRequiredDate, err := parsePurchaseDate(req.CustomerRequiredDate)
+	if err != nil {
+		http.Error(w, "客户需求到货日格式不正确", http.StatusBadRequest)
+		return
+	}
+	logisticsDays := req.LogisticsDays
+	if logisticsDays < 0 {
+		logisticsDays = 0
+	}
+
 	expectedDate, err := parsePurchaseDate(req.ExpectedShippingDate)
 	if err != nil {
 		http.Error(w, "预计发货日期格式不正确", http.StatusBadRequest)
@@ -605,6 +643,8 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
             region = ?,
             order_date = ?,
             expected_shipping_date = ?,
+            customer_required_date = ?,
+            logistics_days = ?,
             payment_status = ?,
             prepared_by = ?,
             payment_settlement = ?,
@@ -613,7 +653,7 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
             transport_method = ?,
             remark = ?
         WHERE id = ?
-    `, req.CustomerName, req.Region, orderDate, expectedDate, req.PaymentStatus, preparedBy, paymentSettlement, freightPayment, freightRecovery, transportMethod, req.Remark, req.ID)
+    `, req.CustomerName, req.Region, orderDate, expectedDate, customerRequiredDate, logisticsDays, req.PaymentStatus, preparedBy, paymentSettlement, freightPayment, freightRecovery, transportMethod, req.Remark, req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -640,14 +680,16 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 	var orderDate sql.NullTime
 	var expectedDate sql.NullTime
 	var deliveryDate sql.NullTime
+	var requiredDate sql.NullTime
+	var logisticsDays int
 	err = models.DB.QueryRow(`
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
-               order_date, expected_shipping_date, delivery_date, total_amount, status, payment_status,
+               order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
                prepared_by, payment_settlement, freight_payment, freight_recovery, transport_method,
                created_at, COALESCE(remark, '') AS remark
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
-		&orderDate, &expectedDate, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
+		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
 		&order.PreparedBy, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
@@ -659,6 +701,11 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 	if expectedDate.Valid {
 		order.ExpectedShippingDate = &expectedDate.Time
 	}
+	if requiredDate.Valid {
+		order.CustomerRequiredDate = &requiredDate.Time
+	}
+	order.LogisticsDays = logisticsDays
+	computeOrderWarning(&order, time.Now())
 	if deliveryDate.Valid {
 		order.DeliveryDate = &deliveryDate.Time
 	}
@@ -730,4 +777,58 @@ func orderOptionDefault(v, fallback string) string {
 		return fallback
 	}
 	return v
+}
+
+// 预警阈值（可调整）：按“距客户需求到货日还剩几天”判断，距离 = 客户需求到货日 - 今天（负数表示已超过）。
+const (
+	// warnOrangeDays 距需求到货日 <= 该天数时显示“即将逾期”。
+	warnOrangeDays = 2
+	// warnYellowDays 距需求到货日 <= 该天数时显示“到货风险”。
+	warnYellowDays = 5
+)
+
+// computeOrderWarning 按“距客户需求到货日剩余天数”计算预警等级，并兼顾“预计到货日（预计发货日+物流天数）晚于需求到货日”的排产风险。
+// 优先级：严重逾期(red) > 即将逾期(orange) > 到货风险(yellow) > 正常(blue)。
+// 已取消订单不预警；已发货订单不再按剩余天数报红/橙，只评估到货是否准时。
+func computeOrderWarning(o *models.Order, today time.Time) {
+	o.WarningLevel = ""
+	o.WarningLabel = ""
+	if o == nil || o.Status == 4 || o.CustomerRequiredDate == nil {
+		return
+	}
+	shipped := o.Status == 3
+	T := calendarDay(today)
+	R := calendarDay(*o.CustomerRequiredDate)
+	left := daysBetween(R, T) // 距客户需求到货日剩余天数（负数=已超过）
+	if !shipped {
+		switch {
+		case left < 0:
+			o.WarningLevel, o.WarningLabel = "red", "严重逾期"
+			return
+		case left <= warnOrangeDays:
+			o.WarningLevel, o.WarningLabel = "orange", "即将逾期"
+			return
+		case left <= warnYellowDays:
+			o.WarningLevel, o.WarningLabel = "yellow", "到货风险"
+			return
+		}
+	}
+	if o.ExpectedShippingDate != nil {
+		S := calendarDay(*o.ExpectedShippingDate)
+		if S.AddDate(0, 0, o.LogisticsDays).After(R) { // 预计到货日 > 需求到货日
+			o.WarningLevel, o.WarningLabel = "yellow", "到货风险"
+			return
+		}
+	}
+	o.WarningLevel, o.WarningLabel = "blue", "正常"
+}
+
+// calendarDay 将时间归一到 UTC 零点，仅保留“日历日期”以消除时区差异，便于按天比较。
+func calendarDay(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC)
+}
+
+// daysBetween 返回 a - b 相差的日历天数。
+func daysBetween(a, b time.Time) int {
+	return int(calendarDay(a).Sub(calendarDay(b)).Hours() / 24)
 }

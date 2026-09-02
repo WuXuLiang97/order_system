@@ -89,6 +89,8 @@ CREATE TABLE orders (
     delivery_date   DATE DEFAULT NULL COMMENT '期望交货日期',
     order_date      DATE DEFAULT NULL COMMENT '下单日期',
     expected_shipping_date DATE DEFAULT NULL COMMENT '预计发货日期',
+    customer_required_date DATE DEFAULT NULL COMMENT '客户需求到货日',
+    logistics_days INT NOT NULL DEFAULT 0 COMMENT '物流天数（天）',
     total_amount    DECIMAL(10,2) NOT NULL COMMENT '订单总金额',
     status          TINYINT DEFAULT 0 COMMENT '0-待生产 1-生产中 2-待发货 3-已发货 4-已取消',
     payment_status  TINYINT DEFAULT 0 COMMENT '回款状态：0-否 1-是',

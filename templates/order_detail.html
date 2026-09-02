@@ -175,6 +175,21 @@
             color: #888;
             text-align: center;
         }
+
+        /* 订单预警灯 */
+        .warn-dot {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 6px;
+            vertical-align: middle;
+        }
+        .warn-red { background-color: #e74c3c; }
+        .warn-orange { background-color: #f39c12; }
+        .warn-yellow { background-color: #f1c40f; }
+        .warn-blue { background-color: #2e86de; }
+        .warn-gray { background-color: #bdc3c7; }
     </style>
 </head>
 <body>
@@ -199,6 +214,9 @@
             <div class="info-item"><strong>客户地址：</strong><span>{{if .Order.CustomerAddress}}{{.Order.CustomerAddress}}{{else}}未填写{{end}}</span></div>
             <div class="info-item"><strong>下单日期：</strong><span>{{if .Order.OrderDate}}{{.Order.OrderDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
             <div class="info-item"><strong>预计发货：</strong><span>{{if .Order.ExpectedShippingDate}}{{.Order.ExpectedShippingDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
+            <div class="info-item"><strong>需求到货日：</strong><span>{{if .Order.CustomerRequiredDate}}{{.Order.CustomerRequiredDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
+            <div class="info-item"><strong>物流天数：</strong><span>{{if .Order.LogisticsDays}}{{.Order.LogisticsDays}}{{else}}0{{end}} 天</span></div>
+            <div class="info-item"><strong>到货预警：</strong><span>{{if .Order.WarningLevel}}<span class="warn-dot warn-{{.Order.WarningLevel}}"></span>{{end}}{{if .Order.WarningLabel}}{{.Order.WarningLabel}}{{else}}—{{end}}</span></div>
             <div class="info-item"><strong>回款状态：</strong><span>{{if eq .Order.PaymentStatus 1}}是{{else}}否{{end}}</span></div>
             <div class="info-item"><strong>订单状态：</strong>
                 <span class="status-badge status-{{.Order.Status}}">

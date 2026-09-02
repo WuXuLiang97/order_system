@@ -48,6 +48,8 @@
                                 <th>金额</th>
                                 <th>下单日期</th>
                                 <th>预计发货日期</th>
+                                <th>客户需求到货日</th>
+                                <th>预警</th>
                                 <th>订单状态</th>
                                 <th>回款状态</th>
                                 <th>备注</th>
@@ -102,6 +104,14 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">预计发货日期</label>
                             <input type="date" class="form-control" id="expectedShippingDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">客户需求到货日</label>
+                            <input type="date" class="form-control" id="customerRequiredDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">物流天数（天）</label>
+                            <input type="number" class="form-control" id="logisticsDays" min="0" step="1" value="0">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">回款状态</label>
@@ -231,6 +241,14 @@
                             <input type="date" class="form-control" id="editExpectedShippingDate">
                         </div>
                         <div class="col-md-6 mb-3">
+                            <label class="form-label">客户需求到货日</label>
+                            <input type="date" class="form-control" id="editCustomerRequiredDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">物流天数（天）</label>
+                            <input type="number" class="form-control" id="editLogisticsDays" min="0" step="1" value="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
                             <label class="form-label">回款状态</label>
                             <select class="form-control" id="editPaymentStatus">
                                 <option value="0">否</option>
@@ -303,6 +321,11 @@ var customerCache = [];
 function formatDate(value) {
     if (!value) return '-';
     return value.slice(0, 10);
+}
+function warnHtml(level, label) {
+    if (!level) return '-';
+    var cls = {red: 'warn-red', orange: 'warn-orange', yellow: 'warn-yellow', blue: 'warn-blue'}[level] || 'warn-gray';
+    return `<span class="warn-dot ${cls}"></span>${label || ''}`;
 }
 
 function currentUserName() {
@@ -452,7 +475,7 @@ function loadOrders(status, keyword) {
             var tbody = $('#orderTableBody');
             tbody.empty();
             if (data.length === 0) {
-                tbody.append('<tr><td colspan="15" class="text-center text-muted">暂无匹配的订单</td></tr>');
+                tbody.append('<tr><td colspan="17" class="text-center text-muted">暂无匹配的订单</td></tr>');
                 return;
             }
 
@@ -498,6 +521,8 @@ function loadOrders(status, keyword) {
                             <td>¥${amount.toFixed(2)}</td>
                             <td>${formatDate(order.order_date)}</td>
                             <td>${formatDate(order.expected_shipping_date)}</td>
+                            <td>${formatDate(order.customer_required_date)}</td>
+                            <td>${warnHtml(order.warning_level, order.warning_label)}</td>
                             <td>${statusSelect}</td>
                             <td>${payment}</td>
                             <td>${order.remark || '-'}</td>
@@ -600,6 +625,8 @@ function createOrder() {
         region: $('#region').val().trim(),
         order_date: $('#orderDate').val(),
         expected_shipping_date: $('#expectedShippingDate').val(),
+        customer_required_date: $('#customerRequiredDate').val(),
+        logistics_days: parseInt($('#logisticsDays').val()) || 0,
         payment_status: parseInt($('#paymentStatus').val()),
         prepared_by: $('#preparedBy').val().trim(),
         payment_settlement: customFieldValue('paymentSettlement', 'paymentSettlementCustom'),
@@ -641,6 +668,8 @@ function editOrder(id) {
             $('#editRegion').val(order.region || '');
             $('#editOrderDate').val(formatDate(order.order_date) === '-' ? '' : formatDate(order.order_date));
             $('#editExpectedShippingDate').val(formatDate(order.expected_shipping_date) === '-' ? '' : formatDate(order.expected_shipping_date));
+            $('#editCustomerRequiredDate').val(formatDate(order.customer_required_date) === '-' ? '' : formatDate(order.customer_required_date));
+            $('#editLogisticsDays').val(order.logistics_days || 0);
             $('#editPaymentStatus').val(order.payment_status);
             $('#editPreparedBy').val(order.prepared_by || currentUserName());
             setCustomField('editPaymentSettlement', 'editPaymentSettlementCustom', order.payment_settlement || '现付', ['现付']);
@@ -669,6 +698,8 @@ function saveEditOrder() {
         region: $('#editRegion').val().trim(),
         order_date: $('#editOrderDate').val(),
         expected_shipping_date: $('#editExpectedShippingDate').val(),
+        customer_required_date: $('#editCustomerRequiredDate').val(),
+        logistics_days: parseInt($('#editLogisticsDays').val()) || 0,
         payment_status: parseInt($('#editPaymentStatus').val()),
         prepared_by: $('#editPreparedBy').val().trim(),
         payment_settlement: customFieldValue('editPaymentSettlement', 'editPaymentSettlementCustom'),

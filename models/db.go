@@ -85,6 +85,12 @@ func ensureOrderColumns() error {
 	if err := ensureColumn("orders", "expected_shipping_date", "DATE NULL"); err != nil {
 		return err
 	}
+	if err := ensureColumn("orders", "customer_required_date", "DATE NULL"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "logistics_days", "INT NOT NULL DEFAULT 0"); err != nil {
+		return err
+	}
 	if err := ensureColumn("orders", "payment_status", "TINYINT NOT NULL DEFAULT 0"); err != nil {
 		return err
 	}
