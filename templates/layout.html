@@ -63,6 +63,12 @@
         .warn-yellow { background-color: #f1c40f; }
         .warn-blue { background-color: #2e86de; }
         .warn-gray { background-color: #bdc3c7; }
+
+        /* 内容不足一屏时，页脚固定贴底 */
+        html, body { min-height: 100vh; }
+        body { display: flex; flex-direction: column; }
+        #pageContent { flex: 1 0 auto; }
+        .site-footer { flex-shrink: 0; }
     </style>
 </head>
 <body>
@@ -142,11 +148,11 @@
         </div>
     </nav>
     
-    <div class="container-fluid px-3 px-xl-4 mt-4">
+    <div class="container-fluid px-3 px-xl-4 mt-4" id="pageContent">
         {{template "content" .}}
     </div>
     
-    <footer class="footer mt-5 py-3 bg-light">
+    <footer class="footer mt-5 py-3 bg-light site-footer">
         <div class="container-fluid text-center">
             <span class="text-muted">© 2026 深圳市印客领科技有限公司</span>
         </div>
