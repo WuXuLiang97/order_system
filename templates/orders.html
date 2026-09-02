@@ -112,31 +112,31 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">制单</label>
-                            <input type="text" class="form-control" id="editPreparedBy" placeholder="制单人（默认为当前登录人）">
+                            <input type="text" class="form-control" id="preparedBy" placeholder="制单人（默认为当前登录人）">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">货款结算</label>
                             <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="editPaymentSettlement">
+                                <select class="form-control flex-shrink-0" style="width:130px;" id="paymentSettlement">
                                     <option value="现付">现付</option>
                                     <option value="自定义">自定义</option>
                                 </select>
-                                <input type="text" class="form-control" id="editPaymentSettlementCustom" placeholder="请输入货款结算方式，如：月结30天" disabled>
+                                <input type="text" class="form-control" id="paymentSettlementCustom" placeholder="请输入货款结算方式，如：月结30天" disabled>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">运费支付</label>
                             <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="editFreightPayment">
+                                <select class="form-control flex-shrink-0" style="width:130px;" id="freightPayment">
                                     <option value="现付">现付</option>
                                     <option value="自定义">自定义</option>
                                 </select>
-                                <input type="text" class="form-control" id="editFreightPaymentCustom" placeholder="请输入运费支付方式" disabled>
+                                <input type="text" class="form-control" id="freightPaymentCustom" placeholder="请输入运费支付方式" disabled>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">运费回收</label>
-                                <select class="form-control" id="editFreightRecovery">
+                                <select class="form-control" id="freightRecovery">
                                     <option value="可回收">可回收</option>
                                     <option value="不可回收">不可回收</option>
                                 </select>
@@ -144,12 +144,12 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">运输方式</label>
                             <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="editTransportMethod">
+                                <select class="form-control flex-shrink-0" style="width:130px;" id="transportMethod">
                                     <option value="物流">物流</option>
                                     <option value="快递">快递</option>
                                     <option value="自定义">自定义</option>
                                 </select>
-                                <input type="text" class="form-control" id="editTransportMethodCustom" placeholder="请输入运输方式" disabled>
+                                <input type="text" class="form-control" id="transportMethodCustom" placeholder="请输入运输方式" disabled>
                             </div>
                         </div>
 <div class="col-md-12 mb-3">
@@ -239,31 +239,31 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">制单</label>
-                            <input type="text" class="form-control" id="preparedBy" placeholder="制单人（默认为当前登录人）">
+                            <input type="text" class="form-control" id="editPreparedBy" placeholder="制单人（默认为当前登录人）">
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">货款结算</label>
                             <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="paymentSettlement">
+                                <select class="form-control flex-shrink-0" style="width:130px;" id="editPaymentSettlement">
                                     <option value="现付">现付</option>
                                     <option value="自定义">自定义</option>
                                 </select>
-                                <input type="text" class="form-control" id="paymentSettlementCustom" placeholder="请输入货款结算方式，如：月结30天" disabled>
+                                <input type="text" class="form-control" id="editPaymentSettlementCustom" placeholder="请输入货款结算方式，如：月结30天" disabled>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">运费支付</label>
                             <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="freightPayment">
+                                <select class="form-control flex-shrink-0" style="width:130px;" id="editFreightPayment">
                                     <option value="现付">现付</option>
                                     <option value="自定义">自定义</option>
                                 </select>
-                                <input type="text" class="form-control" id="freightPaymentCustom" placeholder="请输入运费支付方式" disabled>
+                                <input type="text" class="form-control" id="editFreightPaymentCustom" placeholder="请输入运费支付方式" disabled>
                             </div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">运费回收</label>
-                                <select class="form-control" id="freightRecovery">
+                                <select class="form-control" id="editFreightRecovery">
                                     <option value="可回收">可回收</option>
                                     <option value="不可回收">不可回收</option>
                                 </select>
@@ -271,12 +271,12 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">运输方式</label>
                             <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="transportMethod">
+                                <select class="form-control flex-shrink-0" style="width:130px;" id="editTransportMethod">
                                     <option value="物流">物流</option>
                                     <option value="快递">快递</option>
                                     <option value="自定义">自定义</option>
                                 </select>
-                                <input type="text" class="form-control" id="transportMethodCustom" placeholder="请输入运输方式" disabled>
+                                <input type="text" class="form-control" id="editTransportMethodCustom" placeholder="请输入运输方式" disabled>
                             </div>
                         </div>
 <div class="col-md-12 mb-3">
