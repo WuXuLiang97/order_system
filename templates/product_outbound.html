@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>送货单 {{.Outbound.OutboundNo}}</title>
+    <style>
+        * { box-sizing: border-box; }
+        body {
+            font-family: "Microsoft YaHei", "SimSun", Arial, sans-serif;
+            color: #222;
+            margin: 0;
+            padding: 20px;
+            background: #f0f0f0;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 28px 32px;
+            box-shadow: 0 2px 10px rgba(0,0,0,.15);
+            border-radius: 6px;
+        }
+        .actions {
+            text-align: right;
+            margin-bottom: 12px;
+        }
+        .actions button {
+            padding: 8px 18px;
+            margin-left: 8px;
+            border: 1px solid #999;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .actions button:hover { background: #eee; }
+        .header { text-align: center; border-bottom: 2px solid #333; padding-bottom: 10px; margin-bottom: 14px; }
+        .header h1 { margin: 0; font-size: 26px; letter-spacing: 6px; }
+        .header .company { font-size: 13px; color: #555; margin-bottom: 4px; }
+        .header .doc-no { font-size: 15px; margin-top: 4px; font-weight: bold; }
+        .info-row { display: flex; flex-wrap: wrap; gap: 6px 28px; margin-bottom: 10px; font-size: 14px; }
+        .info-item { white-space: nowrap; }
+        .info-item .label { color: #555; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { border: 1px solid #333; padding: 6px 8px; text-align: center; }
+        td.text-left, th.text-left { text-align: left; }
+        thead th { background: #f5f5f5; }
+        .total-row { font-weight: bold; background: #fafafa; }
+        .remark-box { margin-top: 12px; font-size: 14px; border-top: 1px dashed #999; padding-top: 8px; }
+        .remark-box .remark-content { white-space: pre-wrap; margin-top: 4px; }
+        .sign-row {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 42px;
+            font-size: 14px;
+        }
+        .sign-row div { text-align: center; }
+        .footer { margin-top: 18px; font-size: 12px; color: #888; text-align: center; border-top: 1px dashed #ccc; padding-top: 8px; }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .container { box-shadow: none; border-radius: 0; padding: 10px 4px; max-width: none; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="actions no-print">
+            <button onclick="window.print()">🖨️ 打印 / 导出PDF</button>
+            <button onclick="window.close()">关闭</button>
+        </div>
+
+        <div class="header">
+            <div class="company">深圳市印客领科技有限公司</div>
+            <h1>送 货 单</h1>
+            <div class="doc-no">送货单号：{{.Outbound.OutboundNo}}</div>
+        </div>
+
+        <div class="info-row">
+            <div class="info-item"><span class="label">送货日期：</span>{{.Outbound.OutDate.Format "2006-01-02"}}</div>
+            {{if .Outbound.Receiver}}<div class="info-item"><span class="label">收货单位：</span>{{.Outbound.Receiver}}</div>{{end}}
+            <div class="info-item"><span class="label">制单人：</span>{{if .Outbound.CreatedByName}}{{.Outbound.CreatedByName}}{{else}}—{{end}}</div>
+        </div>
+
+        <table>
+            <thead>
+                <tr>
+                    <th style="width:8%;">序号</th>
+                    <th style="width:32%;" class="text-left">产品名称</th>
+                    <th style="width:22%;" class="text-left">规格型号</th>
+                    <th style="width:13%;">单位</th>
+                    <th style="width:15%;">数量</th>
+                </tr>
+            </thead>
+            <tbody>
+                {{range $index, $item := .Items}}
+                <tr>
+                    <td>{{add $index 1}}</td>
+                    <td class="text-left">{{$item.ProductName}}</td>
+                    <td class="text-left">{{$item.Spec}}</td>
+                    <td>{{$item.Unit}}</td>
+                    <td>{{printf "%g" $item.Quantity}}</td>
+                </tr>
+                {{end}}
+                <tr class="total-row">
+                    <td colspan="4" style="text-align:right;">总数量：</td>
+                    <td>{{printf "%g" .TotalQuantity}}</td>
+                </tr>
+            </tbody>
+        </table>
+
+        {{if .Outbound.Remark}}
+        <div class="remark-box">
+            <strong>📝 备注：</strong>
+            <div class="remark-content">{{.Outbound.Remark}}</div>
+        </div>
+        {{else}}
+        <div class="remark-box" style="color:#999;">（无备注）</div>
+        {{end}}
+
+        <div class="sign-row">
+            <div>送货人签字：_______________</div>
+            <div>收货人签字：_______________</div>
+            <div>日期：___________________</div>
+        </div>
+
+        <div class="footer">
+            打印日期：{{.Now.Format "2006-01-02 15:04:05"}}　|　本单仅作发货清点使用，不含价格信息　|　系统自动生成
+        </div>
+    </div>
+</body>
+</html>

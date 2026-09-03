@@ -9,6 +9,9 @@
                     <button class="btn btn-success btn-sm me-2" data-bs-toggle="modal" data-bs-target="#productionModal">
                         <i class="bi bi-plus-circle"></i> 生产入库
                     </button>
+                    <button class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#outboundModal">
+                        <i class="bi bi-box-arrow-right"></i> 成品出库
+                    </button>
                     <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addProductModal">
                         <i class="bi bi-plus-circle"></i> 添加产品
                     </button>
@@ -44,6 +47,76 @@
     </div>
 </div>
 
+<!-- 成品出库记录 -->
+<div class="row mt-3">
+    <div class="col-md-12">
+        <div class="card">
+            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+                <h5 class="mb-0"><i class="bi bi-box-arrow-right"></i> 成品出库记录（送货单）</h5>
+                <span class="text-muted small">出库后可直接打印送货单，单据不含价格信息</span>
+            </div>
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-hover" id="outboundTable">
+                        <thead>
+                            <tr>
+                                <th>送货单号</th>
+                                <th>出库日期</th>
+                                <th>收货单位</th>
+                                <th>型号数</th>
+                                <th>总数量</th>
+                                <th>操作人</th>
+                                <th>操作</th>
+                            </tr>
+                        </thead>
+                        <tbody id="outboundTableBody"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 成品出库模态框 -->
+<div class="modal fade" id="outboundModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-box-arrow-right"></i> 成品出库 / 送货单</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="outboundForm">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">出库日期</label>
+                            <input type="date" class="form-control" id="outboundDate">
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">收货单位（可选，打印在送货单上）</label>
+                            <input type="text" class="form-control" id="outboundReceiver" placeholder="客户名称 / 收货单位">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">出库明细（型号 + 数量）</label>
+                        <div id="outboundItems"></div>
+                        <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addOutboundRow()">
+                            <i class="bi bi-plus"></i> 添加一个型号
+                        </button>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">备注</label>
+                        <textarea class="form-control" id="outboundRemark" rows="2" placeholder="打印备注，如：随货附送货单、注意事项等"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" onclick="submitOutbound()">保存出库并打印</button>
+            </div>
+        </div>
+    </div>
+</div>
 <!-- 添加产品模态框（含 BOM） -->
 <div class="modal fade" id="addProductModal" tabindex="-1">
     <div class="modal-dialog modal-lg">
@@ -621,5 +694,200 @@ function submitProduction() {
         }
     });
 }
+// ============================
+// 成品出库 / 送货单
+// ============================
+var outboundProducts = [];
+
+function qtyText(n) {
+    var num = Number(n || 0);
+    if (Number.isInteger(num)) return String(num);
+    return String(Math.round(num * 1000) / 1000);
+}
+
+function buildOutboundRow() {
+    var opts = '<option value="">请选择产品</option>';
+    outboundProducts.forEach(function(p) {
+        opts += `<option value="${p.id}">${p.name}（库存 ${qtyText(p.stock)} ${p.unit || ''}）</option>`;
+    });
+    return `<div class="row mb-2 outbound-row align-items-end">
+        <div class="col-md-5">
+            <select class="form-control outbound-product-select">${opts}</select>
+        </div>
+        <div class="col-md-2">
+            <input type="text" class="form-control outbound-spec" placeholder="规格型号" readonly>
+        </div>
+        <div class="col-md-1">
+            <input type="text" class="form-control outbound-unit" placeholder="单位" readonly>
+        </div>
+        <div class="col-md-2">
+            <input type="number" class="form-control outbound-qty" placeholder="出库数量" step="any" min="0">
+        </div>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn btn-danger btn-sm remove-outbound-row"><i class="bi bi-trash"></i> 删除</button>
+        </div>
+    </div>`;
+}
+
+function refreshOutboundRowInfo(row) {
+    var pid = parseInt(row.find('.outbound-product-select').val());
+    var p = outboundProducts.find(function(x) { return x.id === pid; });
+    if (p) {
+        row.find('.outbound-spec').val(p.spec || '');
+        row.find('.outbound-unit').val(p.unit || '');
+    } else {
+        row.find('.outbound-spec').val('');
+        row.find('.outbound-unit').val('');
+    }
+}
+
+function addOutboundRow() {
+    $('#outboundItems').append(buildOutboundRow());
+}
+
+function todayStr() {
+    var d = new Date();
+    var m = ('0' + (d.getMonth() + 1)).slice(-2);
+    var day = ('0' + d.getDate()).slice(-2);
+    return d.getFullYear() + '-' + m + '-' + day;
+}
+
+$('#outboundModal').on('show.bs.modal', function() {
+    $('#outboundForm')[0].reset();
+    $('#outboundDate').val(todayStr());
+    $('#outboundItems').empty();
+    $.ajax({
+        url: '/api/products',
+        method: 'GET',
+        success: function(data) {
+            outboundProducts = data || [];
+            $('#outboundItems').append(buildOutboundRow());
+        },
+        error: function() {
+            alert('加载产品列表失败');
+        }
+    });
+});
+
+$(document).on('change', '.outbound-product-select', function() {
+    refreshOutboundRowInfo($(this).closest('.outbound-row'));
+});
+
+$(document).on('click', '.remove-outbound-row', function() {
+    if ($('#outboundItems .outbound-row').length > 1) {
+        $(this).closest('.outbound-row').remove();
+    } else {
+        alert('至少保留一行');
+    }
+});
+
+function submitOutbound() {
+    var items = [];
+    var valid = true;
+    var errors = [];
+    $('#outboundItems .outbound-row').each(function(index) {
+        var row = $(this);
+        var pid = parseInt(row.find('.outbound-product-select').val());
+        var qty = parseFloat(row.find('.outbound-qty').val());
+        if (!pid) {
+            errors.push('第 ' + (index + 1) + ' 行：请选择产品');
+            valid = false;
+        } else if (!qty || qty <= 0) {
+            errors.push('第 ' + (index + 1) + ' 行：出库数量必须大于 0');
+            valid = false;
+        } else {
+            items.push({product_id: pid, quantity: qty});
+        }
+    });
+    if (!valid) {
+        alert(errors.join('\n'));
+        return;
+    }
+    if (items.length === 0) {
+        alert('请至少填写一行出库明细');
+        return;
+    }
+    $.ajax({
+        url: '/api/outbounds/create',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            out_date: $('#outboundDate').val(),
+            receiver: $('#outboundReceiver').val().trim(),
+            remark: $('#outboundRemark').val().trim(),
+            items: items
+        }),
+        success: function(res) {
+            alert((res.message || '成品出库成功') + '，单号：' + res.outbound_no);
+            $('#outboundModal').modal('hide');
+            loadProducts();
+            loadOutbounds();
+            window.open('/outbound/detail?id=' + res.id, '_blank');
+        },
+        error: function(xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('出库失败: ' + msg);
+        }
+    });
+}
+
+function loadOutbounds() {
+    $.ajax({
+        url: '/api/outbounds/list?limit=50',
+        method: 'GET',
+        success: function(data) {
+            var tbody = $('#outboundTableBody');
+            tbody.empty();
+            if (!data || !data.length) {
+                tbody.append('<tr><td colspan="7" class="text-center text-muted">暂无出库记录</td></tr>');
+                return;
+            }
+            data.forEach(function(o) {
+                var actions = `<a class="btn btn-outline-primary btn-sm me-1" href="/outbound/detail?id=${o.id}" target="_blank"><i class="bi bi-printer"></i> 打印送货单</a>`;
+                if (window.PERMS && window.PERMS['product:manage']) {
+                    actions += `<button class="btn btn-danger btn-sm" onclick="deleteOutbound(${o.id})"><i class="bi bi-trash"></i> 删除</button>`;
+                }
+                tbody.append(`<tr>
+                    <td><span class="badge bg-dark">${escapeOut(o.outbound_no)}</span></td>
+                    <td>${o.out_date ? String(o.out_date).slice(0, 10) : '-'}</td>
+                    <td>${o.receiver ? escapeOut(o.receiver) : '-'}</td>
+                    <td>${o.item_count || 0} 项</td>
+                    <td><strong>${qtyText(o.total_quantity)}</strong></td>
+                    <td>${escapeOut(o.created_by_name || '-')}</td>
+                    <td class="text-nowrap">${actions}</td>
+                </tr>`);
+            });
+        },
+        error: function(xhr) {
+            alert('加载出库记录失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function deleteOutbound(id) {
+    if (!confirm('确定删除该出库记录吗？删除后对应成品库存将自动回补。')) return;
+    $.ajax({
+        url: '/api/outbounds/delete?id=' + id,
+        method: 'POST',
+        success: function(res) {
+            alert(res.message || '删除成功');
+            loadOutbounds();
+            loadProducts();
+        },
+        error: function(xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('删除失败: ' + msg);
+        }
+    });
+}
+
+function escapeOut(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+loadOutbounds();
 </script>
 {{end}}

@@ -43,6 +43,9 @@ func InitDB(dataSourceName string) {
 	if err = EnsureCustomerAttachmentsTable(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureProductOutboundTables(); err != nil {
+		log.Fatal(err)
+	}
 	if err = ensureOrderColumns(); err != nil {
 		log.Fatal(err)
 	}

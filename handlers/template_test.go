@@ -120,4 +120,26 @@ func TestPageTemplates(t *testing.T) {
 	if err := tmpl.Execute(io.Discard, detailData); err != nil {
 		t.Fatalf("order_detail execute error: %v", err)
 	}
+
+	// 成品出库送货单打印页（独立模板）
+	outboundData := struct {
+		Outbound      models.ProductOutbound
+		Items         []models.ProductOutboundItem
+		Now           time.Time
+		TotalQuantity float64
+	}{
+		Outbound: models.ProductOutbound{OutboundNo: "FHTEST", OutDate: time.Now(), Receiver: "测试客户", CreatedByName: "管理员"},
+		Items: []models.ProductOutboundItem{
+			{ProductName: "产品A", Spec: "A型", Unit: "个", Quantity: 2},
+		},
+		Now:           time.Now(),
+		TotalQuantity: 2,
+	}
+	tmpl2, err := template.New("product_outbound.html").Funcs(utils.FuncMap()).ParseFiles("../templates/product_outbound.html")
+	if err != nil {
+		t.Fatalf("product_outbound parse error: %v", err)
+	}
+	if err := tmpl2.Execute(io.Discard, outboundData); err != nil {
+		t.Fatalf("product_outbound execute error: %v", err)
+	}
 }

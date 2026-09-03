@@ -54,6 +54,10 @@ func main() {
 	http.HandleFunc("/api/products/update", handlers.RequirePermission(handlers.PermProductManage, handlers.UpdateProduct))
 	http.HandleFunc("/api/products/delete", handlers.RequirePermission(handlers.PermProductManage, handlers.DeleteProduct))
 	http.HandleFunc("/api/production", handlers.RequirePermission(handlers.PermProductManage, handlers.ProduceProduct))
+	http.HandleFunc("/outbound/detail", handlers.RequirePermission(handlers.PermProductView, handlers.ProductOutboundPrintPage))
+	http.HandleFunc("/api/outbounds/list", handlers.RequirePermission(handlers.PermProductView, handlers.ListProductOutbounds))
+	http.HandleFunc("/api/outbounds/create", handlers.RequirePermission(handlers.PermProductManage, handlers.CreateProductOutbound))
+	http.HandleFunc("/api/outbounds/delete", handlers.RequirePermission(handlers.PermProductManage, handlers.DeleteProductOutbound))
 
 	// API 路由 - 订单
 	http.HandleFunc("/api/orders", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(handlers.CreateOrder))
