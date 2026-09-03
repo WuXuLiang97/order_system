@@ -149,6 +149,10 @@
                             <input type="text" class="form-control" id="preparedBy" placeholder="制单人（默认为当前登录人）">
                         </div>
                         <div class="col-md-6 mb-3">
+                            <label class="form-label">负责人（业务员）</label>
+                            <select class="form-control" id="orderOwner"><option value="0">未分配</option></select>
+                        </div>
+                        <div class="col-md-6 mb-3">
                             <label class="form-label">货款结算</label>
                             <div class="d-flex gap-2">
                                 <select class="form-control flex-shrink-0" style="width:130px;" id="paymentSettlement">
@@ -297,6 +301,10 @@
                             <input type="text" class="form-control" id="editPreparedBy" placeholder="制单人（默认为当前登录人）">
                         </div>
                         <div class="col-md-6 mb-3">
+                            <label class="form-label">负责人（业务员）</label>
+                            <select class="form-control" id="editOrderOwner"><option value="0">未分配</option></select>
+                        </div>
+                        <div class="col-md-6 mb-3">
                             <label class="form-label">货款结算</label>
                             <div class="d-flex gap-2">
                                 <select class="form-control flex-shrink-0" style="width:130px;" id="editPaymentSettlement">
@@ -393,6 +401,26 @@ function warnHtml(level, label) {
 function orderMoney(order, v) {
     var num = Number(v || 0).toFixed(2);
     return (order.currency && order.currency !== 'CNY' ? order.currency + ' ' : '¥') + num;
+}
+
+function fillOwnerOptions() {
+    if (window.__OWNER_OPTIONS__) return;
+    $.ajax({
+        url: '/api/users/options',
+        method: 'GET',
+        success: function(data) {
+            window.__OWNER_OPTIONS__ = data || [];
+            var html = '<option value="0">未分配</option>';
+            window.__OWNER_OPTIONS__.forEach(function(u) {
+                html += '<option value="' + u.id + '">' + u.name + '</option>';
+            });
+            $('#orderOwner, #editOrderOwner').html(html);
+            if (window.CURRENT_USER && $('#orderOwner').val() !== String(window.CURRENT_USER.id)) {
+                $('#orderOwner').val(window.CURRENT_USER.id);
+            }
+        },
+        error: function() { /* 忽略：加载失败时负责人仅未分配 */ }
+    });
 }
 
 function currentUserName() {
@@ -567,7 +595,11 @@ function loadOrders(status, keyword) {
             var P = window.PERMS || {};
             var canEditAll = !!P['order:edit_all'];
             var canEditOwn = !!P['order:edit_own'];
-            var isMine = function(order) { var cu = window.CURRENT_USER; return !!cu && !!order.created_by_user_id && order.created_by_user_id === cu.id; };
+            var isMine = function(order) {
+                var cu = window.CURRENT_USER;
+                if (!cu) return false;
+                return (!!order.created_by_user_id && order.created_by_user_id === cu.id) || order.owner_user_id === cu.id;
+            };
             data.forEach(function(order) {
                 var items = order.items && order.items.length ? order.items : [];
                 if (items.length === 0) {
@@ -599,7 +631,7 @@ function loadOrders(status, keyword) {
                     var row = `
                         <tr>
                             <td><strong>${order.order_no}</strong></td>
-                            <td>${order.customer_name}</td>
+                            <td>${order.customer_name + (order.owner_name ? ' <span class="small text-muted">负责：' + order.owner_name + '</span>' : '')}</td>
                             <td>${order.region || '-'}</td>
                             <td>${item.product_name || '-'}</td>
                             <td>${item.spec || '-'}</td>
@@ -723,6 +755,7 @@ function createOrder() {
         logistics_days: parseInt($('#logisticsDays').val()) || 0,
         payment_status: parseInt($('#paymentStatus').val()),
         prepared_by: $('#preparedBy').val().trim(),
+        owner_user_id: parseInt($('#orderOwner').val()) || 0,
         payment_settlement: customFieldValue('paymentSettlement', 'paymentSettlementCustom'),
         freight_payment: customFieldValue('freightPayment', 'freightPaymentCustom'),
         freight_recovery: $('#freightRecovery').val(),
@@ -770,6 +803,7 @@ function editOrder(id) {
             $('#editLogisticsDays').val(order.logistics_days || 0);
             $('#editPaymentStatus').val(order.payment_status);
             $('#editPreparedBy').val(order.prepared_by || currentUserName());
+            $('#editOrderOwner').val(order.owner_user_id || 0);
             setCustomField('editPaymentSettlement', 'editPaymentSettlementCustom', order.payment_settlement || '现付', ['现付']);
             setCustomField('editFreightPayment', 'editFreightPaymentCustom', order.freight_payment || '现付', ['现付']);
             $('#editFreightRecovery').val(order.freight_recovery === '不可回收' ? '不可回收' : '可回收');
@@ -804,6 +838,7 @@ function saveEditOrder() {
         logistics_days: parseInt($('#editLogisticsDays').val()) || 0,
         payment_status: parseInt($('#editPaymentStatus').val()),
         prepared_by: $('#editPreparedBy').val().trim(),
+        owner_user_id: parseInt($('#editOrderOwner').val()) || 0,
         payment_settlement: customFieldValue('editPaymentSettlement', 'editPaymentSettlementCustom'),
         freight_payment: customFieldValue('editFreightPayment', 'editFreightPaymentCustom'),
         freight_recovery: $('#editFreightRecovery').val(),
@@ -888,6 +923,7 @@ $(document).ready(function() {
     bindCustomField('editFreightPayment', 'editFreightPaymentCustom');
     bindCustomField('editTransportMethod', 'editTransportMethodCustom');
     fillOrderOptionSelects();
+    fillOwnerOptions();
     $('#searchKeyword').on('keypress', function(e) {
         if (e.which === 13) applyFilter();
     });

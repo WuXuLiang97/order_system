@@ -7,6 +7,8 @@ type Order struct {
 	OrderNo              string     `json:"order_no"`
 	CustomerID           int        `json:"customer_id"`
 	CustomerName         string     `json:"customer_name"`
+	CustomerCode         string     `json:"customer_code"`
+	CustomerFullName     string     `json:"customer_full_name"`
 	Region               string     `json:"region"`
 	CustomerAddress      string     `json:"customer_address"`
 	CustomerPhone        string     `json:"customer_phone"`
@@ -20,6 +22,8 @@ type Order struct {
 	PaymentStatus        int        `json:"payment_status"`
 	PreparedBy           string     `json:"prepared_by"`
 	CreatedByUserID      *int       `json:"created_by_user_id"`
+	OwnerUserID          int        `json:"owner_user_id"`
+	OwnerName            string     `json:"owner_name"`
 	PaymentSettlement    string     `json:"payment_settlement"`
 	FreightPayment       string     `json:"freight_payment"`
 	FreightRecovery      string     `json:"freight_recovery"`

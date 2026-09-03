@@ -130,8 +130,19 @@ func HasPermission(u *models.User, perm string) bool {
 	return PermissionsFor(u)[perm]
 }
 
-// canViewOrder 判断用户能否查看指定订单（编辑全部/查看全部=true；仅本人需为创建人）。
-func canViewOrder(u *models.User, ownerID *int) bool {
+// isOwnOrder 判断用户是否为订单的创建人或负责人。
+func isOwnOrder(u *models.User, createdByID, ownerUserID *int) bool {
+	if u == nil {
+		return false
+	}
+	if createdByID != nil && *createdByID == u.ID {
+		return true
+	}
+	return ownerUserID != nil && *ownerUserID == u.ID
+}
+
+// canViewOrder 判断用户能否查看指定订单（查看/编辑全部=true；“仅本人”=创建人或负责人）。
+func canViewOrder(u *models.User, createdByID, ownerUserID *int) bool {
 	if u == nil {
 		return false
 	}
@@ -140,13 +151,13 @@ func canViewOrder(u *models.User, ownerID *int) bool {
 		return true
 	}
 	if perms[PermOrderViewOwn] || perms[PermOrderEditOwn] {
-		return ownerID != nil && *ownerID == u.ID
+		return isOwnOrder(u, createdByID, ownerUserID)
 	}
 	return false
 }
 
-// canEditOrder 判断用户能否编辑指定订单（编辑全部=true；编辑仅本人需为创建人，且不含删除）。
-func canEditOrder(u *models.User, ownerID *int) bool {
+// canEditOrder 判断用户能否编辑指定订单（编辑全部=true；“仅本人”=创建人或负责人，且不含删除）。
+func canEditOrder(u *models.User, createdByID, ownerUserID *int) bool {
 	if u == nil {
 		return false
 	}
@@ -155,7 +166,7 @@ func canEditOrder(u *models.User, ownerID *int) bool {
 		return true
 	}
 	if perms[PermOrderEditOwn] {
-		return ownerID != nil && *ownerID == u.ID
+		return isOwnOrder(u, createdByID, ownerUserID)
 	}
 	return false
 }

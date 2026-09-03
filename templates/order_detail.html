@@ -26,16 +26,16 @@
         .header {
             text-align: center;
             border-bottom: 3px double #333;
-            padding-bottom: 15px;
-            margin-bottom: 25px;
+            padding-bottom: 8px;
+            margin-bottom: 12px;
         }
         .header h1 {
             margin: 0;
-            font-size: 28px;
-            letter-spacing: 4px;
+            font-size: 24px;
+            letter-spacing: 2px;
         }
         .header .order-no {
-            font-size: 18px;
+            font-size: 15px;
             color: #555;
             margin-top: 5px;
         }
@@ -43,14 +43,14 @@
             display: flex;
             flex-wrap: wrap;
             justify-content: space-between;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
             background: #f9f9f9;
-            padding: 15px;
+            padding: 4px 6px;
             border-radius: 4px;
         }
         .info-item {
             flex: 1 1 30%;
-            margin-bottom: 8px;
+            margin-bottom: 4px;
         }
         .info-item strong {
             display: inline-block;
@@ -75,18 +75,18 @@
         table {
             width: 100%;
             border-collapse: collapse;
-            margin: 20px 0;
+            margin: 6px 0;
             font-size: 14px;
         }
         table th {
             background: #f2f2f2;
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 6px;
             text-align: center;
         }
         table td {
             border: 1px solid #ddd;
-            padding: 8px 10px;
+            padding: 4px 6px;
             text-align: center;
         }
         table .text-left { text-align: left; }
@@ -98,12 +98,12 @@
             border-top: 2px solid #333;
         }
         .footer {
-            margin-top: 30px;
+            margin-top: 10px;
             text-align: center;
             font-size: 12px;
             color: #999;
             border-top: 1px solid #ddd;
-            padding-top: 15px;
+            padding-top: 6px;
         }
         .btn-print {
             background: #007bff;
@@ -129,14 +129,14 @@
         .btn-back:hover { background: #5a6268; }
         .actions {
             text-align: center;
-            margin-bottom: 20px;
+            margin-bottom: 8px;
         }
         @media print {
             .actions { display: none; }
         }
         .remark-box {
-            margin-top: 15px;
-            padding: 12px;
+            margin-top: 8px;
+            padding: 8px;
             background: #fef9e7;
             border-left: 4px solid #f39c12;
             border-radius: 4px;
@@ -190,6 +190,8 @@
         .warn-yellow { background-color: #f1c40f; }
         .warn-blue { background-color: #2e86de; }
         .warn-gray { background-color: #bdc3c7; }
+        .date-item { flex: 1 1 100%; white-space: nowrap; }
+        .info-item.wrap { flex: 1 1 100%; white-space: normal; }
     </style>
 </head>
 <body>
@@ -209,29 +211,51 @@
         <!-- 客户信息 -->
         <div class="info-row">
             <div class="info-item"><strong>客户名称：</strong><span>{{.Order.CustomerName}}</span></div>
+            <div class="info-item"><strong>客户编号：</strong><span>{{if .Order.CustomerCode}}{{.Order.CustomerCode}}{{else}}—{{end}}</span></div>
+            <div class="info-item"><strong>客户全称：</strong><span>{{if .Order.CustomerFullName}}{{.Order.CustomerFullName}}{{else}}—{{end}}</span></div>
             <div class="info-item"><strong>地区：</strong><span>{{if .Order.Region}}{{.Order.Region}}{{else}}未填写{{end}}</span></div>
             <div class="info-item"><strong>联系电话：</strong><span>{{if .Order.CustomerPhone}}{{.Order.CustomerPhone}}{{else}}未填写{{end}}</span></div>
-            <div class="info-item"><strong>客户地址：</strong><span>{{if .Order.CustomerAddress}}{{.Order.CustomerAddress}}{{else}}未填写{{end}}</span></div>
-            <div class="info-item"><strong>下单日期：</strong><span>{{if .Order.OrderDate}}{{.Order.OrderDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
-            <div class="info-item"><strong>预计发货：</strong><span>{{if .Order.ExpectedShippingDate}}{{.Order.ExpectedShippingDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
-            <div class="info-item"><strong>需求到货日：</strong><span>{{if .Order.CustomerRequiredDate}}{{.Order.CustomerRequiredDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span></div>
-            <div class="info-item"><strong>物流天数：</strong><span>{{if .Order.LogisticsDays}}{{.Order.LogisticsDays}}{{else}}0{{end}} 天</span></div>
-            <div class="info-item"><strong>到货预警：</strong><span>{{if .Order.WarningLevel}}<span class="warn-dot warn-{{.Order.WarningLevel}}"></span>{{end}}{{if .Order.WarningLabel}}{{.Order.WarningLabel}}{{else}}—{{end}}</span></div>
-            <div class="info-item"><strong>回款状态：</strong><span>{{if eq .Order.PaymentStatus 1}}是{{else}}否{{end}}</span></div>
-            <div class="info-item"><strong>订单状态：</strong>
-                <span class="status-badge status-{{.Order.Status}}">
-                    {{if eq .Order.Status 0}}待生产{{else if eq .Order.Status 1}}生产中{{else if eq .Order.Status 2}}待发货{{else if eq .Order.Status 3}}已发货{{else if eq .Order.Status 4}}已取消{{else}}未知{{end}}
-                </span>
+            <div class="info-item wrap"><strong>客户地址：</strong><span>{{if .Order.CustomerAddress}}{{.Order.CustomerAddress}}{{else}}未填写{{end}}</span></div>
+        </div>
+
+        <!-- 交付日期 -->
+        <div class="info-row">
+            <div class="info-item date-item">
+                <strong>下单：</strong><span>{{if .Order.OrderDate}}{{.Order.OrderDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span>　｜　
+                <strong>预计发货：</strong><span>{{if .Order.ExpectedShippingDate}}{{.Order.ExpectedShippingDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span>　｜　
+                <strong>需求到货：</strong><span>{{if .Order.CustomerRequiredDate}}{{.Order.CustomerRequiredDate.Format "2006-01-02"}}{{else}}未指定{{end}}</span>
+                （物流 {{if .Order.LogisticsDays}}{{.Order.LogisticsDays}}{{else}}0{{end}} 天）
             </div>
+            <div class="info-item"><strong>到货预警：</strong><span>{{if .Order.WarningLevel}}<span class="warn-dot warn-{{.Order.WarningLevel}}"></span>{{end}}{{if .Order.WarningLabel}}{{.Order.WarningLabel}}{{else}}—{{end}}</span></div>
+        </div>
+
+        <!-- 单据信息 -->
+        <div class="info-row">
+            <div class="info-item"><strong>订单状态：</strong><span class="status-badge status-{{.Order.Status}}">{{if eq .Order.Status 0}}待生产{{else if eq .Order.Status 1}}生产中{{else if eq .Order.Status 2}}待发货{{else if eq .Order.Status 3}}已发货{{else if eq .Order.Status 4}}已取消{{else}}未知{{end}}</span></div>
+            <div class="info-item"><strong>回款状态：</strong><span>{{if eq .Order.PaymentStatus 1}}是{{else}}否{{end}}</span></div>
             <div class="info-item"><strong>制单：</strong><span>{{if .Order.PreparedBy}}{{.Order.PreparedBy}}{{else}}未填写{{end}}</span></div>
-            <div class="info-item"><strong>货款结算：</strong><span>{{if .Order.PaymentSettlement}}{{.Order.PaymentSettlement}}{{else}}现付{{end}}</span></div>
-            <div class="info-item"><strong>运费支付：</strong><span>{{if .Order.FreightPayment}}{{.Order.FreightPayment}}{{else}}现付{{end}}</span></div>
-            <div class="info-item"><strong>运费回收：</strong><span>{{if .Order.FreightRecovery}}{{.Order.FreightRecovery}}{{else}}可回收{{end}}</span></div>
-            <div class="info-item"><strong>运输方式：</strong><span>{{if .Order.TransportMethod}}{{.Order.TransportMethod}}{{else}}物流{{end}}</span></div>
+            <div class="info-item"><strong>负责人（业务员）：</strong><span>{{if .Order.OwnerName}}{{.Order.OwnerName}}{{else}}未分配{{end}}</span></div>
             <div class="info-item"><strong>创建时间：</strong><span>{{.Order.CreatedAt.Format "2006-01-02 15:04:05"}}</span></div>
         </div>
 
-        <!-- 客户备注（只显示一次） -->
+        <!-- 商务与结算 -->
+        <div class="info-row">
+            <div class="info-item"><strong>币种：</strong><span>{{if .Order.Currency}}{{.Order.Currency}}{{else}}CNY{{end}}</span></div>
+            <div class="info-item"><strong>货款结算：</strong><span>{{if .Order.PaymentSettlement}}{{.Order.PaymentSettlement}}{{else}}现付{{end}}</span></div>
+            <div class="info-item"><strong>贸易术语：</strong><span>{{if .Order.TradeTerms}}{{.Order.TradeTerms}}{{else}}未填写{{end}}</span></div>
+            <div class="info-item"><strong>运费支付：</strong><span>{{if .Order.FreightPayment}}{{.Order.FreightPayment}}{{else}}现付{{end}}</span></div>
+            <div class="info-item"><strong>运费回收：</strong><span>{{if .Order.FreightRecovery}}{{.Order.FreightRecovery}}{{else}}可回收{{end}}</span></div>
+            <div class="info-item"><strong>运输方式：</strong><span>{{if .Order.TransportMethod}}{{.Order.TransportMethod}}{{else}}物流{{end}}</span></div>
+        </div>
+
+        {{if .Order.ShippingMark}}
+        <div class="remark-box">
+            <strong>📦 唛头：</strong>
+            <div class="remark-content" style="white-space:pre-wrap;">{{.Order.ShippingMark}}</div>
+        </div>
+        {{end}}
+
+        <!-- 客户备注 -->
         {{if .Order.Remark}}
         <div class="remark-box">
             <strong>📝 备注：</strong>

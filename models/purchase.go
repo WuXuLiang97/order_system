@@ -21,7 +21,9 @@ type PurchaseMaterial struct {
 	Freight             float64    `json:"freight"`
 	PurchaseDate        *time.Time `json:"purchase_date"`
 	ExpectedArrivalDate *time.Time `json:"expected_arrival_date"`
+	ActualArrivalDate   *time.Time `json:"actual_arrival_date"`
 	Status              int        `json:"status"`
+	PaymentStatus       string     `json:"payment_status"`
 	Remark              string     `json:"remark"`
 	PaymentReceipts     []string   `json:"payment_receipts"`
 	StockAdded          int        `json:"stock_added"`
@@ -68,6 +70,12 @@ func EnsurePurchaseMaterialsTable() error {
 	if err != nil {
 		return err
 	}
+	if err := ensureColumn("purchase_materials", "actual_arrival_date", "DATE NULL"); err != nil {
+		return err
+	}
+	if err := ensureColumn("purchase_materials", "payment_status", "VARCHAR(20) NOT NULL DEFAULT '未付款'"); err != nil {
+		return err
+	}
 	return ensurePaymentReceiptColumnText()
 }
 
@@ -95,7 +103,7 @@ func ensurePaymentReceiptColumnText() error {
 func GetAllPurchaseMaterials() ([]PurchaseMaterial, error) {
 	rows, err := DB.Query(`
         SELECT id, material_name, material_type, spec, unit, quantity, price, amount,
-               supplier, freight, purchase_date, expected_arrival_date, status,
+               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date, payment_status, status,
                COALESCE(remark, '') AS remark, COALESCE(payment_receipt, '') AS payment_receipt,
                stock_added, created_at
         FROM purchase_materials
@@ -111,10 +119,11 @@ func GetAllPurchaseMaterials() ([]PurchaseMaterial, error) {
 		var p PurchaseMaterial
 		var purchaseDate sql.NullTime
 		var expectedDate sql.NullTime
+		var actualDate sql.NullTime
 		var paymentReceiptRaw string
 		err := rows.Scan(&p.ID, &p.MaterialName, &p.MaterialType, &p.Spec, &p.Unit,
 			&p.Quantity, &p.Price, &p.Amount, &p.Supplier, &p.Freight,
-			&purchaseDate, &expectedDate, &p.Status, &p.Remark, &paymentReceiptRaw,
+			&purchaseDate, &expectedDate, &actualDate, &p.PaymentStatus, &p.Status, &p.Remark, &paymentReceiptRaw,
 			&p.StockAdded, &p.CreatedAt)
 		if err != nil {
 			return nil, err
@@ -124,6 +133,9 @@ func GetAllPurchaseMaterials() ([]PurchaseMaterial, error) {
 		}
 		if expectedDate.Valid {
 			p.ExpectedArrivalDate = &expectedDate.Time
+		}
+		if actualDate.Valid {
+			p.ActualArrivalDate = &actualDate.Time
 		}
 		p.PaymentReceipts = parsePaymentReceipts(paymentReceiptRaw)
 		list = append(list, p)
@@ -136,17 +148,18 @@ func GetPurchaseMaterialByID(id int) (*PurchaseMaterial, error) {
 	var p PurchaseMaterial
 	var purchaseDate sql.NullTime
 	var expectedDate sql.NullTime
+	var actualDate sql.NullTime
 	var paymentReceiptRaw string
 	err := DB.QueryRow(`
         SELECT id, material_name, material_type, spec, unit, quantity, price, amount,
-               supplier, freight, purchase_date, expected_arrival_date, status,
+               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date, payment_status, status,
                COALESCE(remark, '') AS remark, COALESCE(payment_receipt, '') AS payment_receipt,
                stock_added, created_at
         FROM purchase_materials
         WHERE id = ?
     `, id).Scan(&p.ID, &p.MaterialName, &p.MaterialType, &p.Spec, &p.Unit,
 		&p.Quantity, &p.Price, &p.Amount, &p.Supplier, &p.Freight,
-		&purchaseDate, &expectedDate, &p.Status, &p.Remark, &paymentReceiptRaw,
+		&purchaseDate, &expectedDate, &actualDate, &p.PaymentStatus, &p.Status, &p.Remark, &paymentReceiptRaw,
 		&p.StockAdded, &p.CreatedAt)
 	if err != nil {
 		return nil, err

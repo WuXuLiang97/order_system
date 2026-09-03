@@ -322,7 +322,7 @@ function addUser() {
     }
     var permissions = role === 'admin' ? [] : collectPerms('add');
     $.ajax({
-        url: '/api/users',
+        url: '/api/users/add',
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({ username: username, password: password, display_name: displayName, role: role, permissions: permissions }),

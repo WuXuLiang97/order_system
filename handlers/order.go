@@ -17,6 +17,7 @@ import (
 type OrderCreateRequest struct {
 	CustomerName         string `json:"customer_name"`
 	CustomerID           int    `json:"customer_id"`
+	OwnerUserID          int    `json:"owner_user_id"`
 	Region               string `json:"region"`
 	CustomerAddress      string `json:"customer_address"`
 	CustomerPhone        string `json:"customer_phone"`
@@ -149,6 +150,16 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	tradeTerms := strings.TrimSpace(req.TradeTerms)
 	shippingMark := strings.TrimSpace(req.ShippingMark)
 
+	ownerUserID := req.OwnerUserID
+	if ownerUserID < 0 {
+		ownerUserID = 0
+	}
+	if ownerUserID == 0 {
+		if u := CurrentUser(r); u != nil {
+			ownerUserID = u.ID
+		}
+	}
+
 	var createdBy interface{} = nil
 	if u := CurrentUser(r); u != nil {
 		createdBy = u.ID
@@ -159,11 +170,11 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
         (order_no, customer_name, region, customer_address, customer_phone,
          order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
          prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method, remark,
-         customer_id, currency, trade_terms, shipping_mark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         customer_id, owner_user_id, currency, trade_terms, shipping_mark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, orderNo, req.CustomerName, req.Region, req.CustomerAddress, req.CustomerPhone,
 		orderDate, expectedShippingDate, customerRequiredDate, logisticsDays, total, req.PaymentStatus, preparedBy, createdBy, paymentSettlement,
-		freightPayment, freightRecovery, transportMethod, req.Remark, customerID, currency, tradeTerms, shippingMark)
+		freightPayment, freightRecovery, transportMethod, req.Remark, customerID, ownerUserID, currency, tradeTerms, shippingMark)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -250,9 +261,11 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 	query := `
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-               prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
+               prepared_by, created_by_user_id, owner_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
                customer_id, currency, trade_terms, shipping_mark,
-               created_at, COALESCE(remark, '') AS remark
+               created_at, COALESCE(remark, '') AS remark, COALESCE((SELECT COALESCE(NULLIF(u2.display_name, ''), u2.username, '') FROM users u2 WHERE u2.id = orders.owner_user_id), '') AS owner_name,
+               COALESCE((SELECT c.code FROM customers c WHERE c.id = orders.customer_id), '') AS customer_code,
+               COALESCE((SELECT c.full_name FROM customers c WHERE c.id = orders.customer_id), '') AS customer_full_name
         FROM orders
         WHERE 1=1
     `
@@ -274,8 +287,8 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	if !viewAll {
 		if user != nil {
-			query += " AND created_by_user_id = ?"
-			args = append(args, user.ID)
+			query += " AND (created_by_user_id = ? OR owner_user_id = ?)"
+			args = append(args, user.ID, user.ID)
 		} else {
 			query += " AND 1=0"
 		}
@@ -301,8 +314,8 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 		var createdByUser sql.NullInt64
 		err := rows.Scan(&o.ID, &o.OrderNo, &o.CustomerName, &o.Region, &o.CustomerAddress, &o.CustomerPhone,
 			&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &o.TotalAmount, &o.Status, &o.PaymentStatus,
-			&o.PreparedBy, &createdByUser, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod,
-			&o.CustomerID, &o.Currency, &o.TradeTerms, &o.ShippingMark, &o.CreatedAt, &o.Remark)
+			&o.PreparedBy, &createdByUser, &o.OwnerUserID, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod,
+			&o.CustomerID, &o.Currency, &o.TradeTerms, &o.ShippingMark, &o.CreatedAt, &o.Remark, &o.OwnerName, &o.CustomerCode, &o.CustomerFullName)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -407,8 +420,8 @@ func GetCustomerOrders(w http.ResponseWriter, r *http.Request) {
 	args = append(args, customerID)
 	if !viewAll {
 		if user != nil {
-			query += " AND created_by_user_id = ?"
-			args = append(args, user.ID)
+			query += " AND (created_by_user_id = ? OR owner_user_id = ?)"
+			args = append(args, user.ID, user.ID)
 		} else {
 			query += " AND 1=0"
 		}
@@ -468,14 +481,16 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 	err = models.DB.QueryRow(`
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-               prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
+               prepared_by, created_by_user_id, owner_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
                customer_id, currency, trade_terms, shipping_mark,
-               created_at, COALESCE(remark, '') AS remark
+               created_at, COALESCE(remark, '') AS remark, COALESCE((SELECT COALESCE(NULLIF(u2.display_name, ''), u2.username, '') FROM users u2 WHERE u2.id = orders.owner_user_id), '') AS owner_name,
+               COALESCE((SELECT c.code FROM customers c WHERE c.id = orders.customer_id), '') AS customer_code,
+               COALESCE((SELECT c.full_name FROM customers c WHERE c.id = orders.customer_id), '') AS customer_full_name
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
 		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
-		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod,
-		&order.CustomerID, &order.Currency, &order.TradeTerms, &order.ShippingMark, &order.CreatedAt, &order.Remark)
+		&order.PreparedBy, &createdByUser, &order.OwnerUserID, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod,
+		&order.CustomerID, &order.Currency, &order.TradeTerms, &order.ShippingMark, &order.CreatedAt, &order.Remark, &order.OwnerName, &order.CustomerCode, &order.CustomerFullName)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -495,7 +510,7 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 		order.CreatedByUserID = &uid
 	}
 	computeOrderWarning(&order, time.Now())
-	if !canViewOrder(user, order.CreatedByUserID) {
+	if !canViewOrder(user, order.CreatedByUserID, &order.OwnerUserID) {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
 	}
@@ -698,6 +713,7 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		ID                   int    `json:"id"`
 		CustomerName         string `json:"customer_name"`
 		CustomerID           int    `json:"customer_id"`
+		OwnerUserID          int    `json:"owner_user_id"`
 		Region               string `json:"region"`
 		Currency             string `json:"currency"`
 		TradeTerms           string `json:"trade_terms"`
@@ -770,8 +786,14 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	tradeTerms := strings.TrimSpace(req.TradeTerms)
 	shippingMark := strings.TrimSpace(req.ShippingMark)
 
-	var ownerID sql.NullInt64
-	err = models.DB.QueryRow("SELECT created_by_user_id FROM orders WHERE id = ?", req.ID).Scan(&ownerID)
+	ownerUserID := req.OwnerUserID
+	if ownerUserID < 0 {
+		ownerUserID = 0
+	}
+
+	var orderCreatedBy sql.NullInt64
+	var orderOwner sql.NullInt64
+	err = models.DB.QueryRow("SELECT created_by_user_id, owner_user_id FROM orders WHERE id = ?", req.ID).Scan(&orderCreatedBy, &orderOwner)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -779,7 +801,7 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if !canEditOrder(CurrentUser(r), nullIntPtr(ownerID)) {
+	if !canEditOrder(CurrentUser(r), nullIntPtr(orderCreatedBy), nullIntPtr(orderOwner)) {
 		writeJSONError(w, http.StatusForbidden, "没有权限修改该订单")
 		return
 	}
@@ -788,6 +810,7 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
         UPDATE orders SET
             customer_name = ?,
             customer_id = ?,
+            owner_user_id = ?,
             region = ?,
             currency = ?,
             trade_terms = ?,
@@ -804,7 +827,7 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
             transport_method = ?,
             remark = ?
         WHERE id = ?
-    `, req.CustomerName, customerID, req.Region, currency, tradeTerms, shippingMark, orderDate, expectedDate, customerRequiredDate, logisticsDays, req.PaymentStatus, preparedBy, paymentSettlement, freightPayment, freightRecovery, transportMethod, req.Remark, req.ID)
+    `, req.CustomerName, customerID, ownerUserID, req.Region, currency, tradeTerms, shippingMark, orderDate, expectedDate, customerRequiredDate, logisticsDays, req.PaymentStatus, preparedBy, paymentSettlement, freightPayment, freightRecovery, transportMethod, req.Remark, req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -838,14 +861,16 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 	err = models.DB.QueryRow(`
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-               prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
+               prepared_by, created_by_user_id, owner_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
                customer_id, currency, trade_terms, shipping_mark,
-               created_at, COALESCE(remark, '') AS remark
+               created_at, COALESCE(remark, '') AS remark, COALESCE((SELECT COALESCE(NULLIF(u2.display_name, ''), u2.username, '') FROM users u2 WHERE u2.id = orders.owner_user_id), '') AS owner_name,
+               COALESCE((SELECT c.code FROM customers c WHERE c.id = orders.customer_id), '') AS customer_code,
+               COALESCE((SELECT c.full_name FROM customers c WHERE c.id = orders.customer_id), '') AS customer_full_name
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
 		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
-		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod,
-		&order.CustomerID, &order.Currency, &order.TradeTerms, &order.ShippingMark, &order.CreatedAt, &order.Remark)
+		&order.PreparedBy, &createdByUser, &order.OwnerUserID, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod,
+		&order.CustomerID, &order.Currency, &order.TradeTerms, &order.ShippingMark, &order.CreatedAt, &order.Remark, &order.OwnerName, &order.CustomerCode, &order.CustomerFullName)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -865,7 +890,7 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 		order.CreatedByUserID = &uid
 	}
 	computeOrderWarning(&order, time.Now())
-	if !canViewOrder(user, order.CreatedByUserID) {
+	if !canViewOrder(user, order.CreatedByUserID, &order.OwnerUserID) {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
 	}

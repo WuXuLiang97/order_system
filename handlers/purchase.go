@@ -43,6 +43,8 @@ type purchaseMaterialRequest struct {
 	Freight             float64  `json:"freight"`
 	PurchaseDate        string   `json:"purchase_date"`
 	ExpectedArrivalDate string   `json:"expected_arrival_date"`
+	ActualArrivalDate   string   `json:"actual_arrival_date"`
+	PaymentStatus       string   `json:"payment_status"`
 	Status              int      `json:"status"`
 	Remark              string   `json:"remark"`
 	PaymentReceipts     []string `json:"payment_receipts"`
@@ -74,6 +76,9 @@ func validatePurchaseRequest(req purchaseMaterialRequest) string {
 	}
 	if req.Status != 0 && req.Status != 1 {
 		return "采购状态不正确"
+	}
+	if req.PaymentStatus != "" && req.PaymentStatus != "未付款" && req.PaymentStatus != "已付款" {
+		return "付款状态不正确"
 	}
 	return ""
 }
@@ -143,6 +148,10 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
+	paymentStatus := strings.TrimSpace(req.PaymentStatus)
+	if paymentStatus == "" {
+		paymentStatus = "未付款"
+	}
 
 	purchaseDate, err := parsePurchaseDate(req.PurchaseDate)
 	if err != nil {
@@ -153,6 +162,14 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "预计到货日期格式不正确", http.StatusBadRequest)
 		return
+	}
+	actualDate, err := parsePurchaseDate(req.ActualArrivalDate)
+	if err != nil {
+		http.Error(w, "实际到货日期格式不正确", http.StatusBadRequest)
+		return
+	}
+	if req.Status == 1 && actualDate == nil {
+		actualDate = time.Now()
 	}
 
 	amount := req.Quantity * req.Price
@@ -176,10 +193,10 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	result, err := tx.Exec(`
         INSERT INTO purchase_materials
         (material_name, material_type, spec, unit, quantity, price, amount, supplier, freight,
-         purchase_date, expected_arrival_date, status, remark, payment_receipt, stock_added)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         purchase_date, expected_arrival_date, actual_arrival_date, payment_status, status, remark, payment_receipt, stock_added)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, req.MaterialName, req.MaterialType, req.Spec, req.Unit, req.Quantity, req.Price, amount,
-		req.Supplier, req.Freight, purchaseDate, expectedDate, req.Status, req.Remark, string(paymentReceiptJSON), stockAdded)
+		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, paymentStatus, req.Status, req.Remark, string(paymentReceiptJSON), stockAdded)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -228,6 +245,10 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
+	paymentStatus := strings.TrimSpace(req.PaymentStatus)
+	if paymentStatus == "" {
+		paymentStatus = "未付款"
+	}
 
 	purchaseDate, err := parsePurchaseDate(req.PurchaseDate)
 	if err != nil {
@@ -238,6 +259,14 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		http.Error(w, "预计到货日期格式不正确", http.StatusBadRequest)
 		return
+	}
+	actualDate, err := parsePurchaseDate(req.ActualArrivalDate)
+	if err != nil {
+		http.Error(w, "实际到货日期格式不正确", http.StatusBadRequest)
+		return
+	}
+	if req.Status == 1 && actualDate == nil {
+		actualDate = time.Now()
 	}
 
 	amount := req.Quantity * req.Price
@@ -273,11 +302,11 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	_, err = tx.Exec(`
         UPDATE purchase_materials SET
             material_name = ?, material_type = ?, spec = ?, unit = ?, quantity = ?, price = ?, amount = ?,
-            supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?, status = ?,
+            supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?, actual_arrival_date = ?, payment_status = ?, status = ?,
             remark = ?, payment_receipt = ?, stock_added = ?
         WHERE id = ?
     `, req.MaterialName, req.MaterialType, req.Spec, req.Unit, req.Quantity, req.Price, amount,
-		req.Supplier, req.Freight, purchaseDate, expectedDate, req.Status, req.Remark, string(paymentReceiptJSON),
+		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, paymentStatus, req.Status, req.Remark, string(paymentReceiptJSON),
 		newStockAdded, req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)

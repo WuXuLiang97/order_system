@@ -19,6 +19,7 @@
                         <thead>
                             <tr>
                                 <th>序号</th>
+                                <th>采购日期</th>
                                 <th>物料名称</th>
                                 <th>物料类型</th>
                                 <th>规格型号</th>
@@ -26,10 +27,11 @@
                                 <th>采购数量</th>
                                 <th>单价</th>
                                 <th>金额</th>
-                                <th>供应商</th>
                                 <th>运费</th>
-                                <th>采购日期</th>
+                                <th>供应商</th>
                                 <th>预计到货日期</th>
+                                <th>实际到货日期</th>
+                                <th>付款状态</th>
                                 <th>采购状态</th>
                                 <th>支付水单</th>
                                 <th>备注</th>
@@ -129,6 +131,17 @@
                             <input type="date" class="form-control" id="addExpectedDate">
                         </div>
                         <div class="col-md-6 mb-3">
+                            <label class="form-label">实际到货日期</label>
+                            <input type="date" class="form-control" id="addActualDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">付款状态</label>
+                            <select class="form-control" id="addPaymentStatus">
+                                <option value="未付款">未付款</option>
+                                <option value="已付款">已付款</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
                             <label class="form-label">采购状态</label>
                             <select class="form-control" id="addStatus">
                                 <option value="0">采购中</option>
@@ -215,6 +228,17 @@
                         <div class="col-md-6 mb-3">
                             <label class="form-label">预计到货日期</label>
                             <input type="date" class="form-control" id="editExpectedDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">实际到货日期</label>
+                            <input type="date" class="form-control" id="editActualDate">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">付款状态</label>
+                            <select class="form-control" id="editPaymentStatus">
+                                <option value="未付款">未付款</option>
+                                <option value="已付款">已付款</option>
+                            </select>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">采购状态</label>
@@ -392,6 +416,7 @@ function loadPurchaseMaterials() {
                 var row = `
                     <tr>
                         <td>${index + 1}</td>
+                        <td>${formatDate(p.purchase_date)}</td>
                         <td><strong>${p.material_name}</strong></td>
                         <td><span class="badge bg-${typeClass}">${p.material_type}</span></td>
                         <td>${p.spec || '-'}</td>
@@ -399,10 +424,11 @@ function loadPurchaseMaterials() {
                         <td>${p.quantity}</td>
                         <td>¥${p.price.toFixed(2)}</td>
                         <td>¥${p.amount.toFixed(2)}</td>
-                        <td>${p.supplier || '-'}</td>
                         <td>¥${p.freight.toFixed(2)}</td>
-                        <td>${formatDate(p.purchase_date)}</td>
+                        <td>${p.supplier || '-'}</td>
                         <td>${formatDate(p.expected_arrival_date)}</td>
+                        <td>${formatDate(p.actual_arrival_date)}</td>
+                        <td>${p.payment_status === '已付款' ? '<span class="badge bg-success">已付款</span>' : '<span class="badge bg-secondary">未付款</span>'}</td>
                         <td>${status}</td>
                         <td>${receipt}</td>
                         <td>${p.remark || '-'}</td>
@@ -422,8 +448,8 @@ function loadPurchaseMaterials() {
 function applyPurchaseSearch() {
     var searchText = $('#searchPurchase').val().toLowerCase();
     $('#purchaseTableBody tr').each(function() {
-        var name = $(this).find('td:eq(1)').text().toLowerCase();
-        var supplier = $(this).find('td:eq(8)').text().toLowerCase();
+        var name = $(this).find('td:eq(2)').text().toLowerCase();
+        var supplier = $(this).find('td:eq(10)').text().toLowerCase();
         $(this).toggle(name.indexOf(searchText) > -1 || supplier.indexOf(searchText) > -1);
     });
 }
@@ -456,6 +482,8 @@ function addPurchase() {
         freight: parseFloat($('#addFreight').val()) || 0,
         purchase_date: $('#addPurchaseDate').val(),
         expected_arrival_date: $('#addExpectedDate').val(),
+        actual_arrival_date: $('#addActualDate').val(),
+        payment_status: $('#addPaymentStatus').val(),
         status: parseInt($('#addStatus').val()),
         remark: $('#addRemark').val().trim(),
         payment_receipts: addReceiptUrls
@@ -499,6 +527,8 @@ function editPurchase(id) {
             $('#editFreight').val(data.freight);
             $('#editPurchaseDate').val(formatDate(data.purchase_date) === '-' ? '' : formatDate(data.purchase_date));
             $('#editExpectedDate').val(formatDate(data.expected_arrival_date) === '-' ? '' : formatDate(data.expected_arrival_date));
+            $('#editActualDate').val(formatDate(data.actual_arrival_date) === '-' ? '' : formatDate(data.actual_arrival_date));
+            $('#editPaymentStatus').val(data.payment_status || '未付款');
             $('#editStatus').val(data.status);
             $('#editRemark').val(data.remark || '');
             editReceiptUrls = data.payment_receipts || [];
@@ -532,6 +562,8 @@ function updatePurchase() {
         freight: parseFloat($('#editFreight').val()) || 0,
         purchase_date: $('#editPurchaseDate').val(),
         expected_arrival_date: $('#editExpectedDate').val(),
+        actual_arrival_date: $('#editActualDate').val(),
+        payment_status: $('#editPaymentStatus').val(),
         status: parseInt($('#editStatus').val()),
         remark: $('#editRemark').val().trim(),
         payment_receipts: editReceiptUrls

@@ -156,6 +156,9 @@ func ensureOrderColumns() error {
 	if err := ensureColumn("orders", "customer_id", "INT NOT NULL DEFAULT 0 COMMENT '关联客户ID'"); err != nil {
 		return err
 	}
+	if err := ensureColumn("orders", "owner_user_id", "INT NOT NULL DEFAULT 0 COMMENT '负责人/业务员用户ID'"); err != nil {
+		return err
+	}
 	if err := ensureColumn("orders", "currency", "VARCHAR(20) NOT NULL DEFAULT 'CNY' COMMENT '币种'"); err != nil {
 		return err
 	}
