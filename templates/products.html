@@ -29,6 +29,7 @@
                                 <th>序号</th>
                                 <th>名称</th>
                                 <th>规格型号</th>
+                                <th>包装</th>
                                 <th>单位</th>
                                 <th>库存</th>
                                 <th>单价</th>
@@ -140,6 +141,16 @@
                         <input type="text" class="form-control" id="addProductUnit" value="个">
                     </div>
                     <div class="mb-3">
+                        <label class="form-label">包装</label>
+                        <select class="form-control" id="addProductPackaging">
+                        <option value="">未设置</option>
+                        <option value="真空袋">真空袋</option>
+                        <option value="彩盒">彩盒</option>
+                        <option value="OPP袋">OPP袋</option>
+                        <option value="定制彩盒">定制彩盒</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">库存</label>
                         <input type="number" class="form-control" id="addProductStock" value="0" step="any">
                     </div>
@@ -201,6 +212,16 @@
                     <div class="mb-3">
                         <label class="form-label">单位</label>
                         <input type="text" class="form-control" id="editProductUnit">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">包装</label>
+                        <select class="form-control" id="editProductPackaging">
+                        <option value="">未设置</option>
+                        <option value="真空袋">真空袋</option>
+                        <option value="彩盒">彩盒</option>
+                        <option value="OPP袋">OPP袋</option>
+                        <option value="定制彩盒">定制彩盒</option>
+                        </select>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">库存</label>
@@ -375,6 +396,7 @@ function loadProducts() {
                         <td>${index + 1}</td>
                         <td><strong>${p.name}</strong></td>
                         <td>${p.spec || '-'}</td>
+                        <td>${p.packaging ? p.packaging : '-'}</td>
                         <td>${p.unit || '-'}</td>
                         <td><span class="badge bg-${statusClass}">${p.stock}</span></td>
                         <td>¥${p.price.toFixed(2)}</td>
@@ -435,6 +457,7 @@ function addProduct() {
         name: name,
         spec: $('#addProductSpec').val().trim(),
         unit: $('#addProductUnit').val().trim(),
+        packaging: $('#addProductPackaging').val(),
         stock: parseFloat($('#addProductStock').val()) || 0,
         price: parseFloat($('#addProductPrice').val()) || 0,
         bom: []
@@ -480,6 +503,7 @@ function editProduct(id) {
             $('#editProductName').val(data.name);
             $('#editProductSpec').val(data.spec || '');
             $('#editProductUnit').val(data.unit || '');
+            $('#editProductPackaging').val(data.packaging || '');
             $('#editProductStock').val(data.stock);
             $('#editProductPrice').val(data.price);
 
@@ -559,6 +583,7 @@ function updateProduct() {
         name: name,
         spec: $('#editProductSpec').val().trim(),
         unit: $('#editProductUnit').val().trim(),
+        packaging: $('#editProductPackaging').val(),
         stock: parseFloat($('#editProductStock').val()) || 0,
         price: parseFloat($('#editProductPrice').val()) || 0,
         bom: []

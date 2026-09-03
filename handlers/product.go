@@ -93,12 +93,13 @@ func AddProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name  string  `json:"name"`
-		Spec  string  `json:"spec"`
-		Unit  string  `json:"unit"`
-		Stock int     `json:"stock"`
-		Price float64 `json:"price"`
-		BOM   []struct {
+		Name      string  `json:"name"`
+		Spec      string  `json:"spec"`
+		Unit      string  `json:"unit"`
+		Packaging string  `json:"packaging"`
+		Stock     int     `json:"stock"`
+		Price     float64 `json:"price"`
+		BOM       []struct {
 			RawMaterialID int     `json:"raw_material_id"`
 			Quantity      float64 `json:"quantity"`
 		} `json:"bom"`
@@ -120,7 +121,7 @@ func AddProduct(w http.ResponseWriter, r *http.Request) {
 		req.Price = 0
 	}
 
-	id, err := models.AddProduct(req.Name, req.Spec, req.Unit, req.Stock, req.Price)
+	id, err := models.AddProduct(req.Name, req.Spec, req.Unit, req.Packaging, req.Stock, req.Price)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -155,13 +156,14 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID    int     `json:"id"`
-		Name  string  `json:"name"`
-		Spec  string  `json:"spec"`
-		Unit  string  `json:"unit"`
-		Stock int     `json:"stock"`
-		Price float64 `json:"price"`
-		BOM   []struct {
+		ID        int     `json:"id"`
+		Name      string  `json:"name"`
+		Spec      string  `json:"spec"`
+		Unit      string  `json:"unit"`
+		Packaging string  `json:"packaging"`
+		Stock     int     `json:"stock"`
+		Price     float64 `json:"price"`
+		BOM       []struct {
 			RawMaterialID int     `json:"raw_material_id"`
 			Quantity      float64 `json:"quantity"`
 		} `json:"bom"`
@@ -189,7 +191,7 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	err := models.UpdateProduct(req.ID, req.Name, req.Spec, req.Unit, req.Stock, req.Price)
+	err := models.UpdateProduct(req.ID, req.Name, req.Spec, req.Unit, req.Packaging, req.Stock, req.Price)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return

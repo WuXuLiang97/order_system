@@ -7,6 +7,7 @@ type Product struct {
 	Name      string    `json:"name"`
 	Spec      string    `json:"spec"`
 	Unit      string    `json:"unit"`
+	Packaging string    `json:"packaging"`
 	Stock     float64   `json:"stock"`
 	Price     float64   `json:"price"`
 	CreatedAt time.Time `json:"created_at"`
@@ -14,7 +15,7 @@ type Product struct {
 
 // 查询所有产品
 func GetAllProducts() ([]Product, error) {
-	rows, err := DB.Query("SELECT id, name, spec, unit, stock, price, created_at FROM products ORDER BY id DESC")
+	rows, err := DB.Query("SELECT id, name, spec, unit, packaging, stock, price, created_at FROM products ORDER BY id DESC")
 	if err != nil {
 		return nil, err
 	}
@@ -22,7 +23,7 @@ func GetAllProducts() ([]Product, error) {
 	var products []Product
 	for rows.Next() {
 		var p Product
-		if err := rows.Scan(&p.ID, &p.Name, &p.Spec, &p.Unit, &p.Stock, &p.Price, &p.CreatedAt); err != nil {
+		if err := rows.Scan(&p.ID, &p.Name, &p.Spec, &p.Unit, &p.Packaging, &p.Stock, &p.Price, &p.CreatedAt); err != nil {
 			return nil, err
 		}
 		products = append(products, p)
@@ -33,8 +34,8 @@ func GetAllProducts() ([]Product, error) {
 // 获取单个产品
 func GetProductByID(id int) (*Product, error) {
 	var p Product
-	err := DB.QueryRow("SELECT id, name, spec, unit, stock, price, created_at FROM products WHERE id = ?", id).
-		Scan(&p.ID, &p.Name, &p.Spec, &p.Unit, &p.Stock, &p.Price, &p.CreatedAt)
+	err := DB.QueryRow("SELECT id, name, spec, unit, packaging, stock, price, created_at FROM products WHERE id = ?", id).
+		Scan(&p.ID, &p.Name, &p.Spec, &p.Unit, &p.Packaging, &p.Stock, &p.Price, &p.CreatedAt)
 	if err != nil {
 		return nil, err
 	}
@@ -42,8 +43,8 @@ func GetProductByID(id int) (*Product, error) {
 }
 
 // 添加产品
-func AddProduct(name, spec, unit string, stock int, price float64) (int64, error) {
-	result, err := DB.Exec("INSERT INTO products (name, spec, unit, stock, price) VALUES (?, ?, ?, ?, ?)", name, spec, unit, stock, price)
+func AddProduct(name, spec, unit, packaging string, stock int, price float64) (int64, error) {
+	result, err := DB.Exec("INSERT INTO products (name, spec, unit, packaging, stock, price) VALUES (?, ?, ?, ?, ?, ?)", name, spec, unit, packaging, stock, price)
 	if err != nil {
 		return 0, err
 	}
@@ -51,8 +52,8 @@ func AddProduct(name, spec, unit string, stock int, price float64) (int64, error
 }
 
 // 更新产品
-func UpdateProduct(id int, name, spec, unit string, stock int, price float64) error {
-	_, err := DB.Exec("UPDATE products SET name = ?, spec = ?, unit = ?, stock = ?, price = ? WHERE id = ?", name, spec, unit, stock, price, id)
+func UpdateProduct(id int, name, spec, unit, packaging string, stock int, price float64) error {
+	_, err := DB.Exec("UPDATE products SET name = ?, spec = ?, unit = ?, packaging = ?, stock = ?, price = ? WHERE id = ?", name, spec, unit, packaging, stock, price, id)
 	return err
 }
 
