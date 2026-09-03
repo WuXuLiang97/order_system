@@ -1,4 +1,91 @@
 {{define "content"}}
+<style>
+    /* ===== 首页背景图（此段样式只随首页模板输出，不影响其他页面） ===== */
+    body {
+        background-color: #0b1220;
+        background-image: url('/static/cover-bg.jpg');
+        background-repeat: no-repeat;
+        background-position: center center;
+        background-size: cover;
+        background-attachment: fixed;
+    }
+
+    /* 首页卡片区域上下留白，视觉更舒展 */
+    .home-card {
+        padding: 1.5rem 0;
+    }
+
+    /* ===== 首页卡片：玻璃拟态（替代原有纯色背景） ===== */
+    .home-card .card {
+        background: rgba(15, 23, 42, 0.3) !important;
+        -webkit-backdrop-filter: blur(4px) saturate(160%);
+        backdrop-filter: blur(4px) saturate(160%);
+        border: 1px solid rgba(255, 255, 255, 0.18) !important;
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.25);
+        color: #fff !important;
+        transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+    }
+    .home-card .card:hover {
+        transform: translateY(-4px);
+        background: rgba(15, 23, 42, 0.68) !important;
+        box-shadow: 0 14px 30px rgba(0, 0, 0, 0.35);
+    }
+    /* 不支持 backdrop-filter 的浏览器：退化为较实深色背景，保证可读 */
+    @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+        .home-card .card {
+            background: rgba(15, 23, 42, 0.88) !important;
+        }
+    }
+
+    /* 模块标题：图标彩色圆角块 + 文字垂直居中 */
+    .home-card .card .card-title {
+        display: flex;
+        align-items: center;
+        margin-bottom: 0.5rem;
+    }
+    .home-card .card .card-title i {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex: 0 0 auto;
+        width: 2.5rem;
+        height: 2.5rem;
+        margin-right: 0.6rem;
+        border-radius: 12px;
+        font-size: 1.15rem;
+        color: #fff;
+        box-shadow: 0 4px 10px rgba(0, 0, 0, 0.18);
+    }
+    /* 各模块保留原有色彩区分（通过原有 bg-* 类定位） */
+    .home-card .card.bg-info .card-title i      { background: linear-gradient(135deg, #17a2b8, #0dcaf0); }
+    .home-card .card.bg-success .card-title i   { background: linear-gradient(135deg, #198754, #20c997); }
+    .home-card .card.bg-warning .card-title i   { background: linear-gradient(135deg, #fd7e14, #ffc107); }
+    .home-card .card.bg-secondary .card-title i { background: linear-gradient(135deg, #6c757d, #adb5bd); }
+    .home-card .card.bg-primary .card-title i   { background: linear-gradient(135deg, #4e5cc4, #7b5dd6); }
+
+    /* “进入”按钮：半透明玻璃按钮 */
+    .home-card .card .btn-light {
+        background: rgba(255, 255, 255, 0.16) !important;
+        border: 1px solid rgba(255, 255, 255, 0.35) !important;
+        color: #fff !important;
+        font-weight: 500;
+    }
+    .home-card .card .btn-light:hover {
+        background: rgba(255, 255, 255, 0.3) !important;
+        color: #fff !important;
+    }
+
+    /* 页脚：深色半透明，与整体玻璃风格统一，背景图延伸到页面底部 */
+    .site-footer {
+        background-color: rgba(15, 23, 42, 0.65) !important;
+        -webkit-backdrop-filter: blur(8px);
+        backdrop-filter: blur(8px);
+        border-top: 1px solid rgba(255, 255, 255, 0.12);
+    }
+    .site-footer .text-muted {
+        color: rgba(255, 255, 255, 0.72) !important;
+    }
+</style>
 {{if .CanAny "order:view_all" "order:view_own" "product:view" "material:view" "purchase:view" "customer:view"}}
 <div class="row home-card">
     {{if .CanAny "order:view_all" "order:view_own"}}
