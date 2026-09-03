@@ -11,50 +11,147 @@
                 {{end}}
             </div>
             <div class="card-body">
-                <div class="mb-3">
-                    <input type="text" id="searchCustomer" class="form-control" placeholder="搜索客户名称或电话号码...">
+                <div class="row g-2 mb-3 filter-row align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label small text-muted mb-1">关键字</label>
+                        <input type="text" id="searchCustomer" class="form-control" placeholder="编号 / 名称 / 全称 / 电话...">
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">客户类型</label>
+                        <select id="filterType" class="form-select"><option value="">全部类型</option></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">客户状态</label>
+                        <select id="filterStatus" class="form-select"><option value="">全部状态</option></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">风险等级</label>
+                        <select id="filterRisk" class="form-select"><option value="">全部风险</option></select>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label small text-muted mb-1">所属业务员</label>
+                        <select id="filterOwner" class="form-select"><option value="">全部业务员</option></select>
+                    </div>
+                    <div class="col-md-1">
+                        <button class="btn btn-outline-secondary w-100" onclick="resetCustomerFilters()">重置</button>
+                    </div>
                 </div>
                 <div class="table-responsive">
-                    <table class="table table-striped table-hover" id="customerTable">
+                    <table class="table table-hover" id="customerTable">
                         <thead>
                             <tr>
-                                <th>序号</th>
+                                <th>编号</th>
                                 <th>客户名称</th>
-                                <th>电话号码</th>
-                                <th>收货地址</th>
-                                <th>创建时间</th>
+                                <th>类型</th>
+                                <th>状态</th>
+                                <th>等级</th>
+                                <th>风险</th>
+                                <th>业务员</th>
+                                <th>联系电话</th>
+                                <th>更新时间</th>
                                 <th>操作</th>
                             </tr>
                         </thead>
                         <tbody id="customerTableBody"></tbody>
                     </table>
                 </div>
+                <div class="text-muted small mt-2" id="customerCount"></div>
             </div>
         </div>
     </div>
 </div>
 
 <!-- 添加客户 -->
-<div class="modal fade" id="addCustomerModal" tabindex="-1">
-    <div class="modal-dialog">
+<div class="modal fade" id="addCustomerModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">添加客户</h5>
+                <h5 class="modal-title"><i class="bi bi-person-plus"></i> 添加客户</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="addCustomerForm">
-                    <div class="mb-3">
-                        <label class="form-label">客户名称 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="addName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">电话号码</label>
-                        <input type="text" class="form-control" id="addPhone">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">收货地址</label>
-                        <input type="text" class="form-control" id="addAddress">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">客户名称（简称）<span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="addName" placeholder="列表显示用" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">客户全称</label>
+                            <input type="text" class="form-control" id="addFullName" placeholder="国内：营业执照全称；海外：英文全称（报关用）">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">客户类型</label>
+                            <select class="form-select" id="addType"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户状态</label>
+                            <select class="form-select" id="addStatus"></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户等级</label>
+                            <select class="form-select" id="addLevel"><option value="">未评级</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">所属业务员</label>
+                            <select class="form-select" id="addOwner"><option value="0">未分配</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">风险等级</label>
+                            <select class="form-select" id="addRisk"></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">联系电话</label>
+                            <input type="text" class="form-control" id="addPhone" placeholder="手机/固话">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">国家 / 地区</label>
+                            <input type="text" class="form-control" id="addCountry" placeholder="海外客户必填">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户来源</label>
+                            <select class="form-select" id="addSource"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">收货地址</label>
+                            <input type="text" class="form-control" id="addAddress">
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">合作模式（可多选）</label>
+                            <div id="addModesWrap" class="d-flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">客户品牌名</label>
+                            <input type="text" class="form-control" id="addBrands" placeholder="多个品牌用逗号分隔，OEM 客户必填">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">目标市场（可多选）</label>
+                            <div id="addMarketsWrap" class="d-flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户币种</label>
+                            <select class="form-select" id="addCurrency"></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">结算方式</label>
+                            <select class="form-select" id="addPayment"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">贸易术语</label>
+                            <select class="form-select" id="addTrade"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">开票信息</label>
+                            <textarea class="form-control" id="addInvoice" rows="2" placeholder="国内：抬头、税号、开户行；海外：PI 收件信息"></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">唛头模板</label>
+                            <textarea class="form-control" id="addShipping" rows="2" placeholder="客户固定出货唛头"></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">备注</label>
+                            <textarea class="form-control" id="addRemark" rows="2" placeholder="配方保密、包材禁忌、业务注意事项等"></textarea>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -67,27 +164,101 @@
 </div>
 
 <!-- 编辑客户 -->
-<div class="modal fade" id="editCustomerModal" tabindex="-1">
-    <div class="modal-dialog">
+<div class="modal fade" id="editCustomerModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">编辑客户</h5>
+                <h5 class="modal-title"><i class="bi bi-person-gear"></i> 编辑客户</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="editCustomerForm">
                     <input type="hidden" id="editId">
-                    <div class="mb-3">
-                        <label class="form-label">客户名称 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="editName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">电话号码</label>
-                        <input type="text" class="form-control" id="editPhone">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">收货地址</label>
-                        <input type="text" class="form-control" id="editAddress">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">客户编号</label>
+                            <input type="text" class="form-control" id="editCode" readonly>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">客户名称（简称）<span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="editName" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">客户全称</label>
+                            <input type="text" class="form-control" id="editFullName">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户类型</label>
+                            <select class="form-select" id="editType"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户状态</label>
+                            <select class="form-select" id="editStatus"></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户等级</label>
+                            <select class="form-select" id="editLevel"><option value="">未评级</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">所属业务员</label>
+                            <select class="form-select" id="editOwner"><option value="0">未分配</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">风险等级</label>
+                            <select class="form-select" id="editRisk"></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">联系电话</label>
+                            <input type="text" class="form-control" id="editPhone">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">国家 / 地区</label>
+                            <input type="text" class="form-control" id="editCountry">
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户来源</label>
+                            <select class="form-select" id="editSource"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">收货地址</label>
+                            <input type="text" class="form-control" id="editAddress">
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">合作模式（可多选）</label>
+                            <div id="editModesWrap" class="d-flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">客户品牌名</label>
+                            <input type="text" class="form-control" id="editBrands" placeholder="多个品牌用逗号分隔">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">目标市场（可多选）</label>
+                            <div id="editMarketsWrap" class="d-flex flex-wrap gap-2"></div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">客户币种</label>
+                            <select class="form-select" id="editCurrency"></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">结算方式</label>
+                            <select class="form-select" id="editPayment"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">贸易术语</label>
+                            <select class="form-select" id="editTrade"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">开票信息</label>
+                            <textarea class="form-control" id="editInvoice" rows="2"></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">唛头模板</label>
+                            <textarea class="form-control" id="editShipping" rows="2"></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">备注</label>
+                            <textarea class="form-control" id="editRemark" rows="2"></textarea>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -102,32 +273,112 @@
 
 {{define "scripts"}}
 <script>
+// ===== 下拉选项（与服务端 models 常量保持一致） =====
+const CUSTOMER_TYPES = ["国内OEM","国内品牌经销商","海外OEM","海外品牌商","外贸贸易商","代理商","终端客户"];
+const CUSTOMER_STATUSES = ["潜在客户","意向客户","正式合作","暂停合作","终止合作"];
+const CUSTOMER_LEVELS = ["A","B","C","D"];
+const COOP_MODES = ["OEM贴牌","ODM定制配方","采购自有品牌","定制包材","散装大桶墨水采购","大品牌分销商"];
+const TARGET_MARKETS = ["国内","东南亚","欧洲","美洲","中东","其他"];
+const CURRENCIES = ["CNY","USD","EUR","GBP","JPY","HKD","AUD"];
+const PAYMENT_TERMS = ["现结","到付","月结30天","月结60天","T/T","L/C","其他"];
+const TRADE_TERMS = ["EXW","FOB","CIF","DDP"];
+const SOURCES = ["展会","阿里国际站","独立站","转介绍","其他"];
+const RISK_LEVELS = ["低","中","高"];
+const FOREIGN_TYPES = ["海外OEM","海外品牌商"];   // 境外公司需填国家/地区
+const OEM_TYPES = ["国内OEM","海外OEM"];          // OEM 需填品牌
+
+const STATUS_BADGE = {"潜在客户":"secondary","意向客户":"info","正式合作":"success","暂停合作":"warning","终止合作":"danger"};
+const RISK_BADGE = {"低":"success","中":"warning","高":"danger"};
+
+let userOptionsCache = [];
+
+function fillSelect(sel, values, emptyText) {
+    let html = emptyText !== undefined ? `<option value="">${emptyText}</option>` : "";
+    values.forEach(function(v) {
+        html += `<option value="${v}">${v}</option>`;
+    });
+    $(sel).html(html);
+}
+
+function fillCheckboxes(sel, values, cls) {
+    let html = "";
+    values.forEach(function(v) {
+        html += `<div class="form-check form-check-inline">
+            <input class="form-check-input ${cls}" type="checkbox" value="${v}" id="${cls}-${v}">
+            <label class="form-check-label" for="${cls}-${v}">${v}</label>
+        </div>`;
+    });
+    $(sel).html(html);
+}
+
+function loadUserOptions() {
+    if (userOptionsCache.length) return;
+    $.ajax({
+        url: '/api/users/options',
+        method: 'GET',
+        success: function(data) {
+            userOptionsCache = data || [];
+            userOptionsCache.forEach(function(u) {
+                $('#filterOwner, #addOwner, #editOwner').append(`<option value="${u.id}">${u.name}</option>`);
+            });
+        },
+        error: function() { /* 忽略：无权限查看用户列表时业务员仅显示未分配 */ }
+    });
+}
+
+function setupOptions() {
+    fillSelect('#addType', CUSTOMER_TYPES, '请选择');
+    fillSelect('#editType', CUSTOMER_TYPES, '请选择');
+    fillSelect('#filterType', CUSTOMER_TYPES);
+    fillSelect('#addStatus', CUSTOMER_STATUSES);
+    fillSelect('#editStatus', CUSTOMER_STATUSES);
+    fillSelect('#filterStatus', CUSTOMER_STATUSES);
+    fillSelect('#addRisk', RISK_LEVELS);
+    fillSelect('#editRisk', RISK_LEVELS);
+    fillSelect('#filterRisk', RISK_LEVELS);
+    fillSelect('#addLevel', CUSTOMER_LEVELS, '未评级');
+    fillSelect('#editLevel', CUSTOMER_LEVELS, '未评级');
+    fillSelect('#addCurrency', CURRENCIES);
+    fillSelect('#editCurrency', CURRENCIES);
+    fillSelect('#addSource', SOURCES, '请选择');
+    fillSelect('#editSource', SOURCES, '请选择');
+    fillSelect('#addPayment', PAYMENT_TERMS, '请选择');
+    fillSelect('#editPayment', PAYMENT_TERMS, '请选择');
+    fillSelect('#addTrade', TRADE_TERMS, '请选择');
+    fillSelect('#editTrade', TRADE_TERMS, '请选择');
+    fillCheckboxes('#addModesWrap', COOP_MODES, 'add-mode');
+    fillCheckboxes('#editModesWrap', COOP_MODES, 'edit-mode');
+    fillCheckboxes('#addMarketsWrap', TARGET_MARKETS, 'add-market');
+    fillCheckboxes('#editMarketsWrap', TARGET_MARKETS, 'edit-market');
+    $('#addStatus').val('潜在客户');
+    $('#addRisk').val('低');
+    $('#addCurrency').val('CNY');
+}
+
+function collectChecked(cls, scope) {
+    return $(scope + ' .' + cls + ':checked').map(function() { return $(this).val(); }).get();
+}
+
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function badge(level, map, value) {
+    if (!value) return '<span class="text-muted">-</span>';
+    const cls = map[value] || 'secondary';
+    return `<span class="badge bg-${cls}">${escapeHtml(value)}</span>`;
+}
+
+let customerRows = [];
+
 function loadCustomers() {
     $.ajax({
         url: '/api/customers',
         method: 'GET',
         success: function(data) {
-            var tbody = $('#customerTableBody');
-            tbody.empty();
-            data.forEach(function(c, index) {
-                var actions = '';
-                if (window.PERMS && window.PERMS['customer:manage']) {
-                    actions = `<button class="btn btn-warning btn-sm me-1" onclick="editCustomer(${c.id})">编辑</button>
-                               <button class="btn btn-danger btn-sm" onclick="deleteCustomer(${c.id})">删除</button>`;
-                }
-                var row = `
-                    <tr>
-                        <td>${index + 1}</td>
-                        <td><strong>${c.name}</strong></td>
-                        <td>${c.phone || '-'}</td>
-                        <td>${c.address || '-'}</td>
-                        <td>${new Date(c.created_at).toLocaleString()}</td>
-                        <td>${actions}</td>
-                    </tr>
-                `;
-                tbody.append(row);
-            });
-            applyCustomerSearch();
+            customerRows = data || [];
+            renderCustomers();
         },
         error: function(xhr) {
             alert('加载客户失败: ' + xhr.responseText);
@@ -135,56 +386,186 @@ function loadCustomers() {
     });
 }
 
-function applyCustomerSearch() {
-    var searchText = $('#searchCustomer').val().toLowerCase();
-    $('#customerTableBody tr').each(function() {
-        var name = $(this).find('td:eq(1)').text().toLowerCase();
-        var phone = $(this).find('td:eq(2)').text().toLowerCase();
-        $(this).toggle(name.indexOf(searchText) > -1 || phone.indexOf(searchText) > -1);
-    });
+function ownerName(c) {
+    return c.owner_name ? c.owner_name : (c.owner_user_id ? '#' + c.owner_user_id : '-');
 }
 
-$(document).ready(function() {
-    loadCustomers();
-    $('#searchCustomer').on('keyup', applyCustomerSearch);
-});
+function renderCustomers() {
+    const keyword = ($('#searchCustomer').val() || '').trim().toLowerCase();
+    const fType = $('#filterType').val();
+    const fStatus = $('#filterStatus').val();
+    const fRisk = $('#filterRisk').val();
+    const fOwner = $('#filterOwner').val();
+
+    let visible = customerRows.filter(function(c) {
+        if (fType && c.customer_type !== fType) return false;
+        if (fStatus && c.status !== fStatus) return false;
+        if (fRisk && c.risk_level !== fRisk) return false;
+        if (fOwner && String(c.owner_user_id) !== fOwner) return false;
+        if (keyword) {
+            const hay = [c.code, c.name, c.full_name, c.phone, c.owner_name, c.country_region].join(' ').toLowerCase();
+            if (hay.indexOf(keyword) < 0) return false;
+        }
+        return true;
+    });
+
+    const tbody = $('#customerTableBody');
+    tbody.empty();
+    visible.forEach(function(c) {
+        const actions = `<a class="btn btn-outline-primary btn-sm me-1" href="/customers/detail?id=${c.id}"><i class="bi bi-eye"></i> 详情</a>`;
+        let manageActions = '';
+        if (window.PERMS && window.PERMS['customer:manage']) {
+            manageActions = `<button class="btn btn-warning btn-sm me-1" onclick="editCustomer(${c.id})"><i class="bi bi-pencil"></i> 编辑</button>
+                             <button class="btn btn-danger btn-sm" onclick="deleteCustomer(${c.id})"><i class="bi bi-trash"></i> 删除</button>`;
+        }
+        const tr = `
+            <tr>
+                <td><span class="badge bg-dark">${escapeHtml(c.code || '-')}</span></td>
+                <td><strong>${escapeHtml(c.name)}</strong>${c.full_name ? `<div class="small text-muted">${escapeHtml(c.full_name)}</div>` : ''}</td>
+                <td>${c.customer_type ? escapeHtml(c.customer_type) : '<span class="text-muted">-</span>'}</td>
+                <td>${badge('status', STATUS_BADGE, c.status)}</td>
+                <td>${c.level ? `<span class="badge bg-primary">${escapeHtml(c.level)}</span>` : '-'}</td>
+                <td>${badge('risk', RISK_BADGE, c.risk_level)}</td>
+                <td>${escapeHtml(ownerName(c))}</td>
+                <td>${c.phone ? escapeHtml(c.phone) : '-'}</td>
+                <td class="small text-muted">${c.updated_at ? new Date(c.updated_at).toLocaleString() : '-'}</td>
+                <td class="text-nowrap">${actions}${manageActions}</td>
+            </tr>`;
+        tbody.append(tr);
+    });
+    $('#customerCount').text('共 ' + visible.length + ' 条客户记录');
+    if (window.CURRENT_USER && !window.CURRENT_USER.is_admin) {
+        $('#customerCount').append('<span class="ms-2">（普通用户仅显示本人负责/本人创建及历史公共客户）</span>');
+    }
+}
+
+function resetCustomerFilters() {
+    $('#searchCustomer').val('');
+    $('#filterType').val('');
+    $('#filterStatus').val('');
+    $('#filterRisk').val('');
+    $('#filterOwner').val('');
+    renderCustomers();
+}
+
+function getAddPayload() {
+    const type = $('#addType').val();
+    return {
+        name: $('#addName').val().trim(),
+        phone: $('#addPhone').val().trim(),
+        address: $('#addAddress').val().trim(),
+        full_name: $('#addFullName').val().trim(),
+        customer_type: type,
+        status: $('#addStatus').val() || '潜在客户',
+        level: $('#addLevel').val(),
+        cooperation_modes: collectChecked('add-mode', '#addCustomerForm'),
+        brand_names: $('#addBrands').val().split(/[,，]/).map(s => s.trim()).filter(Boolean),
+        target_markets: collectChecked('add-market', '#addCustomerForm'),
+        currency: $('#addCurrency').val() || 'CNY',
+        payment_terms: $('#addPayment').val(),
+        trade_terms: $('#addTrade').val(),
+        country_region: $('#addCountry').val().trim(),
+        invoice_info: $('#addInvoice').val().trim(),
+        shipping_mark: $('#addShipping').val().trim(),
+        source: $('#addSource').val(),
+        owner_user_id: parseInt($('#addOwner').val()) || 0,
+        risk_level: $('#addRisk').val() || '低',
+        remark: $('#addRemark').val().trim()
+    };
+}
+
+function getEditPayload() {
+    const type = $('#editType').val();
+    return {
+        id: parseInt($('#editId').val()),
+        name: $('#editName').val().trim(),
+        phone: $('#editPhone').val().trim(),
+        address: $('#editAddress').val().trim(),
+        full_name: $('#editFullName').val().trim(),
+        customer_type: type,
+        status: $('#editStatus').val() || '潜在客户',
+        level: $('#editLevel').val(),
+        cooperation_modes: collectChecked('edit-mode', '#editCustomerForm'),
+        brand_names: $('#editBrands').val().split(/[,，]/).map(s => s.trim()).filter(Boolean),
+        target_markets: collectChecked('edit-market', '#editCustomerForm'),
+        currency: $('#editCurrency').val() || 'CNY',
+        payment_terms: $('#editPayment').val(),
+        trade_terms: $('#editTrade').val(),
+        country_region: $('#editCountry').val().trim(),
+        invoice_info: $('#editInvoice').val().trim(),
+        shipping_mark: $('#editShipping').val().trim(),
+        source: $('#editSource').val(),
+        owner_user_id: parseInt($('#editOwner').val()) || 0,
+        risk_level: $('#editRisk').val() || '低',
+        remark: $('#editRemark').val().trim()
+    };
+}
 
 function addCustomer() {
-    var name = $('#addName').val().trim();
-    if (!name) {
-        alert('请输入客户名称');
-        return;
-    }
+    const p = getAddPayload();
+    if (!p.name) { alert('请输入客户名称（简称）'); return; }
+    if (OEM_TYPES.indexOf(p.customer_type) > -1 && p.brand_names.length === 0) { alert('OEM 客户必须填写客户品牌名'); return; }
+    if (FOREIGN_TYPES.indexOf(p.customer_type) > -1 && !p.country_region) { alert('境外客户必须填写国家/地区'); return; }
     $.ajax({
         url: '/api/customers/add',
         method: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({
-            name: name,
-            phone: $('#addPhone').val().trim(),
-            address: $('#addAddress').val().trim()
-        }),
-        success: function() {
-            alert('添加成功');
+        data: JSON.stringify(p),
+        success: function(res) {
+            alert((res.message || '添加成功') + '，客户编号：' + res.code);
             $('#addCustomerModal').modal('hide');
             $('#addCustomerForm')[0].reset();
+            $('#addStatus').val('潜在客户');
+            $('#addRisk').val('低');
+            $('#addCurrency').val('CNY');
             loadCustomers();
         },
         error: function(xhr) {
-            alert('添加失败: ' + xhr.responseText);
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('添加失败: ' + msg);
         }
     });
 }
 
 function editCustomer(id) {
     $.ajax({
-        url: `/api/customers/get?id=${id}`,
+        url: '/api/customers/get?id=' + id,
         method: 'GET',
-        success: function(data) {
-            $('#editId').val(data.id);
-            $('#editName').val(data.name);
-            $('#editPhone').val(data.phone || '');
-            $('#editAddress').val(data.address || '');
+        success: function(d) {
+            $('#editId').val(d.id);
+            $('#editCode').val(d.code || '');
+            $('#editName').val(d.name || '');
+            $('#editFullName').val(d.full_name || '');
+            $('#editType').val(d.customer_type || '');
+            $('#editStatus').val(d.status || '潜在客户');
+            $('#editLevel').val(d.level || '');
+            $('#editPhone').val(d.phone || '');
+            $('#editAddress').val(d.address || '');
+            $('#editCountry').val(d.country_region || '');
+            $('#editSource').val(d.source || '');
+            if (userOptionsCache.length) {
+                $('#editOwner').val(String(d.owner_user_id || 0));
+            } else {
+                loadUserOptions();
+                setTimeout(function() { $('#editOwner').val(String(d.owner_user_id || 0)); }, 600);
+            }
+            $('#editRisk').val(d.risk_level || '低');
+            $('#editCurrency').val(d.currency || 'CNY');
+            $('#editPayment').val(d.payment_terms || '');
+            $('#editTrade').val(d.trade_terms || '');
+            $('#editInvoice').val(d.invoice_info || '');
+            $('#editShipping').val(d.shipping_mark || '');
+            $('#editRemark').val(d.remark || '');
+            $('#editBrands').val((d.brand_names || []).join(', '));
+            $('#editCustomerForm .edit-mode').prop('checked', false);
+            (d.cooperation_modes || []).forEach(function(v) {
+                $('#editCustomerForm .edit-mode[value="' + v + '"]').prop('checked', true);
+            });
+            $('#editCustomerForm .edit-market').prop('checked', false);
+            (d.target_markets || []).forEach(function(v) {
+                $('#editCustomerForm .edit-market[value="' + v + '"]').prop('checked', true);
+            });
             $('#editCustomerModal').modal('show');
         },
         error: function(xhr) {
@@ -194,46 +575,59 @@ function editCustomer(id) {
 }
 
 function updateCustomer() {
-    var id = parseInt($('#editId').val());
-    var name = $('#editName').val().trim();
-    if (!name) {
-        alert('请输入客户名称');
-        return;
-    }
+    const p = getEditPayload();
+    if (!p.name) { alert('请输入客户名称（简称）'); return; }
+    if (OEM_TYPES.indexOf(p.customer_type) > -1 && p.brand_names.length === 0) { alert('OEM 客户必须填写客户品牌名'); return; }
+    if (FOREIGN_TYPES.indexOf(p.customer_type) > -1 && !p.country_region) { alert('境外客户必须填写国家/地区'); return; }
     $.ajax({
         url: '/api/customers/update',
         method: 'POST',
         contentType: 'application/json',
-        data: JSON.stringify({
-            id: id,
-            name: name,
-            phone: $('#editPhone').val().trim(),
-            address: $('#editAddress').val().trim()
-        }),
-        success: function() {
-            alert('更新成功');
+        data: JSON.stringify(p),
+        success: function(res) {
+            alert(res.message || '更新成功');
             $('#editCustomerModal').modal('hide');
             loadCustomers();
         },
         error: function(xhr) {
-            alert('更新失败: ' + xhr.responseText);
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('更新失败: ' + msg);
         }
     });
 }
 
 function deleteCustomer(id) {
-    if (!confirm('确定要删除该客户吗？')) return;
+    if (!confirm('确定要删除该客户吗？删除后无法恢复。')) return;
     $.ajax({
-        url: `/api/customers/delete?id=${id}`,
+        url: '/api/customers/delete?id=' + id,
         method: 'POST',
-        success: function() {
-            alert('删除成功');
+        success: function(res) {
+            alert(res.message || '删除成功');
             loadCustomers();
         },
         error: function(xhr) {
-            alert('删除失败: ' + xhr.responseText);
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('删除失败: ' + msg);
         }
     });
 }
+
+$(document).ready(function() {
+    setupOptions();
+    loadUserOptions();
+    loadCustomers();
+    $('#searchCustomer').on('keyup', renderCustomers);
+    $('#filterType, #filterStatus, #filterRisk, #filterOwner').on('change', renderCustomers);
+
+    // 从客户详情页跳回编辑：?edit=<id>
+    const params = new URLSearchParams(window.location.search);
+    const editId = params.get('edit');
+    if (editId && /^\d+$/.test(editId)) {
+        loadUserOptions();
+        setTimeout(function() { editCustomer(parseInt(editId)); }, 400);
+    }
+});
 </script>
 {{end}}

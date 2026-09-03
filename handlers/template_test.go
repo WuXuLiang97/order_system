@@ -65,6 +65,8 @@ func TestPageTemplates(t *testing.T) {
 		{"purchase-viewer", []string{"../templates/layout.html", "../templates/purchase_materials.html"}, viewer},
 		{"customers-admin", []string{"../templates/layout.html", "../templates/customers.html"}, admin},
 		{"customers-viewer", []string{"../templates/layout.html", "../templates/customers.html"}, viewer},
+		{"customer-detail-admin", []string{"../templates/layout.html", "../templates/customer_detail.html"}, admin},
+		{"customer-detail-viewer", []string{"../templates/layout.html", "../templates/customer_detail.html"}, viewer},
 		{"users-admin", []string{"../templates/layout.html", "../templates/users.html"}, admin},
 	}
 

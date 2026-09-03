@@ -34,6 +34,15 @@ func InitDB(dataSourceName string) {
 	if err = EnsureCustomersTable(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureCustomerColumns(); err != nil {
+		log.Fatal(err)
+	}
+	if err = EnsureCustomerContactsTable(); err != nil {
+		log.Fatal(err)
+	}
+	if err = EnsureCustomerAttachmentsTable(); err != nil {
+		log.Fatal(err)
+	}
 	if err = ensureOrderColumns(); err != nil {
 		log.Fatal(err)
 	}
@@ -60,6 +69,26 @@ func ensureColumn(table, column, definition string) error {
 		return nil
 	}
 	_, err = DB.Exec(fmt.Sprintf("ALTER TABLE `%s` ADD COLUMN `%s` %s", table, column, definition))
+	return err
+}
+
+// ensureUniqueIndex 若指定唯一索引不存在则创建。
+func ensureUniqueIndex(table, indexName, column string) error {
+	var count int
+	err := DB.QueryRow(`
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND INDEX_NAME = ?
+    `, table, indexName).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err = DB.Exec(fmt.Sprintf("CREATE UNIQUE INDEX `%s` ON `%s` (`%s`)", indexName, table, column))
 	return err
 }
 
@@ -118,7 +147,18 @@ func ensureOrderColumns() error {
 	if err := ensureColumn("orders", "transport_method", "VARCHAR(50) NOT NULL DEFAULT '物流'"); err != nil {
 		return err
 	}
-	// 历史订单空值回填为默认值（早期版本可能写入空字符串）
+	if err := ensureColumn("orders", "customer_id", "INT NOT NULL DEFAULT 0 COMMENT '关联客户ID'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "currency", "VARCHAR(20) NOT NULL DEFAULT 'CNY' COMMENT '币种'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "trade_terms", "VARCHAR(20) NOT NULL DEFAULT '' COMMENT '贸易术语'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("orders", "shipping_mark", "VARCHAR(1000) NOT NULL DEFAULT '' COMMENT '唛头'"); err != nil {
+		return err
+	} // 历史订单空值回填为默认值（早期版本可能写入空字符串）
 	if _, err := DB.Exec("UPDATE orders SET payment_settlement = '现付' WHERE payment_settlement IS NULL OR payment_settlement = ''"); err != nil {
 		return err
 	}

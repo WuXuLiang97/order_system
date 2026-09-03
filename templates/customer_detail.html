@@ -1,0 +1,623 @@
+{{define "content"}}
+<div class="row">
+    <div class="col-12">
+        <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
+            <h4 class="mb-0"><i class="bi bi-person-lines-fill"></i> 客户详情</h4>
+            <div>
+                <a class="btn btn-outline-secondary btn-sm" href="/customers"><i class="bi bi-arrow-left"></i> 返回列表</a>
+                {{if .Can "customer:manage"}}
+                <a class="btn btn-primary btn-sm" id="btnEditCustomer" href="#"><i class="bi bi-pencil"></i> 编辑资料</a>
+                {{end}}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="customerDetailRoot">
+    <div class="text-center py-5 text-muted">加载中...</div>
+</div>
+
+<!-- 关联订单 -->
+<div class="card mt-3" id="ordersCard" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+        <h5 class="mb-0"><i class="bi bi-receipt"></i> 关联订单</h5>
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>订单号</th>
+                        <th>下单日期</th>
+                        <th>金额</th>
+                        <th>状态</th>
+                        <th>回款状态</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="customerOrderTableBody"></tbody>
+            </table>
+        </div>
+        <div class="text-muted small mt-1">仅展示由客户档案关联建档的订单。</div>
+    </div>
+</div>
+<!-- 联系人列表 -->
+<div class="card mt-3" id="contactsCard" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+        <h5 class="mb-0"><i class="bi bi-people"></i> 联系人</h5>
+        {{if .Can "customer:manage"}}
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#contactModal" onclick="openAddContact()">
+            <i class="bi bi-person-plus"></i> 添加联系人
+        </button>
+        {{end}}
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>姓名</th>
+                        <th>职位</th>
+                        <th>手机</th>
+                        <th>电话</th>
+                        <th>邮箱</th>
+                        <th>微信</th>
+                        <th>WhatsApp</th>
+                        <th>社交账号</th>
+                        <th>备注</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="contactTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 附件列表 -->
+<div class="card mt-3" id="attachmentsCard" style="display:none;">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+        <h5 class="mb-0"><i class="bi bi-paperclip"></i> 附件</h5>
+        {{if .Can "customer:manage"}}
+        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#attachmentModal" onclick="openAddAttachment()">
+            <i class="bi bi-upload"></i> 上传附件
+        </button>
+        {{end}}
+    </div>
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>分类</th>
+                        <th>文件名</th>
+                        <th>大小</th>
+                        <th>上传人</th>
+                        <th>上传时间</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="attachmentTableBody"></tbody>
+            </table>
+        </div>
+        <div class="text-muted small mt-1">支持上传 OEM 协议、保密协议、标签样稿、合同扫描件、唛头等文件。</div>
+    </div>
+</div>
+
+<!-- 上传附件 -->
+<div class="modal fade" id="attachmentModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">上传附件</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="attachmentForm">
+                    <div class="mb-3">
+                        <label class="form-label">附件分类</label>
+                        <select class="form-select" id="attachmentCategory"></select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">选择文件 <span class="text-danger">*</span></label>
+                        <input type="file" class="form-control" id="attachmentFile" required>
+                        <div class="form-text">支持图片、PDF、Office 文档、txt、zip/rar，单个不超过 30MB。</div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="uploadAttachment()">上传</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 联系人新增/编辑 -->
+<div class="modal fade" id="contactModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="contactModalTitle">添加联系人</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="contactForm">
+                    <input type="hidden" id="contactId">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">姓名 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="contactName" required>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">职位</label>
+                            <select class="form-select" id="contactTitle"><option value="">请选择</option></select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">手机</label>
+                            <input type="text" class="form-control" id="contactMobile">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">电话</label>
+                            <input type="text" class="form-control" id="contactPhone">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">邮箱</label>
+                            <input type="text" class="form-control" id="contactEmail">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">社交账号（微信等）</label>
+                            <input type="text" class="form-control" id="contactSocial">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">微信号</label>
+                            <input type="text" class="form-control" id="contactWechat">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">WhatsApp</label>
+                            <input type="text" class="form-control" id="contactWhatsapp">
+                        </div>
+                        <div class="col-md-4 mb-3 d-flex align-items-end">
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" id="contactPrimary">
+                                <label class="form-check-label" for="contactPrimary">设为主联系人</label>
+                            </div>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">备注</label>
+                            <input type="text" class="form-control" id="contactRemark">
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-primary" onclick="saveContact()">保存</button>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+const CONTACT_TITLES = ["老板","总监","业务","采购","技术"];
+const STATUS_BADGE = {"潜在客户":"secondary","意向客户":"info","正式合作":"success","暂停合作":"warning","终止合作":"danger"};
+const RISK_BADGE = {"低":"success","中":"warning","高":"danger"};
+let currentCustomerId = 0;
+
+function escapeHtml(s) {
+    if (s === null || s === undefined) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function currentCustomerIdFromUrl() {
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    return /^\d+$/.test(id || '') ? parseInt(id) : 0;
+}
+
+function item(label, value) {
+    return `<div class="col-md-6 col-lg-4 mb-3">
+        <div class="text-muted small mb-1">${escapeHtml(label)}</div>
+        <div>${value === '' || value === null || value === undefined ? '<span class="text-muted">-</span>' : value}</div>
+    </div>`;
+}
+
+function multiText(arr) {
+    return (arr || []).map(escapeHtml).join('、') || '';
+}
+
+function loadCustomer() {
+    const id = currentCustomerIdFromUrl();
+    if (!id) {
+        $('#customerDetailRoot').html('<div class="alert alert-warning">无效的客户 ID</div>');
+        return;
+    }
+    currentCustomerId = id;
+    $.ajax({
+        url: '/api/customers/get?id=' + id,
+        method: 'GET',
+        success: function(c) {
+            renderDetail(c);
+            $('#btnEditCustomer').attr('href', '/customers?edit=' + c.id);
+            $('#contactsCard').show();
+            loadContacts();
+            $('#attachmentsCard').show();
+            loadAttachments();
+            tryLoadCustomerOrders();
+        },
+        error: function(xhr) {
+            $('#customerDetailRoot').html('<div class="alert alert-danger">加载失败: ' + escapeHtml(xhr.responseText) + '</div>');
+        }
+    });
+}
+
+function renderDetail(c) {
+    const head = `
+        <div class="card mb-3">
+            <div class="card-body">
+                <div class="d-flex align-items-center flex-wrap gap-3">
+                    <div class="rounded-circle bg-primary text-white d-flex align-items-center justify-content-center" style="width:56px;height:56px;font-size:24px;flex:0 0 auto;">
+                        <i class="bi bi-building"></i>
+                    </div>
+                    <div class="flex-grow-1">
+                        <h4 class="mb-1">${escapeHtml(c.name)}
+                            <span class="badge bg-dark ms-1">${escapeHtml(c.code || '')}</span>
+                            ${c.status ? `<span class="badge bg-${STATUS_BADGE[c.status] || 'secondary'} ms-1">${escapeHtml(c.status)}</span>` : ''}
+                        </h4>
+                        <div class="text-muted">
+                            ${c.customer_type ? `<span class="me-3">${escapeHtml(c.customer_type)}</span>` : ''}
+                            ${c.level ? `<span class="me-3">等级：<span class="badge bg-primary">${escapeHtml(c.level)}</span></span>` : ''}
+                            ${c.risk_level ? `<span class="me-3">风险：<span class="badge bg-${RISK_BADGE[c.risk_level] || 'secondary'}">${escapeHtml(c.risk_level)}</span></span>` : ''}
+                            ${c.owner_name ? `<span class="me-3"><i class="bi bi-person"></i> 业务员：${escapeHtml(c.owner_name)}</span>` : ''}
+                        </div>
+                    </div>
+                    <div class="text-end small text-muted">
+                        <div>创建：${c.created_at ? new Date(c.created_at).toLocaleString() : '-'}</div>
+                        <div>更新：${c.updated_at ? new Date(c.updated_at).toLocaleString() : '-'}</div>
+                    </div>
+                </div>
+            </div>
+        </div>`;
+
+    const basic = `
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-info-circle"></i> 基本信息</div>
+            <div class="card-body row">
+                ${item('客户全称', escapeHtml(c.full_name))}
+                ${item('客户类型', escapeHtml(c.customer_type))}
+                ${item('客户状态', c.status ? `<span class="badge bg-${STATUS_BADGE[c.status] || 'secondary'}">${escapeHtml(c.status)}</span>` : '')}
+                ${item('客户等级', c.level ? `<span class="badge bg-primary">${escapeHtml(c.level)}</span>` : '')}
+                ${item('客户来源', escapeHtml(c.source))}
+                ${item('所属业务员', escapeHtml(c.owner_name))}
+                ${item('国家 / 地区', escapeHtml(c.country_region))}
+                ${item('联系电话', escapeHtml(c.phone))}
+                ${item('收货地址', escapeHtml(c.address))}
+                ${item('目标市场', multiText(c.target_markets))}
+            </div>
+        </div>`;
+
+    const biz = `
+        <div class="card mb-3">
+            <div class="card-header"><i class="bi bi-briefcase"></i> 商务与风控</div>
+            <div class="card-body row">
+                ${item('合作模式', multiText(c.cooperation_modes))}
+                ${item('客户品牌', multiText(c.brand_names))}
+                ${item('客户币种', escapeHtml(c.currency))}
+                ${item('结算方式', escapeHtml(c.payment_terms))}
+                ${item('贸易术语', escapeHtml(c.trade_terms))}
+                ${item('风险等级', c.risk_level ? `<span class="badge bg-${RISK_BADGE[c.risk_level] || 'secondary'}">${escapeHtml(c.risk_level)}</span>` : '')}
+                <div class="col-12 mb-3">
+                    <div class="text-muted small mb-1">开票信息</div>
+                    <div style="white-space:pre-wrap;">${escapeHtml(c.invoice_info) || '<span class="text-muted">-</span>'}</div>
+                </div>
+                <div class="col-12 mb-3">
+                    <div class="text-muted small mb-1">唛头模板</div>
+                    <div style="white-space:pre-wrap;">${escapeHtml(c.shipping_mark) || '<span class="text-muted">-</span>'}</div>
+                </div>
+                <div class="col-12 mb-3">
+                    <div class="text-muted small mb-1">备注</div>
+                    <div style="white-space:pre-wrap;">${escapeHtml(c.remark) || '<span class="text-muted">-</span>'}</div>
+                </div>
+            </div>
+        </div>`;
+
+    $('#customerDetailRoot').html(head + basic + biz);
+}
+
+function loadContacts() {
+    $.ajax({
+        url: '/api/customers/contacts?customer_id=' + currentCustomerId,
+        method: 'GET',
+        success: function(data) {
+            const tbody = $('#contactTableBody');
+            tbody.empty();
+            if (!data || !data.length) {
+                tbody.append('<tr><td colspan="10" class="text-center text-muted">暂无联系人</td></tr>');
+                return;
+            }
+            data.forEach(function(ct) {
+                const nameHtml = ct.is_primary ? `${escapeHtml(ct.name)} <span class="badge bg-danger" title="主联系人">主</span>` : escapeHtml(ct.name);
+                let actions = '';
+                if (window.PERMS && window.PERMS['customer:manage']) {
+                    actions = `<button class="btn btn-warning btn-sm me-1" onclick="openEditContact(${ct.id})"><i class="bi bi-pencil"></i> 编辑</button>
+                               <button class="btn btn-danger btn-sm" onclick="deleteContact(${ct.id})"><i class="bi bi-trash"></i> 删除</button>`;
+                }
+                tbody.append(`<tr>
+                    <td>${nameHtml}</td>
+                    <td>${escapeHtml(ct.title) || '-'}</td>
+                    <td>${escapeHtml(ct.mobile) || '-'}</td>
+                    <td>${escapeHtml(ct.phone) || '-'}</td>
+                    <td>${escapeHtml(ct.email) || '-'}</td>
+                    <td>${escapeHtml(ct.wechat) || '-'}</td>
+                    <td>${escapeHtml(ct.whatsapp) || '-'}</td>
+                    <td>${escapeHtml(ct.social_account) || '-'}</td>
+                    <td class="small">${escapeHtml(ct.remark) || '-'}</td>
+                    <td class="text-nowrap">${actions}</td>
+                </tr>`);
+            });
+        },
+        error: function(xhr) {
+            alert('加载联系人失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function openAddContact() {
+    $('#contactModalTitle').text('添加联系人');
+    $('#contactId').val('');
+    $('#contactForm')[0].reset();
+    $('#contactPrimary').prop('checked', false);
+    $('#contactModal').modal('show');
+}
+
+function openEditContact(id) {
+    $('#contactModalTitle').text('编辑联系人');
+    $('#contactForm')[0].reset();
+    // 从已加载列表取数据填充
+    $.ajax({
+        url: '/api/customers/contacts?customer_id=' + currentCustomerId,
+        method: 'GET',
+        success: function(data) {
+            const ct = (data || []).find(function(x) { return x.id === id; });
+            if (!ct) { alert('联系人不存在'); return; }
+            $('#contactId').val(ct.id);
+            $('#contactName').val(ct.name || '');
+            $('#contactTitle').val(ct.title || '');
+            $('#contactMobile').val(ct.mobile || '');
+            $('#contactPhone').val(ct.phone || '');
+            $('#contactEmail').val(ct.email || '');
+            $('#contactSocial').val(ct.social_account || '');
+            $('#contactWechat').val(ct.wechat || '');
+            $('#contactWhatsapp').val(ct.whatsapp || '');
+            $('#contactPrimary').prop('checked', !!ct.is_primary);
+            $('#contactRemark').val(ct.remark || '');
+            $('#contactModal').modal('show');
+        },
+        error: function(xhr) {
+            alert('加载联系人失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function contactPayload() {
+    return {
+        id: parseInt($('#contactId').val()) || 0,
+        customer_id: currentCustomerId,
+        name: $('#contactName').val().trim(),
+        title: $('#contactTitle').val(),
+        mobile: $('#contactMobile').val().trim(),
+        phone: $('#contactPhone').val().trim(),
+        email: $('#contactEmail').val().trim(),
+        wechat: $('#contactWechat').val().trim(),
+        whatsapp: $('#contactWhatsapp').val().trim(),
+        social_account: $('#contactSocial').val().trim(),
+        is_primary: $('#contactPrimary').is(':checked'),
+        remark: $('#contactRemark').val().trim()
+    };
+}
+
+function saveContact() {
+    const p = contactPayload();
+    if (!p.name) { alert('请输入联系人姓名'); return; }
+    const isEdit = p.id > 0;
+    $.ajax({
+        url: isEdit ? '/api/customers/contacts/update' : '/api/customers/contacts/add',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(p),
+        success: function(res) {
+            alert(res.message || (isEdit ? '更新成功' : '添加成功'));
+            $('#contactModal').modal('hide');
+            loadContacts();
+        },
+        error: function(xhr) {
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert((isEdit ? '更新' : '添加') + '失败: ' + msg);
+        }
+    });
+}
+
+function deleteContact(id) {
+    if (!confirm('确定要删除该联系人吗？')) return;
+    $.ajax({
+        url: '/api/customers/contacts/delete?id=' + id,
+        method: 'POST',
+        success: function(res) {
+            alert(res.message || '删除成功');
+            loadContacts();
+        },
+        error: function(xhr) {
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('删除失败: ' + msg);
+        }
+    });
+}
+
+const ATTACH_CATEGORIES = ["OEM协议","保密协议","标签样稿","合同扫描件","唛头","其他"];
+
+function fileIcon(name) {
+    const ext = (name.split('.').pop() || '').toLowerCase();
+    if (['jpg','jpeg','png','gif','webp'].indexOf(ext) > -1) return 'bi-file-earmark-image';
+    if (ext === 'pdf') return 'bi-file-earmark-pdf';
+    if (['doc','docx'].indexOf(ext) > -1) return 'bi-file-earmark-word';
+    if (['xls','xlsx'].indexOf(ext) > -1) return 'bi-file-earmark-excel';
+    if (['ppt','pptx'].indexOf(ext) > -1) return 'bi-file-earmark-ppt';
+    if (['zip','rar'].indexOf(ext) > -1) return 'bi-file-earmark-zip';
+    return 'bi-file-earmark';
+}
+
+function fmtSize(bytes) {
+    if (!bytes) return '-';
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(2) + ' MB';
+}
+
+function loadAttachments() {
+    if (!currentCustomerId) return;
+    $.ajax({
+        url: '/api/customers/attachments?customer_id=' + currentCustomerId,
+        method: 'GET',
+        success: function(data) {
+            const tbody = $('#attachmentTableBody');
+            tbody.empty();
+            if (!data || !data.length) {
+                tbody.append('<tr><td colspan="6" class="text-center text-muted">暂无附件</td></tr>');
+                return;
+            }
+            data.forEach(function(a) {
+                const icon = fileIcon(a.file_name);
+                const dl = `<a href="${a.url}" target="_blank" class="btn btn-outline-secondary btn-sm me-1" title="打开/下载"><i class="bi bi-download"></i> 打开</a>`;
+                let del = '';
+                if (window.PERMS && window.PERMS['customer:manage']) {
+                    del = `<button class="btn btn-danger btn-sm" onclick="deleteAttachment(${a.id})"><i class="bi bi-trash"></i> 删除</button>`;
+                }
+                tbody.append(`<tr>
+                    <td><span class="badge bg-info text-dark">${escapeHtml(a.category || '其他')}</span></td>
+                    <td><i class="bi ${icon} me-1"></i>${escapeHtml(a.file_name)}</td>
+                    <td>${fmtSize(a.file_size)}</td>
+                    <td>${escapeHtml(a.uploaded_by_name || '-')}</td>
+                    <td class="small text-muted">${a.created_at ? new Date(a.created_at).toLocaleString() : '-'}</td>
+                    <td class="text-nowrap">${dl}${del}</td>
+                </tr>`);
+            });
+        },
+        error: function(xhr) {
+            alert('加载附件失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function openAddAttachment() {
+    $('#attachmentForm')[0].reset();
+    $('#attachmentCategory').val('其他');
+    $('#attachmentModal').modal('show');
+}
+
+function uploadAttachment() {
+    const file = document.getElementById('attachmentFile').files[0];
+    if (!file) { alert('请选择要上传的文件'); return; }
+    const fd = new FormData();
+    fd.append('customer_id', currentCustomerId);
+    fd.append('category', $('#attachmentCategory').val() || '其他');
+    fd.append('file', file);
+    $.ajax({
+        url: '/api/customers/attachments/upload',
+        method: 'POST',
+        data: fd,
+        processData: false,
+        contentType: false,
+        success: function(res) {
+            alert(res.message || '上传成功');
+            $('#attachmentModal').modal('hide');
+            $('#attachmentForm')[0].reset();
+            loadAttachments();
+        },
+        error: function(xhr) {
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('上传失败: ' + msg);
+        }
+    });
+}
+
+function deleteAttachment(id) {
+    if (!confirm('确定要删除该附件吗？')) return;
+    $.ajax({
+        url: '/api/customers/attachments/delete?id=' + id,
+        method: 'POST',
+        success: function(res) {
+            alert(res.message || '删除成功');
+            loadAttachments();
+        },
+        error: function(xhr) {
+            let msg = xhr.responseText;
+            try { const j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('删除失败: ' + msg);
+        }
+    });
+}
+const ORDER_STATUS_TEXT = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'};
+const ORDER_STATUS_BADGE = {0:'bg-warning text-dark',1:'bg-info text-dark',2:'bg-primary',3:'bg-success',4:'bg-secondary'};
+
+function orderMoneyLocal(o, v) {
+    var num = Number(v || 0).toFixed(2);
+    return (o.currency && o.currency !== 'CNY' ? o.currency + ' ' : '¥') + num;
+}
+
+function tryLoadCustomerOrders() {
+    var perms = window.PERMS || {};
+    if (!perms['order:view_own'] && !perms['order:view_all']) return;
+    $('#ordersCard').show();
+    loadCustomerOrders();
+}
+
+function loadCustomerOrders() {
+    if (!currentCustomerId) return;
+    $.ajax({
+        url: '/api/customers/orders?customer_id=' + currentCustomerId,
+        method: 'GET',
+        success: function(data) {
+            var tbody = $('#customerOrderTableBody');
+            tbody.empty();
+            if (!data || !data.length) {
+                tbody.append('<tr><td colspan="6" class="text-center text-muted">暂无关联订单</td></tr>');
+                return;
+            }
+            data.forEach(function(o) {
+                var st = ORDER_STATUS_TEXT[o.status] || '未知';
+                var stCls = ORDER_STATUS_BADGE[o.status] || 'bg-secondary';
+                var pay = o.payment_status === 1
+                    ? '<span class="badge bg-success">已回款</span>'
+                    : '<span class="badge bg-secondary">未回款</span>';
+                tbody.append(`<tr>
+                    <td><a href="/order/detail?id=${o.id}" target="_blank"><strong>${escapeHtml(o.order_no)}</strong></a></td>
+                    <td>${o.order_date ? String(o.order_date).slice(0, 10) : '-'}</td>
+                    <td>${orderMoneyLocal(o, o.total_amount)}</td>
+                    <td><span class="badge ${stCls}">${st}</span></td>
+                    <td>${pay}</td>
+                    <td><a class="btn btn-outline-primary btn-sm" href="/order/detail?id=${o.id}" target="_blank"><i class="bi bi-eye"></i> 查看</a></td>
+                </tr>`);
+            });
+        },
+        error: function(xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            $('#customerOrderTableBody').html('<tr><td colspan="6" class="text-center text-danger">加载关联订单失败: ' + escapeHtml(msg) + '</td></tr>');
+        }
+    });
+}
+$(document).ready(function() {
+    let titleHtml = '<option value="">请选择</option>';
+    CONTACT_TITLES.forEach(function(t) { titleHtml += '<option value="' + t + '">' + t + '</option>'; });
+    $('#contactTitle').html(titleHtml);
+    let catHtml = '';
+    ATTACH_CATEGORIES.forEach(function(c) { catHtml += '<option value="' + c + '">' + c + '</option>'; });
+    $('#attachmentCategory').html(catHtml).val('其他');
+    loadCustomer();
+});
+</script>
+{{end}}

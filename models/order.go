@@ -5,6 +5,7 @@ import "time"
 type Order struct {
 	ID                   int        `json:"id"`
 	OrderNo              string     `json:"order_no"`
+	CustomerID           int        `json:"customer_id"`
 	CustomerName         string     `json:"customer_name"`
 	Region               string     `json:"region"`
 	CustomerAddress      string     `json:"customer_address"`
@@ -23,6 +24,9 @@ type Order struct {
 	FreightPayment       string     `json:"freight_payment"`
 	FreightRecovery      string     `json:"freight_recovery"`
 	TransportMethod      string     `json:"transport_method"`
+	Currency             string     `json:"currency"`
+	TradeTerms           string     `json:"trade_terms"`
+	ShippingMark         string     `json:"shipping_mark"`
 	Remark               string     `json:"remark"`
 	WarningLevel         string     `json:"warning_level"`
 	WarningLabel         string     `json:"warning_label"`

@@ -190,6 +190,18 @@
                             <label class="form-label">备注</label>
                             <textarea class="form-control" id="createRemark" rows="2"></textarea>
                         </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">币种</label>
+                            <select class="form-control" id="currency"><option value="CNY">CNY</option></select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">贸易术语</label>
+                            <select class="form-control" id="tradeTerms"><option value="">无</option></select>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">唛头</label>
+                            <textarea class="form-control" id="shippingMark" rows="2" placeholder="客户固定出货唛头"></textarea>
+                        </div>
                     </div>
 
                     <div class="mb-3">
@@ -247,6 +259,7 @@
             <div class="modal-body">
                 <form id="editOrderForm">
                     <input type="hidden" id="editOrderId">
+                    <input type="hidden" id="editCustomerId">
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">客户名称 <span class="text-danger">*</span></label>
@@ -325,6 +338,18 @@
                             <label class="form-label">备注</label>
                             <textarea class="form-control" id="editRemark" rows="2"></textarea>
                         </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">币种</label>
+                            <select class="form-control" id="editCurrency"><option value="CNY">CNY</option></select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">贸易术语</label>
+                            <select class="form-control" id="editTradeTerms"><option value="">无</option></select>
+                        </div>
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label">唛头</label>
+                            <textarea class="form-control" id="editShippingMark" rows="2" placeholder="客户固定出货唛头"></textarea>
+                        </div>
                     </div>
                 </form>
             </div>
@@ -342,6 +367,19 @@
 var productCache = [];
 var customerCache = [];
 
+var CURRENCY_OPTIONS = ['CNY','USD','EUR','GBP','JPY','HKD','AUD'];
+var TRADE_TERM_OPTIONS = ['EXW','FOB','CIF','DDP'];
+function fillOrderOptionSelects() {
+    var curHtml = '';
+    CURRENCY_OPTIONS.forEach(function(c) { curHtml += '<option value="' + c + '">' + c + '</option>'; });
+    $('#currency').html(curHtml);
+    $('#editCurrency').html(curHtml);
+    var tradeHtml = '<option value="">无</option>';
+    TRADE_TERM_OPTIONS.forEach(function(t) { tradeHtml += '<option value="' + t + '">' + t + '</option>'; });
+    $('#tradeTerms').html(tradeHtml);
+    $('#editTradeTerms').html(tradeHtml);
+}
+
 function formatDate(value) {
     if (!value) return '-';
     return value.slice(0, 10);
@@ -350,6 +388,11 @@ function warnHtml(level, label) {
     if (!level) return '-';
     var cls = {red: 'warn-red', orange: 'warn-orange', yellow: 'warn-yellow', blue: 'warn-blue'}[level] || 'warn-gray';
     return `<span class="warn-dot ${cls}"></span>${label || ''}`;
+}
+
+function orderMoney(order, v) {
+    var num = Number(v || 0).toFixed(2);
+    return (order.currency && order.currency !== 'CNY' ? order.currency + ' ' : '¥') + num;
 }
 
 function currentUserName() {
@@ -425,7 +468,8 @@ function loadCustomersToSelect() {
             select.empty();
             select.append('<option value="">手动输入客户</option>');
             customerCache.forEach(function(c) {
-                select.append(`<option value="${c.id}">${c.name} (${c.phone || '无电话'})</option>`);
+                var cLabel = (c.code ? c.code + ' ' : '') + c.name + (c.phone ? ' (' + c.phone + ')' : '');
+                select.append(`<option value="${c.id}">${cLabel}</option>`);
             });
             if (currentVal) select.val(currentVal);
         },
@@ -474,6 +518,14 @@ $(document).on('change', '#customerSelect', function() {
         $('#customerName').val(customer.name || '');
         $('#customerPhone').val(customer.phone || '');
         $('#customerAddress').val(customer.address || '');
+        $('#currency').val(customer.currency || 'CNY');
+        $('#tradeTerms').val(customer.trade_terms || '');
+        $('#shippingMark').val(customer.shipping_mark || '');
+        // 从客户档案带出货款结算方式（现付或自定义文本）
+        setCustomField('paymentSettlement', 'paymentSettlementCustom', customer.payment_terms || '', ['现付']);
+        if (customer.country_region && !$('#region').val()) {
+            $('#region').val(customer.country_region);
+        }
     }
 });
 $(document).on('input', '.quantity-input', function() {
@@ -553,8 +605,8 @@ function loadOrders(status, keyword) {
                             <td>${item.spec || '-'}</td>
                             <td>${item.unit || '-'}</td>
                             <td>${item.quantity}</td>
-                            <td>¥${(item.price || 0).toFixed(2)}</td>
-                            <td>¥${amount.toFixed(2)}</td>
+                            <td>${orderMoney(order, item.price || 0)}</td>
+                            <td>${orderMoney(order, amount)}</td>
                             <td>${formatDate(order.order_date)}</td>
                             <td>${formatDate(order.expected_shipping_date)}</td>
                             <td>${formatDate(order.customer_required_date)}</td>
@@ -676,6 +728,10 @@ function createOrder() {
         freight_recovery: $('#freightRecovery').val(),
         transport_method: customFieldValue('transportMethod', 'transportMethodCustom'),
         remark: $('#createRemark').val().trim(),
+        customer_id: parseInt($('#customerSelect').val()) || 0,
+        currency: $('#currency').val() || 'CNY',
+        trade_terms: $('#tradeTerms').val() || '',
+        shipping_mark: $('#shippingMark').val().trim(),
         items: items
     };
 
@@ -718,6 +774,10 @@ function editOrder(id) {
             setCustomField('editFreightPayment', 'editFreightPaymentCustom', order.freight_payment || '现付', ['现付']);
             $('#editFreightRecovery').val(order.freight_recovery === '不可回收' ? '不可回收' : '可回收');
             setCustomField('editTransportMethod', 'editTransportMethodCustom', order.transport_method || '物流', ['物流', '快递']);
+            $('#editCustomerId').val(order.customer_id || 0);
+            $('#editCurrency').val(order.currency || 'CNY');
+            $('#editTradeTerms').val(order.trade_terms || '');
+            $('#editShippingMark').val(order.shipping_mark || '');
             $('#editRemark').val(order.remark || '');
             $('#editOrderModal').modal('show');
         },
@@ -748,6 +808,10 @@ function saveEditOrder() {
         freight_payment: customFieldValue('editFreightPayment', 'editFreightPaymentCustom'),
         freight_recovery: $('#editFreightRecovery').val(),
         transport_method: customFieldValue('editTransportMethod', 'editTransportMethodCustom'),
+        customer_id: parseInt($('#editCustomerId').val()) || 0,
+        currency: $('#editCurrency').val() || 'CNY',
+        trade_terms: $('#editTradeTerms').val() || '',
+        shipping_mark: $('#editShippingMark').val().trim(),
         remark: $('#editRemark').val().trim()
     };
     $.ajax({
@@ -781,6 +845,9 @@ $('#createOrderModal').on('show.bs.modal', function() {
     $('#freightPayment').val('现付');
     $('#freightRecovery').val('可回收');
     $('#transportMethod').val('物流');
+    $('#currency').val('CNY');
+    $('#tradeTerms').val('');
+    $('#shippingMark').val('');
     refreshCustomField('paymentSettlement', 'paymentSettlementCustom');
     refreshCustomField('freightPayment', 'freightPaymentCustom');
     refreshCustomField('transportMethod', 'transportMethodCustom');
@@ -820,6 +887,7 @@ $(document).ready(function() {
     bindCustomField('editPaymentSettlement', 'editPaymentSettlementCustom');
     bindCustomField('editFreightPayment', 'editFreightPaymentCustom');
     bindCustomField('editTransportMethod', 'editTransportMethodCustom');
+    fillOrderOptionSelects();
     $('#searchKeyword').on('keypress', function(e) {
         if (e.which === 13) applyFilter();
     });

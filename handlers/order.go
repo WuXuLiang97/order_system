@@ -16,9 +16,13 @@ import (
 
 type OrderCreateRequest struct {
 	CustomerName         string `json:"customer_name"`
+	CustomerID           int    `json:"customer_id"`
 	Region               string `json:"region"`
 	CustomerAddress      string `json:"customer_address"`
 	CustomerPhone        string `json:"customer_phone"`
+	Currency             string `json:"currency"`
+	TradeTerms           string `json:"trade_terms"`
+	ShippingMark         string `json:"shipping_mark"`
 	OrderDate            string `json:"order_date"`
 	ExpectedShippingDate string `json:"expected_shipping_date"`
 	CustomerRequiredDate string `json:"customer_required_date"`
@@ -137,6 +141,13 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	freightPayment := orderOptionDefault(req.FreightPayment, "现付")
 	freightRecovery := orderOptionDefault(req.FreightRecovery, "可回收")
 	transportMethod := orderOptionDefault(req.TransportMethod, "物流")
+	customerID := req.CustomerID
+	if customerID < 0 {
+		customerID = 0
+	}
+	currency := orderOptionDefault(req.Currency, "CNY")
+	tradeTerms := strings.TrimSpace(req.TradeTerms)
+	shippingMark := strings.TrimSpace(req.ShippingMark)
 
 	var createdBy interface{} = nil
 	if u := CurrentUser(r); u != nil {
@@ -147,11 +158,12 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
         INSERT INTO orders
         (order_no, customer_name, region, customer_address, customer_phone,
          order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
-         prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method, remark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?)
+         prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method, remark,
+         customer_id, currency, trade_terms, shipping_mark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `, orderNo, req.CustomerName, req.Region, req.CustomerAddress, req.CustomerPhone,
 		orderDate, expectedShippingDate, customerRequiredDate, logisticsDays, total, req.PaymentStatus, preparedBy, createdBy, paymentSettlement,
-		freightPayment, freightRecovery, transportMethod, req.Remark)
+		freightPayment, freightRecovery, transportMethod, req.Remark, customerID, currency, tradeTerms, shippingMark)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -239,6 +251,7 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
                prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
+               customer_id, currency, trade_terms, shipping_mark,
                created_at, COALESCE(remark, '') AS remark
         FROM orders
         WHERE 1=1
@@ -288,7 +301,8 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 		var createdByUser sql.NullInt64
 		err := rows.Scan(&o.ID, &o.OrderNo, &o.CustomerName, &o.Region, &o.CustomerAddress, &o.CustomerPhone,
 			&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &o.TotalAmount, &o.Status, &o.PaymentStatus,
-			&o.PreparedBy, &createdByUser, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod, &o.CreatedAt, &o.Remark)
+			&o.PreparedBy, &createdByUser, &o.PaymentSettlement, &o.FreightPayment, &o.FreightRecovery, &o.TransportMethod,
+			&o.CustomerID, &o.Currency, &o.TradeTerms, &o.ShippingMark, &o.CreatedAt, &o.Remark)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -349,6 +363,87 @@ func getOrderItems(orderID int) ([]orderItemView, error) {
 	return items, rows.Err()
 }
 
+// customerOrderRow 客户详情页展示的关联订单行
+type customerOrderRow struct {
+	ID            int        `json:"id"`
+	OrderNo       string     `json:"order_no"`
+	OrderDate     *time.Time `json:"order_date"`
+	TotalAmount   float64    `json:"total_amount"`
+	Currency      string     `json:"currency"`
+	Status        int        `json:"status"`
+	PaymentStatus int        `json:"payment_status"`
+	CreatedAt     time.Time  `json:"created_at"`
+}
+
+// GetCustomerOrders 获取某客户的关联订单列表（按订单行级权限过滤）
+func GetCustomerOrders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	customerID, err := strconv.Atoi(r.URL.Query().Get("customer_id"))
+	if err != nil || customerID <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "Invalid customer_id")
+		return
+	}
+	customer, err := models.GetCustomerByID(customerID)
+	if err != nil {
+		writeJSONError(w, http.StatusBadRequest, "客户不存在")
+		return
+	}
+	user := CurrentUser(r)
+	if !canViewCustomer(user, customer) {
+		writeJSONError(w, http.StatusForbidden, "无权查看该客户")
+		return
+	}
+
+	perms := PermissionsFor(user)
+	viewAll := perms[PermOrderViewAll] || perms[PermOrderEditAll]
+	query := `
+        SELECT id, order_no, order_date, total_amount, currency, status, payment_status, created_at
+        FROM orders
+        WHERE customer_id = ?`
+	var args []interface{}
+	args = append(args, customerID)
+	if !viewAll {
+		if user != nil {
+			query += " AND created_by_user_id = ?"
+			args = append(args, user.ID)
+		} else {
+			query += " AND 1=0"
+		}
+	}
+	query += " ORDER BY id DESC"
+
+	rows, err := models.DB.Query(query, args...)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var list []customerOrderRow
+	for rows.Next() {
+		var row customerOrderRow
+		var orderDate sql.NullTime
+		if err := rows.Scan(&row.ID, &row.OrderNo, &orderDate, &row.TotalAmount, &row.Currency, &row.Status, &row.PaymentStatus, &row.CreatedAt); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if orderDate.Valid {
+			row.OrderDate = &orderDate.Time
+		}
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(list)
+}
+
 // GetOrderDetail 获取订单详情（JSON）
 func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -374,11 +469,13 @@ func GetOrderDetail(w http.ResponseWriter, r *http.Request) {
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
                prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
+               customer_id, currency, trade_terms, shipping_mark,
                created_at, COALESCE(remark, '') AS remark
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
 		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
-		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
+		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod,
+		&order.CustomerID, &order.Currency, &order.TradeTerms, &order.ShippingMark, &order.CreatedAt, &order.Remark)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -600,7 +697,11 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		ID                   int    `json:"id"`
 		CustomerName         string `json:"customer_name"`
+		CustomerID           int    `json:"customer_id"`
 		Region               string `json:"region"`
+		Currency             string `json:"currency"`
+		TradeTerms           string `json:"trade_terms"`
+		ShippingMark         string `json:"shipping_mark"`
 		OrderDate            string `json:"order_date"`
 		ExpectedShippingDate string `json:"expected_shipping_date"`
 		CustomerRequiredDate string `json:"customer_required_date"`
@@ -661,6 +762,13 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	freightPayment := orderOptionDefault(req.FreightPayment, "现付")
 	freightRecovery := orderOptionDefault(req.FreightRecovery, "可回收")
 	transportMethod := orderOptionDefault(req.TransportMethod, "物流")
+	customerID := req.CustomerID
+	if customerID < 0 {
+		customerID = 0
+	}
+	currency := orderOptionDefault(req.Currency, "CNY")
+	tradeTerms := strings.TrimSpace(req.TradeTerms)
+	shippingMark := strings.TrimSpace(req.ShippingMark)
 
 	var ownerID sql.NullInt64
 	err = models.DB.QueryRow("SELECT created_by_user_id FROM orders WHERE id = ?", req.ID).Scan(&ownerID)
@@ -679,7 +787,11 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	_, err = models.DB.Exec(`
         UPDATE orders SET
             customer_name = ?,
+            customer_id = ?,
             region = ?,
+            currency = ?,
+            trade_terms = ?,
+            shipping_mark = ?,
             order_date = ?,
             expected_shipping_date = ?,
             customer_required_date = ?,
@@ -692,7 +804,7 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
             transport_method = ?,
             remark = ?
         WHERE id = ?
-    `, req.CustomerName, req.Region, orderDate, expectedDate, customerRequiredDate, logisticsDays, req.PaymentStatus, preparedBy, paymentSettlement, freightPayment, freightRecovery, transportMethod, req.Remark, req.ID)
+    `, req.CustomerName, customerID, req.Region, currency, tradeTerms, shippingMark, orderDate, expectedDate, customerRequiredDate, logisticsDays, req.PaymentStatus, preparedBy, paymentSettlement, freightPayment, freightRecovery, transportMethod, req.Remark, req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -727,11 +839,13 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
         SELECT id, order_no, customer_name, region, customer_address, customer_phone,
                order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
                prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method,
+               customer_id, currency, trade_terms, shipping_mark,
                created_at, COALESCE(remark, '') AS remark
         FROM orders WHERE id = ?
     `, id).Scan(&order.ID, &order.OrderNo, &order.CustomerName, &order.Region, &order.CustomerAddress, &order.CustomerPhone,
 		&orderDate, &expectedDate, &requiredDate, &logisticsDays, &deliveryDate, &order.TotalAmount, &order.Status, &order.PaymentStatus,
-		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod, &order.CreatedAt, &order.Remark)
+		&order.PreparedBy, &createdByUser, &order.PaymentSettlement, &order.FreightPayment, &order.FreightRecovery, &order.TransportMethod,
+		&order.CustomerID, &order.Currency, &order.TradeTerms, &order.ShippingMark, &order.CreatedAt, &order.Remark)
 	if err != nil {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return

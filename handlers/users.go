@@ -31,6 +31,35 @@ func ListUsers(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(users)
 }
 
+// UserOptions 返回轻量用户列表（用于“所属业务员”等下拉选择）
+func UserOptions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		writeJSONError(w, http.StatusMethodNotAllowed, "Method not allowed")
+		return
+	}
+	users, err := models.GetAllUsers()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	type userOption struct {
+		ID       int    `json:"id"`
+		Username string `json:"username"`
+		Name     string `json:"name"`
+		Role     string `json:"role"`
+	}
+	opts := make([]userOption, 0, len(users))
+	for _, u := range users {
+		name := u.DisplayName
+		if name == "" {
+			name = u.Username
+		}
+		opts = append(opts, userOption{ID: u.ID, Username: u.Username, Name: name, Role: u.Role})
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(opts)
+}
+
 // AddUser 添加用户（管理员）
 func AddUser(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
