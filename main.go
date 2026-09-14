@@ -6,6 +6,7 @@ import (
 	"order-system/handlers"
 	"order-system/models"
 	"os"
+	"path/filepath"
 )
 
 // page 返回一个渲染指定模板文件（含 layout）的页面处理器，
@@ -17,6 +18,17 @@ func page(files ...string) http.HandlerFunc {
 }
 
 func main() {
+	// 若可执行文件所在目录包含 templates（部署目录），则切换为该目录作为工作目录，
+	// 避免 systemd/脚本从其它目录启动时找不到 templates/、static/、uploads/。
+	if exe, err := os.Executable(); err == nil {
+		exeDir := filepath.Dir(exe)
+		if _, err := os.Stat(filepath.Join(exeDir, "templates")); err == nil {
+			if err := os.Chdir(exeDir); err == nil {
+				log.Printf("工作目录已切换到程序所在目录: %s", exeDir)
+			}
+		}
+	}
+
 	// 初始化数据库（同时确保 users 表存在并写入默认账户）
 	models.InitDB("root:Wxl111222@tcp(127.0.0.1:3306)/order_system?charset=utf8mb4&parseTime=True")
 
