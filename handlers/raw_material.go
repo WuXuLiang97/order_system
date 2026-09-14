@@ -2,9 +2,18 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"mime/multipart"
 	"net/http"
-	"order-system/models"
+	"os"
+	"path/filepath"
 	"strconv"
+	"strings"
+	"time"
+
+	"order-system/models"
 )
 
 // 获取所有原材料列表
@@ -61,12 +70,13 @@ func AddRawMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		Name     string  `json:"name"`
-		Spec     string  `json:"spec"`
-		Stock    float64 `json:"stock"` // 改为 float64
-		Unit     string  `json:"unit"`
-		MinStock float64 `json:"min_stock"` // 改为 float64
-		Price    float64 `json:"price"`
+		Name     string   `json:"name"`
+		Spec     string   `json:"spec"`
+		Stock    float64  `json:"stock"` // 改为 float64
+		Unit     string   `json:"unit"`
+		MinStock float64  `json:"min_stock"` // 改为 float64
+		Price    float64  `json:"price"`
+		Images   []string `json:"images"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -86,7 +96,7 @@ func AddRawMaterial(w http.ResponseWriter, r *http.Request) {
 		req.Price = 0
 	}
 
-	id, err := models.AddRawMaterial(req.Name, req.Spec, req.Unit, req.Stock, req.MinStock, req.Price)
+	id, err := models.AddRawMaterialWithImages(req.Name, req.Spec, req.Unit, req.Stock, req.MinStock, req.Price, req.Images)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -108,13 +118,14 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID       int     `json:"id"`
-		Name     string  `json:"name"`
-		Spec     string  `json:"spec"`
-		Stock    float64 `json:"stock"` // 改为 float64
-		Unit     string  `json:"unit"`
-		MinStock float64 `json:"min_stock"` // 改为 float64
-		Price    float64 `json:"price"`
+		ID       int      `json:"id"`
+		Name     string   `json:"name"`
+		Spec     string   `json:"spec"`
+		Stock    float64  `json:"stock"` // 改为 float64
+		Unit     string   `json:"unit"`
+		MinStock float64  `json:"min_stock"` // 改为 float64
+		Price    float64  `json:"price"`
+		Images   []string `json:"images"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -138,7 +149,7 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 		req.Price = 0
 	}
 
-	err := models.UpdateRawMaterial(req.ID, req.Name, req.Spec, req.Unit, req.Stock, req.MinStock, req.Price)
+	err := models.UpdateRawMaterialWithImages(req.ID, req.Name, req.Spec, req.Unit, req.Stock, req.MinStock, req.Price, req.Images)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -243,6 +254,21 @@ func RawMaterialOutbound(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// deleteRawMaterialImageFiles 删除原材料关联的图鉴图片文件。
+func deleteRawMaterialImageFiles(urls []string) {
+	for _, url := range urls {
+		rel := strings.TrimPrefix(url, "/")
+		if !strings.HasPrefix(rel, "uploads/raw_material_images/") {
+			log.Printf("跳过删除非原材料图鉴目录文件: %s", url)
+			continue
+		}
+		localPath := filepath.FromSlash(rel)
+		if err := os.Remove(localPath); err != nil && !os.IsNotExist(err) {
+			log.Printf("删除原材料图鉴文件失败 %s: %v", localPath, err)
+		}
+	}
+}
+
 // 删除原材料
 func DeleteRawMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
@@ -262,12 +288,19 @@ func DeleteRawMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	material, err := models.GetRawMaterialByID(id)
+	if err != nil {
+		http.Error(w, "Raw material not found", http.StatusNotFound)
+		return
+	}
+
 	err = models.DeleteRawMaterial(id)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
+	deleteRawMaterialImageFiles(material.Images)
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]string{
 		"message": "原材料删除成功",
@@ -289,4 +322,74 @@ func GetLowStockRawMaterials(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(materials)
+}
+
+// UploadRawMaterialImages 上传原材料图鉴图片，支持一次选择多张。
+func UploadRawMaterialImages(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	r.Body = http.MaxBytesReader(w, r.Body, 30<<20)
+	if err := r.ParseMultipartForm(30 << 20); err != nil {
+		http.Error(w, "读取上传文件失败", http.StatusBadRequest)
+		return
+	}
+
+	var fileHeaders []*multipart.FileHeader
+	if r.MultipartForm != nil {
+		fileHeaders = r.MultipartForm.File["files"]
+		if len(fileHeaders) == 0 {
+			fileHeaders = r.MultipartForm.File["file"]
+		}
+	}
+	if len(fileHeaders) == 0 {
+		http.Error(w, "请选择要上传的图片", http.StatusBadRequest)
+		return
+	}
+
+	allowed := map[string]bool{".jpg": true, ".jpeg": true, ".png": true, ".gif": true, ".webp": true}
+	dir := filepath.Join("uploads", "raw_material_images")
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var urls []string
+	for _, header := range fileHeaders {
+		ext := strings.ToLower(filepath.Ext(header.Filename))
+		if !allowed[ext] {
+			http.Error(w, "仅支持 jpg、jpeg、png、gif、webp 图片", http.StatusBadRequest)
+			return
+		}
+		file, err := header.Open()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		filename := fmt.Sprintf("%d_%d%s", time.Now().UnixNano(), len(urls), ext)
+		dst := filepath.Join(dir, filename)
+		out, err := os.Create(dst)
+		if err != nil {
+			file.Close()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if _, err := io.Copy(out, file); err != nil {
+			out.Close()
+			file.Close()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		out.Close()
+		file.Close()
+		urls = append(urls, "/"+filepath.ToSlash(dst))
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"urls":    urls,
+		"message": "上传成功",
+	})
 }

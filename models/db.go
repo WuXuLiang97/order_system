@@ -106,6 +106,9 @@ func ensureProductAndMaterialColumns() error {
 	if err := ensureColumn("products", "packaging", "VARCHAR(50) NOT NULL DEFAULT '' COMMENT '包装方式'"); err != nil {
 		return err
 	}
+	if err := ensureColumn("raw_materials", "images", "TEXT"); err != nil {
+		return err
+	}
 	if err := ensureColumn("raw_materials", "spec", "VARCHAR(100) NOT NULL DEFAULT ''"); err != nil {
 		return err
 	}

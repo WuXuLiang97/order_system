@@ -109,6 +109,7 @@ func main() {
 	http.HandleFunc("/api/raw-materials/get", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.GetRawMaterial))
 	http.HandleFunc("/api/raw-materials/add", handlers.RequirePermission(handlers.PermMaterialManage, handlers.AddRawMaterial))
 	http.HandleFunc("/api/raw-materials/update", handlers.RequirePermission(handlers.PermMaterialManage, handlers.UpdateRawMaterial))
+	http.HandleFunc("/api/raw-materials/upload", handlers.RequirePermission(handlers.PermMaterialManage, handlers.UploadRawMaterialImages))
 	http.HandleFunc("/api/raw-materials/delete", handlers.RequirePermission(handlers.PermMaterialManage, handlers.DeleteRawMaterial))
 	http.HandleFunc("/api/raw-materials/inbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialInbound))
 	http.HandleFunc("/api/raw-materials/outbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialOutbound))
@@ -123,6 +124,7 @@ func main() {
 	http.HandleFunc("/api/users/permissions", handlers.RequirePermission(handlers.PermUserManage, handlers.SaveUserPermissions))
 
 	os.MkdirAll("uploads/payment_receipts", 0755)
+	os.MkdirAll("uploads/raw_material_images", 0755)
 	log.Println("Server started at :6688")
 	log.Fatal(http.ListenAndServe(":6688", nil))
 }

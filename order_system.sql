@@ -50,6 +50,7 @@ CREATE TABLE raw_materials (
     unit        VARCHAR(20) DEFAULT '个' COMMENT '单位（如：升、千克、米）',
     min_stock   DECIMAL(10,3) DEFAULT 0 COMMENT '最低库存预警值（支持小数）',
     price       DECIMAL(10,2) DEFAULT 0 COMMENT '原材料单价',
+    images      TEXT COMMENT '原材料图鉴图片路径(JSON数组)',
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='原材料库存表';
 
