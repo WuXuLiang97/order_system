@@ -125,6 +125,6 @@ func main() {
 
 	os.MkdirAll("uploads/payment_receipts", 0755)
 	os.MkdirAll("uploads/raw_material_images", 0755)
-	log.Println("Server started at :6689")
-	log.Fatal(http.ListenAndServe(":6689", nil))
+	log.Println("Server started at :6688")
+	log.Fatal(http.ListenAndServe(":6688", nil))
 }
