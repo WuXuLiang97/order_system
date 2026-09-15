@@ -99,9 +99,9 @@
                     <div class="row">
                         <div class="col-md-12 mb-3">
                             <label class="form-label">选择客户</label>
-                            <select class="form-control" id="customerSelect">
-                                <option value="">手动输入客户</option>
-                            </select>
+                            <input type="text" class="form-control customer-search-input" id="customerSearchInput" list="customerAutocompleteOptions" placeholder="输入客户名称、编号或电话，也可直接手动填写下方客户名称" autocomplete="off">
+                            <input type="hidden" id="customerId">
+                            <datalist id="customerAutocompleteOptions"></datalist>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">客户名称 <span class="text-danger">*</span></label>
@@ -371,8 +371,9 @@
 {{define "scripts"}}
 <script>
 var productCache = [];
-var productByDisplay = new Map();
 var customerCache = [];
+var orderProductAutocomplete = null;
+var customerAutocomplete = null;
 
 var CURRENCY_OPTIONS = ['CNY','USD','EUR','GBP','JPY','HKD','AUD'];
 var TRADE_TERM_OPTIONS = ['EXW','FOB','CIF','DDP'];
@@ -482,18 +483,17 @@ function productDisplayValue(product) {
     return (product.name || '') + (details.length ? '（' + details.join('，') + '）' : '');
 }
 
-function setOrderRowProduct(row, product) {
-    var input = row.find('.product-input');
-    if (!product) {
-        input.val('').removeClass('is-invalid');
-        row.find('.product-id-input').val('');
-        row.find('.spec-display').val('');
-        row.find('.unit-display').val('');
-        row.find('.price-display').val('');
-        recalcRow(row);
-        return;
-    }
-    input.val(productDisplayValue(product)).removeClass('is-invalid');
+function clearOrderRowProduct(input) {
+    var row = $(input).closest('.item-row');
+    row.find('.product-id-input').val('');
+    row.find('.spec-display').val('');
+    row.find('.unit-display').val('');
+    row.find('.price-display').val('');
+    recalcRow(row);
+}
+
+function applyOrderProductSelection(product, input) {
+    var row = $(input).closest('.item-row');
     row.find('.product-id-input').val(product.id);
     row.find('.spec-display').val(product.spec || '');
     row.find('.unit-display').val(product.unit || '');
@@ -501,56 +501,21 @@ function setOrderRowProduct(row, product) {
     recalcRow(row);
 }
 
-function resolveOrderProductInput(row) {
-    var input = row.find('.product-input');
-    var value = (input.val() || '').trim();
-    if (!value) {
-        setOrderRowProduct(row, null);
-        return;
-    }
-
-    var product = productByDisplay.get(value);
-    if (!product) {
-        var matches = productCache.filter(function(item) {
-            return (item.name || '').trim() === value;
-        });
-        if (matches.length === 1) product = matches[0];
-    }
-
-    if (product) {
-        setOrderRowProduct(row, product);
-    } else {
-        row.find('.product-id-input').val('');
-        row.find('.spec-display').val('');
-        row.find('.unit-display').val('');
-        row.find('.price-display').val('');
-        input.addClass('is-invalid');
-        recalcRow(row);
-    }
-}
-
-function rebuildProductAutocomplete() {
-    productByDisplay = new Map();
-    productCache.forEach(function(product) {
-        productByDisplay.set(productDisplayValue(product), product);
-    });
-
-    var datalist = $('#orderProductOptions').empty();
-    productCache
-        .slice()
-        .sort(function(a, b) {
+function initOrderProductAutocomplete() {
+    if (orderProductAutocomplete) return;
+    orderProductAutocomplete = AutoComplete.create({
+        name: 'order_product',
+        inputSelector: '.product-input',
+        hiddenSelector: '.product-id-input',
+        datalistSelector: '#orderProductOptions',
+        getId: function(product) { return product.id; },
+        getDisplay: productDisplayValue,
+        getAliases: function(product) { return [product.name]; },
+        sortItems: function(a, b) {
             return (a.name || '').localeCompare(b.name || '', 'zh-CN');
-        })
-        .forEach(function(product) {
-            datalist.append($('<option>').val(productDisplayValue(product)));
-        });
-
-    $('.item-row').each(function() {
-        var row = $(this);
-        var productID = parseInt(row.find('.product-id-input').val());
-        if (!productID) return;
-        var product = productCache.find(function(item) { return item.id === productID; });
-        if (product) setOrderRowProduct(row, product);
+        },
+        onSelect: applyOrderProductSelection,
+        onClear: function(_, input) { clearOrderRowProduct(input); }
     });
 }
 
@@ -564,7 +529,8 @@ function loadProducts(callback) {
             if (productCache.length === 0) {
                 $('#productLoadStatus').html('<span class="text-danger">⚠️ 暂无产品，请先添加产品！</span>');
             }
-            rebuildProductAutocomplete();
+            initOrderProductAutocomplete();
+            orderProductAutocomplete.setItems(productCache);
             if (callback) callback();
         },
         error: function() {
@@ -573,21 +539,62 @@ function loadProducts(callback) {
         }
     });
 }
+
+function customerDisplayValue(customer) {
+    var parts = [];
+    if (customer.code) parts.push(customer.code);
+    parts.push(customer.name || '');
+    var label = parts.join(' ');
+    var extras = [];
+    if (customer.phone) extras.push('电话：' + customer.phone);
+    if (customer.full_name && customer.full_name !== customer.name) extras.push('全称：' + customer.full_name);
+    return label + (extras.length ? '（' + extras.join('，') + '）' : '');
+}
+
+function applyCustomerSelection(customer) {
+    $('#customerId').val(customer.id);
+    $('#customerName').val(customer.name || '');
+    $('#customerPhone').val(customer.phone || '');
+    $('#customerAddress').val(customer.address || '');
+    $('#currency').val(customer.currency || 'CNY');
+    $('#tradeTerms').val(customer.trade_terms || '');
+    $('#shippingMark').val(customer.shipping_mark || '');
+    setCustomField('paymentSettlement', 'paymentSettlementCustom', customer.payment_terms || '', ['现付']);
+    if (customer.country_region && !$('#region').val()) {
+        $('#region').val(customer.country_region);
+    }
+}
+
+function initCustomerAutocomplete() {
+    if (customerAutocomplete) return;
+    customerAutocomplete = AutoComplete.create({
+        name: 'order_customer',
+        inputSelector: '#customerSearchInput',
+        hiddenSelector: '#customerId',
+        datalistSelector: '#customerAutocompleteOptions',
+        getId: function(customer) { return customer.id; },
+        getDisplay: customerDisplayValue,
+        getAliases: function(customer) {
+            return [customer.name, customer.code, customer.phone, customer.full_name];
+        },
+        sortItems: function(a, b) {
+            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+        },
+        onSelect: applyCustomerSelection,
+        onClear: function() {
+            $('#customerId').val('');
+        }
+    });
+}
+
 function loadCustomersToSelect() {
     $.ajax({
         url: '/api/customers',
         method: 'GET',
         success: function(data) {
             customerCache = data || [];
-            var select = $('#customerSelect');
-            var currentVal = select.val();
-            select.empty();
-            select.append('<option value="">手动输入客户</option>');
-            customerCache.forEach(function(c) {
-                var cLabel = (c.code ? c.code + ' ' : '') + c.name + (c.phone ? ' (' + c.phone + ')' : '');
-                select.append(`<option value="${c.id}">${cLabel}</option>`);
-            });
-            if (currentVal) select.val(currentVal);
+            initCustomerAutocomplete();
+            customerAutocomplete.setItems(customerCache);
         },
         error: function() {
             alert('加载客户列表失败');
@@ -609,33 +616,7 @@ $(document).on('click', '.remove-item', function() {
     }
 });
 
-$(document).on('input', '.product-input', function() {
-    var row = $(this).closest('.item-row');
-    row.find('.product-id-input').val('');
-    $(this).removeClass('is-invalid');
-});
 
-$(document).on('change', '.product-input', function() {
-    resolveOrderProductInput($(this).closest('.item-row'));
-});
-
-$(document).on('change', '#customerSelect', function() {
-    var id = parseInt($(this).val());
-    var customer = customerCache.find(function(c) { return c.id === id; });
-    if (customer) {
-        $('#customerName').val(customer.name || '');
-        $('#customerPhone').val(customer.phone || '');
-        $('#customerAddress').val(customer.address || '');
-        $('#currency').val(customer.currency || 'CNY');
-        $('#tradeTerms').val(customer.trade_terms || '');
-        $('#shippingMark').val(customer.shipping_mark || '');
-        // 从客户档案带出货款结算方式（现付或自定义文本）
-        setCustomField('paymentSettlement', 'paymentSettlementCustom', customer.payment_terms || '', ['现付']);
-        if (customer.country_region && !$('#region').val()) {
-            $('#region').val(customer.country_region);
-        }
-    }
-});
 $(document).on('input', '.quantity-input', function() {
     recalcRow($(this).closest('.item-row'));
 });
@@ -868,7 +849,7 @@ function createOrder() {
     var errors = [];
     $('.item-row').each(function(index) {
         var row = $(this);
-        resolveOrderProductInput(row);
+        orderProductAutocomplete.resolveRow(row);
         var productId = parseInt(row.find('.product-id-input').val());
         var quantity = parseInt(row.find('.quantity-input').val());
         if (!productId) {
@@ -907,7 +888,7 @@ function createOrder() {
         freight_recovery: $('#freightRecovery').val(),
         transport_method: customFieldValue('transportMethod', 'transportMethodCustom'),
         remark: $('#createRemark').val().trim(),
-        customer_id: parseInt($('#customerSelect').val()) || 0,
+        customer_id: parseInt($('#customerId').val()) || 0,
         currency: $('#currency').val() || 'CNY',
         trade_terms: $('#tradeTerms').val() || '',
         shipping_mark: $('#shippingMark').val().trim(),

@@ -273,6 +273,7 @@
 </div>
 
 <datalist id="bomRawMaterialOptions"></datalist>
+<datalist id="outboundProductOptions"></datalist>
 
 <!-- 生产入库模态框 -->
 <div class="modal fade" id="productionModal" tabindex="-1">
@@ -286,9 +287,9 @@
                 <form id="productionForm">
                     <div class="mb-3">
                         <label class="form-label">选择产品 <span class="text-danger">*</span></label>
-                        <select class="form-control" id="productionProductId" required>
-                            <option value="">请选择产品</option>
-                        </select>
+                        <input type="text" class="form-control production-product-input" id="productionProductInput" list="productionProductOptions" placeholder="输入产品名称、规格或单位" autocomplete="off" required>
+                        <input type="hidden" id="productionProductId">
+                        <datalist id="productionProductOptions"></datalist>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">生产数量 <span class="text-danger">*</span></label>
@@ -308,6 +309,8 @@
 
 {{define "scripts"}}
 <script>
+var productionProductAutocomplete = null;
+var outboundProductAutocomplete = null;
 // ============================
 // 原材料自动补全
 // ============================
@@ -726,19 +729,65 @@ function deleteProduct(id) {
 // 生产入库功能
 // ============================
 
-// 加载产品列表到生产入库下拉框
+function productionProductDisplayValue(product) {
+    var details = [];
+    if (product.spec) details.push('规格：' + product.spec);
+    if (product.unit) details.push('单位：' + product.unit);
+    details.push('库存：' + qtyText(product.stock));
+    return (product.name || '') + '（' + details.join('，') + '）';
+}
+
+function loadProductionBom(productID) {
+    if (!productID) {
+        $('#productionBomInfo').text('');
+        return;
+    }
+    $.ajax({
+        url: `/api/products/get?id=${productID}`,
+        method: 'GET',
+        success: function(data) {
+            var bom = data.bom || [];
+            if (bom.length === 0) {
+                $('#productionBomInfo').html('<span class="text-warning">⚠️ 该产品无BOM，入库将不扣减原材料。</span>');
+            } else {
+                var html = '<strong>📦 原材料消耗清单：</strong><br>';
+                bom.forEach(function(b) {
+                    html += `- 原材料ID: ${b.raw_material_id}，用量: ${b.quantity}<br>`;
+                });
+                $('#productionBomInfo').html(html);
+            }
+        },
+        error: function() {
+            $('#productionBomInfo').html('<span class="text-danger">加载BOM信息失败</span>');
+        }
+    });
+}
+
+function initProductionProductAutocomplete() {
+    if (productionProductAutocomplete) return;
+    productionProductAutocomplete = AutoComplete.create({
+        name: 'production_product',
+        inputSelector: '#productionProductInput',
+        hiddenSelector: '#productionProductId',
+        datalistSelector: '#productionProductOptions',
+        getId: function(product) { return product.id; },
+        getDisplay: productionProductDisplayValue,
+        getAliases: function(product) { return [product.name]; },
+        sortItems: function(a, b) {
+            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+        },
+        onSelect: function(product) { loadProductionBom(product.id); },
+        onClear: function() { $('#productionBomInfo').text(''); }
+    });
+}
+
 function loadProductionProducts() {
     $.ajax({
         url: '/api/products',
         method: 'GET',
         success: function(data) {
-            var select = $('#productionProductId');
-            select.empty();
-            select.append('<option value="">请选择产品</option>');
-            data.forEach(function(p, index) {
-                select.append(`<option value="${p.id}">${p.name} (库存: ${p.stock})</option>`);
-            });
-            // 清空BOM信息
+            initProductionProductAutocomplete();
+            productionProductAutocomplete.setItems(data || []);
             $('#productionBomInfo').text('');
         },
         error: function() {
@@ -746,37 +795,9 @@ function loadProductionProducts() {
         }
     });
 }
-
-// 当选择产品时，显示BOM信息
-$('#productionProductId').on('change', function() {
-    var productId = $(this).val();
-    if (productId) {
-        $.ajax({
-            url: `/api/products/get?id=${productId}`,
-            method: 'GET',
-            success: function(data) {
-                var bom = data.bom || [];
-                if (bom.length === 0) {
-                    $('#productionBomInfo').html('<span class="text-warning">⚠️ 该产品无BOM，入库将不扣减原材料。</span>');
-                } else {
-                    var html = '<strong>📦 原材料消耗清单：</strong><br>';
-                    bom.forEach(function(b) {
-                        html += `- 原材料ID: ${b.raw_material_id}，用量: ${b.quantity}<br>`;
-                    });
-                    $('#productionBomInfo').html(html);
-                }
-            },
-            error: function() {
-                $('#productionBomInfo').html('<span class="text-danger">加载BOM信息失败</span>');
-            }
-        });
-    } else {
-        $('#productionBomInfo').text('');
-    }
-});
-
 // 提交生产入库
 function submitProduction() {
+    productionProductAutocomplete.resolveInput($('#productionProductInput'));
     var productId = $('#productionProductId').val();
     var quantity = parseFloat($('#productionQuantity').val());
 
@@ -822,14 +843,51 @@ function qtyText(n) {
     return String(Math.round(num * 1000) / 1000);
 }
 
-function buildOutboundRow() {
-    var opts = '<option value="">请选择产品</option>';
-    outboundProducts.forEach(function(p) {
-        opts += `<option value="${p.id}">${p.name}（库存 ${qtyText(p.stock)} ${p.unit || ''}）</option>`;
+function outboundProductDisplayValue(product) {
+    var details = [];
+    if (product.spec) details.push('规格：' + product.spec);
+    if (product.unit) details.push('单位：' + product.unit);
+    details.push('库存：' + qtyText(product.stock));
+    return (product.name || '') + '（' + details.join('，') + '）';
+}
+
+function clearOutboundProductRow(input) {
+    var row = $(input).closest('.outbound-row');
+    row.find('.outbound-product-id').val('');
+    row.find('.outbound-spec').val('');
+    row.find('.outbound-unit').val('');
+}
+
+function applyOutboundProductSelection(product, input) {
+    var row = $(input).closest('.outbound-row');
+    row.find('.outbound-product-id').val(product.id);
+    row.find('.outbound-spec').val(product.spec || '');
+    row.find('.outbound-unit').val(product.unit || '');
+}
+
+function initOutboundProductAutocomplete() {
+    if (outboundProductAutocomplete) return;
+    outboundProductAutocomplete = AutoComplete.create({
+        name: 'outbound_product',
+        inputSelector: '.outbound-product-input',
+        hiddenSelector: '.outbound-product-id',
+        datalistSelector: '#outboundProductOptions',
+        getId: function(product) { return product.id; },
+        getDisplay: outboundProductDisplayValue,
+        getAliases: function(product) { return [product.name]; },
+        sortItems: function(a, b) {
+            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+        },
+        onSelect: applyOutboundProductSelection,
+        onClear: function(_, input) { clearOutboundProductRow(input); }
     });
+}
+
+function buildOutboundRow() {
     return `<div class="row mb-2 outbound-row align-items-end">
         <div class="col-md-5">
-            <select class="form-control outbound-product-select">${opts}</select>
+            <input type="text" class="form-control outbound-product-input" list="outboundProductOptions" placeholder="输入产品名称、规格或单位" autocomplete="off">
+            <input type="hidden" class="outbound-product-id">
         </div>
         <div class="col-md-2">
             <input type="text" class="form-control outbound-spec" placeholder="规格型号" readonly>
@@ -845,7 +903,6 @@ function buildOutboundRow() {
         </div>
     </div>`;
 }
-
 function buildOrderShipmentRow(item) {
     return `<div class="row mb-2 outbound-row order-shipment-row align-items-end">
         <input type="hidden" class="outbound-order-item-id" value="${item.order_item_id}">
@@ -878,17 +935,6 @@ function buildOrderShipmentRow(item) {
     </div>`;
 }
 
-function refreshOutboundRowInfo(row) {
-    var pid = parseInt(row.find('.outbound-product-select').val());
-    var p = outboundProducts.find(function(x) { return x.id === pid; });
-    if (p) {
-        row.find('.outbound-spec').val(p.spec || '');
-        row.find('.outbound-unit').val(p.unit || '');
-    } else {
-        row.find('.outbound-spec').val('');
-        row.find('.outbound-unit').val('');
-    }
-}
 
 function addOutboundRow() {
     if (outboundOrderID) return;
@@ -918,6 +964,8 @@ function resetStandaloneOutbound() {
         method: 'GET',
         success: function(data) {
             outboundProducts = data || [];
+            initOutboundProductAutocomplete();
+            outboundProductAutocomplete.setItems(outboundProducts);
             $('#outboundItems').append(buildOutboundRow());
         },
         error: function() {
@@ -978,9 +1026,6 @@ $('#outboundModal').on('hidden.bs.modal', function() {
     $('#outboundItems').empty();
 });
 
-$(document).on('change', '.outbound-product-select', function() {
-    refreshOutboundRowInfo($(this).closest('.outbound-row'));
-});
 
 $(document).on('click', '.remove-outbound-row', function() {
     if ($('#outboundItems .outbound-row').length > 1) {
@@ -1021,7 +1066,8 @@ function submitOutbound() {
     } else {
         $('#outboundItems .outbound-row').each(function(index) {
             var row = $(this);
-            var pid = parseInt(row.find('.outbound-product-select').val());
+            outboundProductAutocomplete.resolveRow(row);
+            var pid = parseInt(row.find('.outbound-product-id').val());
             var qty = parseFloat(row.find('.outbound-qty').val());
             if (!pid) {
                 errors.push('第 ' + (index + 1) + ' 行：请选择产品');
