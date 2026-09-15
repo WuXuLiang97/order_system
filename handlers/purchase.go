@@ -113,6 +113,41 @@ func ListPurchaseMaterials(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(list)
 }
 
+type purchaseRawMaterialOption struct {
+	ID   int    `json:"id"`
+	Name string `json:"name"`
+	Spec string `json:"spec"`
+	Unit string `json:"unit"`
+}
+
+// ListPurchaseRawMaterialOptions 获取采购原材料可索引的名称、规格型号和单位。
+// 该接口只暴露采购表单所需字段，并仅要求采购查看权限。
+func ListPurchaseRawMaterialOptions(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+
+	materials, err := models.GetAllRawMaterials()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	options := make([]purchaseRawMaterialOption, 0, len(materials))
+	for _, material := range materials {
+		options = append(options, purchaseRawMaterialOption{
+			ID:   material.ID,
+			Name: material.Name,
+			Spec: material.Spec,
+			Unit: material.Unit,
+		})
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(options)
+}
+
 // GetPurchaseMaterial 获取单个采购物料
 func GetPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {

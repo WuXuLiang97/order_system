@@ -92,7 +92,9 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">物料名称 <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="addMaterialName" required>
+                            <input type="text" class="form-control" id="addMaterialName" list="addRawMaterialOptions" autocomplete="off" required>
+                            <datalist id="addRawMaterialOptions"></datalist>
+                            <div class="form-text" id="addRawMaterialHint">输入名称可从已有原材料中选择并自动带出规格和单位，也可直接手动输入。</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">规格型号</label>
@@ -191,7 +193,9 @@
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">物料名称 <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="editMaterialName" required>
+                            <input type="text" class="form-control" id="editMaterialName" list="editRawMaterialOptions" autocomplete="off" required>
+                            <datalist id="editRawMaterialOptions"></datalist>
+                            <div class="form-text" id="editRawMaterialHint">输入名称可从已有原材料中选择并自动带出规格和单位，也可直接手动输入。</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">规格型号</label>
@@ -287,6 +291,92 @@
 <script>
 var addReceiptUrls = [];
 var editReceiptUrls = [];
+var rawMaterialOptions = [];
+var rawMaterialOptionIndex = new Map();
+
+function rawMaterialDisplayValue(material, duplicateNameCount) {
+    var name = (material.name || '').trim();
+    if (duplicateNameCount <= 1) return name;
+
+    var details = [];
+    if (material.spec) details.push(material.spec);
+    if (material.unit) details.push(material.unit);
+    return name + (details.length ? '（' + details.join(' / ') + '）' : '');
+}
+
+function rebuildRawMaterialOptionIndex() {
+    rawMaterialOptionIndex = new Map();
+    var nameCounts = {};
+    rawMaterialOptions.forEach(function(material) {
+        var name = (material.name || '').trim();
+        if (!name) return;
+        nameCounts[name] = (nameCounts[name] || 0) + 1;
+    });
+    rawMaterialOptions.forEach(function(material) {
+        var name = (material.name || '').trim();
+        if (!name) return;
+        rawMaterialOptionIndex.set(rawMaterialDisplayValue(material, nameCounts[name] || 0), material);
+    });
+}
+
+function rawMaterialOptionDescription(material) {
+    var details = [];
+    if (material.spec) details.push('规格：' + material.spec);
+    if (material.unit) details.push('单位：' + material.unit);
+    return details.join('，');
+}
+
+function populateRawMaterialDatalist(prefix) {
+    var datalist = $('#' + prefix + 'RawMaterialOptions');
+    if (!datalist.length) return;
+
+    datalist.empty();
+    rawMaterialOptionIndex.forEach(function(material, value) {
+        datalist.append($('<option>').attr('value', value).attr('label', rawMaterialOptionDescription(material)));
+    });
+}
+
+function loadRawMaterialOptions() {
+    $.ajax({
+        url: '/api/purchase-materials/raw-material-options',
+        method: 'GET',
+        success: function(list) {
+            rawMaterialOptions = Array.isArray(list) ? list : [];
+            rebuildRawMaterialOptionIndex();
+            populateRawMaterialDatalist('add');
+            populateRawMaterialDatalist('edit');
+        },
+        error: function(xhr) {
+            console.error('加载原材料建议失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function toggleRawMaterialSuggestions(prefix) {
+    var isRawMaterial = $('#' + prefix + 'MaterialType').val() === '原材料';
+    var input = $('#' + prefix + 'MaterialName');
+    if (isRawMaterial) {
+        input.attr('list', prefix + 'RawMaterialOptions');
+    } else {
+        input.removeAttr('list');
+    }
+    $('#' + prefix + 'RawMaterialHint').toggleClass('d-none', !isRawMaterial);
+}
+
+function applyRawMaterialSelection(prefix) {
+    if ($('#' + prefix + 'MaterialType').val() !== '原材料') return;
+
+    var input = $('#' + prefix + 'MaterialName');
+    var selectedValue = (input.val() || '').trim();
+    var material = rawMaterialOptionIndex.get(selectedValue);
+    if (!material) return;
+
+    if (selectedValue !== material.name) {
+        input.val(material.name || '');
+    }
+    $('#' + prefix + 'Spec').val(material.spec || '');
+    $('#' + prefix + 'Unit').val(material.unit || '');
+}
 
 function formatDate(value) {
     if (!value) return '-';
@@ -456,12 +546,27 @@ function applyPurchaseSearch() {
 
 $(document).ready(function() {
     loadPurchaseMaterials();
+    loadRawMaterialOptions();
     $('#searchPurchase').on('keyup', applyPurchaseSearch);
     $('#summaryMonth').val(currentMonth());
     loadSummary();
     $('#summaryMonth').on('change', function() {
         loadSummary($(this).val());
     });
+    $('#addMaterialType').on('change', function() {
+        toggleRawMaterialSuggestions('add');
+    });
+    $('#editMaterialType').on('change', function() {
+        toggleRawMaterialSuggestions('edit');
+    });
+    $('#addMaterialName').on('change', function() {
+        applyRawMaterialSelection('add');
+    });
+    $('#editMaterialName').on('change', function() {
+        applyRawMaterialSelection('edit');
+    });
+    toggleRawMaterialSuggestions('add');
+    toggleRawMaterialSuggestions('edit');
 });
 
 function addPurchase() {
@@ -498,6 +603,7 @@ function addPurchase() {
             loadSummary($('#summaryMonth').val());
             $('#addPurchaseModal').modal('hide');
             $('#addPurchaseForm')[0].reset();
+            toggleRawMaterialSuggestions('add');
             $('#addAmount').val('');
             addReceiptUrls = [];
             renderReceiptPreviews('add');
@@ -517,6 +623,7 @@ function editPurchase(id) {
         success: function(data) {
             $('#editPurchaseId').val(data.id);
             $('#editMaterialType').val(data.material_type);
+            toggleRawMaterialSuggestions('edit');
             $('#editMaterialName').val(data.material_name);
             $('#editSpec').val(data.spec || '');
             $('#editUnit').val(data.unit || '');

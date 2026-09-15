@@ -97,6 +97,7 @@ func main() {
 
 	// API 路由 - 采购物料
 	http.HandleFunc("/api/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, handlers.ListPurchaseMaterials))
+	http.HandleFunc("/api/purchase-materials/raw-material-options", handlers.RequirePermission(handlers.PermPurchaseView, handlers.ListPurchaseRawMaterialOptions))
 	http.HandleFunc("/api/purchase-materials/summary", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseMaterialsSummary))
 	http.HandleFunc("/api/purchase-materials/get", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseMaterial))
 	http.HandleFunc("/api/purchase-materials/add", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.AddPurchaseMaterial))
