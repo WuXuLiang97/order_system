@@ -211,9 +211,8 @@
                         <div id="orderItems">
                             <div class="row mb-2 item-row">
                                 <div class="col-md-3">
-                                    <select class="form-control product-select" required>
-                                        <option value="">请选择产品</option>
-                                    </select>
+                                    <input type="text" class="form-control product-input" list="orderProductOptions" placeholder="输入产品名称、规格或单位" autocomplete="off" required>
+                                    <input type="hidden" class="product-id-input">
                                 </div>
                                 <div class="col-md-2">
                                     <input type="text" class="form-control spec-display" placeholder="规格型号" readonly>
@@ -238,6 +237,7 @@
                         <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addOrderItem()">
                             <i class="bi bi-plus"></i> 添加产品
                         </button>
+                        <datalist id="orderProductOptions"></datalist>
                         <div id="productLoadStatus" class="text-muted small mt-1"></div>
                     </div>
                 </form>
@@ -371,6 +371,7 @@
 {{define "scripts"}}
 <script>
 var productCache = [];
+var productByDisplay = new Map();
 var customerCache = [];
 
 var CURRENCY_OPTIONS = ['CNY','USD','EUR','GBP','JPY','HKD','AUD'];
@@ -473,6 +474,86 @@ function setCustomField(selectId, inputId, stored, presets) {
     }
 }
 
+function productDisplayValue(product) {
+    var details = [];
+    if (product.spec) details.push('规格：' + product.spec);
+    if (product.unit) details.push('单位：' + product.unit);
+    details.push('库存：' + Number(product.stock || 0));
+    return (product.name || '') + (details.length ? '（' + details.join('，') + '）' : '');
+}
+
+function setOrderRowProduct(row, product) {
+    var input = row.find('.product-input');
+    if (!product) {
+        input.val('').removeClass('is-invalid');
+        row.find('.product-id-input').val('');
+        row.find('.spec-display').val('');
+        row.find('.unit-display').val('');
+        row.find('.price-display').val('');
+        recalcRow(row);
+        return;
+    }
+    input.val(productDisplayValue(product)).removeClass('is-invalid');
+    row.find('.product-id-input').val(product.id);
+    row.find('.spec-display').val(product.spec || '');
+    row.find('.unit-display').val(product.unit || '');
+    row.find('.price-display').val(product.price || 0);
+    recalcRow(row);
+}
+
+function resolveOrderProductInput(row) {
+    var input = row.find('.product-input');
+    var value = (input.val() || '').trim();
+    if (!value) {
+        setOrderRowProduct(row, null);
+        return;
+    }
+
+    var product = productByDisplay.get(value);
+    if (!product) {
+        var matches = productCache.filter(function(item) {
+            return (item.name || '').trim() === value;
+        });
+        if (matches.length === 1) product = matches[0];
+    }
+
+    if (product) {
+        setOrderRowProduct(row, product);
+    } else {
+        row.find('.product-id-input').val('');
+        row.find('.spec-display').val('');
+        row.find('.unit-display').val('');
+        row.find('.price-display').val('');
+        input.addClass('is-invalid');
+        recalcRow(row);
+    }
+}
+
+function rebuildProductAutocomplete() {
+    productByDisplay = new Map();
+    productCache.forEach(function(product) {
+        productByDisplay.set(productDisplayValue(product), product);
+    });
+
+    var datalist = $('#orderProductOptions').empty();
+    productCache
+        .slice()
+        .sort(function(a, b) {
+            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+        })
+        .forEach(function(product) {
+            datalist.append($('<option>').val(productDisplayValue(product)));
+        });
+
+    $('.item-row').each(function() {
+        var row = $(this);
+        var productID = parseInt(row.find('.product-id-input').val());
+        if (!productID) return;
+        var product = productCache.find(function(item) { return item.id === productID; });
+        if (product) setOrderRowProduct(row, product);
+    });
+}
+
 function loadProducts(callback) {
     $.ajax({
         url: '/api/products',
@@ -483,16 +564,7 @@ function loadProducts(callback) {
             if (productCache.length === 0) {
                 $('#productLoadStatus').html('<span class="text-danger">⚠️ 暂无产品，请先添加产品！</span>');
             }
-            $('.product-select').each(function() {
-                var select = $(this);
-                var currentVal = select.val();
-                select.empty();
-                select.append('<option value="">请选择产品</option>');
-                productCache.forEach(function(p) {
-                    select.append(`<option value="${p.id}">${p.name}</option>`);
-                });
-                if (currentVal) select.val(currentVal);
-            });
+            rebuildProductAutocomplete();
             if (callback) callback();
         },
         error: function() {
@@ -501,7 +573,6 @@ function loadProducts(callback) {
         }
     });
 }
-
 function loadCustomersToSelect() {
     $.ajax({
         url: '/api/customers',
@@ -526,10 +597,8 @@ function loadCustomersToSelect() {
 function addOrderItem() {
     var items = $('#orderItems');
     var newRow = items.find('.item-row:first').clone();
-    newRow.find('input').val('');
-    newRow.find('.product-select').val('');
+    newRow.find('input').val('').removeClass('is-invalid');
     items.append(newRow);
-    loadProducts();
 }
 
 $(document).on('click', '.remove-item', function() {
@@ -540,20 +609,14 @@ $(document).on('click', '.remove-item', function() {
     }
 });
 
-$(document).on('change', '.product-select', function() {
+$(document).on('input', '.product-input', function() {
     var row = $(this).closest('.item-row');
-    var productId = parseInt($(this).val());
-    var product = productCache.find(function(p) { return p.id === productId; });
-    if (product) {
-        row.find('.spec-display').val(product.spec || '');
-        row.find('.unit-display').val(product.unit || '');
-        row.find('.price-display').val(product.price || 0);
-    } else {
-        row.find('.spec-display').val('');
-        row.find('.unit-display').val('');
-        row.find('.price-display').val('');
-    }
-    recalcRow(row);
+    row.find('.product-id-input').val('');
+    $(this).removeClass('is-invalid');
+});
+
+$(document).on('change', '.product-input', function() {
+    resolveOrderProductInput($(this).closest('.item-row'));
 });
 
 $(document).on('change', '#customerSelect', function() {
@@ -805,7 +868,8 @@ function createOrder() {
     var errors = [];
     $('.item-row').each(function(index) {
         var row = $(this);
-        var productId = parseInt(row.find('.product-select').val());
+        resolveOrderProductInput(row);
+        var productId = parseInt(row.find('.product-id-input').val());
         var quantity = parseInt(row.find('.quantity-input').val());
         if (!productId) {
             errors.push(`第 ${index + 1} 行：请选择产品`);
@@ -860,8 +924,7 @@ function createOrder() {
             $('#createOrderModal').modal('hide');
             $('#createOrderForm')[0].reset();
             $('#orderItems .item-row:not(:first)').remove();
-            $('#orderItems .item-row:first input').val('');
-            $('#orderItems .item-row:first select').val('');
+            $('#orderItems .item-row:first input').val('').removeClass('is-invalid');
             applyFilter();
         },
         error: function(xhr) {
