@@ -163,9 +163,8 @@
                         <div id="addBomItems">
                             <div class="row mb-2 bom-row">
                                 <div class="col-md-6">
-                                    <select class="form-control raw-material-select" required>
-                                        <option value="">选择原材料</option>
-                                    </select>
+                                    <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
+                                    <input type="hidden" class="raw-material-id">
                                 </div>
                                 <div class="col-md-4">
                                     <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
@@ -236,9 +235,8 @@
                         <div id="editBomItems">
                             <div class="row mb-2 bom-row">
                                 <div class="col-md-6">
-                                    <select class="form-control raw-material-select" required>
-                                        <option value="">选择原材料</option>
-                                    </select>
+                                    <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
+                                    <input type="hidden" class="raw-material-id">
                                 </div>
                                 <div class="col-md-4">
                                     <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
@@ -262,6 +260,8 @@
         </div>
     </div>
 </div>
+
+<datalist id="bomRawMaterialOptions"></datalist>
 
 <!-- 生产入库模态框 -->
 <div class="modal fade" id="productionModal" tabindex="-1">
@@ -298,24 +298,65 @@
 {{define "scripts"}}
 <script>
 // ============================
-// 工具函数：加载原材料到下拉框
+// 原材料自动补全
 // ============================
-function loadRawMaterialsToSelect(containerId) {
+var bomRawMaterialOptions = [];
+var bomRawMaterialById = new Map();
+var bomRawMaterialByDisplay = new Map();
+
+function bomRawMaterialDisplay(material) {
+    var details = [];
+    if (material.spec) details.push('规格：' + material.spec);
+    if (material.unit) details.push('单位：' + material.unit);
+    details.push('库存：' + material.stock);
+    return (material.name || '') + (details.length ? '（' + details.join('，') + '）' : '');
+}
+
+function rebuildBOMRawMaterialIndex(materials) {
+    bomRawMaterialOptions = Array.isArray(materials) ? materials : [];
+    bomRawMaterialById = new Map();
+    bomRawMaterialByDisplay = new Map();
+
+    bomRawMaterialOptions.forEach(function(material) {
+        bomRawMaterialById.set(String(material.id), material);
+        bomRawMaterialByDisplay.set(bomRawMaterialDisplay(material), material);
+    });
+
+    var datalist = $('#bomRawMaterialOptions').empty();
+    bomRawMaterialOptions
+        .slice()
+        .sort(function(a, b) {
+            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
+        })
+        .forEach(function(material) {
+            datalist.append($('<option>').val(bomRawMaterialDisplay(material)));
+        });
+}
+
+function setBOMRowMaterial(row, material) {
+    var input = row.find('.raw-material-input');
+    var hidden = row.find('.raw-material-id');
+    if (!material) {
+        input.val('').removeClass('is-invalid');
+        hidden.val('');
+        return;
+    }
+    input.val(bomRawMaterialDisplay(material)).removeClass('is-invalid');
+    hidden.val(material.id);
+}
+
+function loadRawMaterialsForBOM() {
     return new Promise((resolve, reject) => {
         $.ajax({
             url: '/api/raw-materials',
             method: 'GET',
             success: function(data) {
-                var container = $('#' + containerId);
-                container.find('.raw-material-select').each(function() {
-                    var select = $(this);
-                    var currentVal = select.val();
-                    select.empty();
-                    select.append('<option value="">选择原材料</option>');
-                    data.forEach(function(m) {
-                        select.append(`<option value="${m.id}">${m.name} (库存: ${m.stock} ${m.unit})</option>`);
-                    });
-                    if (currentVal) select.val(currentVal);
+                rebuildBOMRawMaterialIndex(data);
+                $('.bom-row').each(function() {
+                    var row = $(this);
+                    var materialId = (row.find('.raw-material-id').val() || '').trim();
+                    if (!materialId) return;
+                    setBOMRowMaterial(row, bomRawMaterialById.get(materialId));
                 });
                 resolve(true);
             },
@@ -327,17 +368,52 @@ function loadRawMaterialsToSelect(containerId) {
     });
 }
 
+function resolveBOMRawMaterialInput(row) {
+    var input = row.find('.raw-material-input');
+    var hidden = row.find('.raw-material-id');
+    var value = (input.val() || '').trim();
+
+    if (!value) {
+        hidden.val('');
+        input.removeClass('is-invalid');
+        return;
+    }
+
+    var material = bomRawMaterialByDisplay.get(value);
+    if (!material) {
+        var matches = bomRawMaterialOptions.filter(function(item) {
+            return (item.name || '').trim() === value;
+        });
+        if (matches.length === 1) material = matches[0];
+    }
+
+    if (material) {
+        setBOMRowMaterial(row, material);
+    } else {
+        hidden.val('');
+        input.addClass('is-invalid');
+    }
+}
+
 // ============================
 // BOM 行操作
 // ============================
 function addBomRow(containerId) {
     var container = $('#' + containerId);
     var newRow = container.find('.bom-row:first').clone();
-    newRow.find('select').val('');
-    newRow.find('input').val('');
+    newRow.find('.raw-material-input, .raw-material-id, .bom-quantity').val('').removeClass('is-invalid');
     container.append(newRow);
-    loadRawMaterialsToSelect(containerId);
 }
+
+$(document).on('input', '.raw-material-input', function() {
+    var row = $(this).closest('.bom-row');
+    row.find('.raw-material-id').val('');
+    $(this).removeClass('is-invalid');
+});
+
+$(document).on('change', '.raw-material-input', function() {
+    resolveBOMRawMaterialInput($(this).closest('.bom-row'));
+});
 
 $(document).on('click', '.remove-bom-item', function() {
     var container = $(this).closest('.bom-row').parent();
@@ -356,14 +432,19 @@ function getBomData(containerId) {
     var valid = true;
     var container = $('#' + containerId);
     container.find('.bom-row').each(function() {
-        var rawMaterialId = $(this).find('.raw-material-select').val();
-        var quantity = parseFloat($(this).find('.bom-quantity').val());
+        var row = $(this);
+        resolveBOMRawMaterialInput(row);
+
+        var rawMaterialId = row.find('.raw-material-id').val();
+        var rawMaterialText = (row.find('.raw-material-input').val() || '').trim();
+        var quantity = parseFloat(row.find('.bom-quantity').val());
+
         if (rawMaterialId && !isNaN(quantity) && quantity > 0) {
             items.push({
-                raw_material_id: parseInt(rawMaterialId),
+                raw_material_id: parseInt(rawMaterialId, 10),
                 quantity: quantity
             });
-        } else if (rawMaterialId || quantity) {
+        } else if (rawMaterialId || rawMaterialText || !isNaN(quantity)) {
             valid = false;
         }
     });
@@ -429,12 +510,12 @@ $(document).ready(function() {
     loadProducts();
     $('#searchProduct').on('keyup', applySearch);
 
-    // 当添加/编辑模态框打开时，加载原材料列表
-    $('#addProductModal').on('shown.bs.modal', function() {
-        loadRawMaterialsToSelect('addBomItems');
+    // 当添加/编辑模态框打开时，加载原材料自动补全数据
+    $('#addProductModal').on('show.bs.modal', function() {
+        loadRawMaterialsForBOM();
     });
-    $('#editProductModal').on('shown.bs.modal', function() {
-        loadRawMaterialsToSelect('editBomItems');
+    $('#editProductModal').on('show.bs.modal', function() {
+        loadRawMaterialsForBOM();
     });
 
     // 生产入库模态框打开时加载产品下拉框
@@ -481,8 +562,7 @@ function addProduct() {
             $('#addProductForm')[0].reset();
             var container = $('#addBomItems');
             container.find('.bom-row:not(:first)').remove();
-            container.find('.bom-row:first select').val('');
-            container.find('.bom-row:first input').val('');
+            container.find('.bom-row:first .raw-material-input, .bom-row:first .raw-material-id, .bom-row:first .bom-quantity').val('').removeClass('is-invalid');
             loadProducts();
         },
         error: function(xhr) {
@@ -514,9 +594,8 @@ function editProduct(id) {
                 container.append(`
                     <div class="row mb-2 bom-row">
                         <div class="col-md-6">
-                            <select class="form-control raw-material-select" required>
-                                <option value="">选择原材料</option>
-                            </select>
+                            <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
+                                    <input type="hidden" class="raw-material-id">
                         </div>
                         <div class="col-md-4">
                             <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
@@ -531,9 +610,8 @@ function editProduct(id) {
                     var row = `
                         <div class="row mb-2 bom-row">
                             <div class="col-md-6">
-                                <select class="form-control raw-material-select" required>
-                                    <option value="">选择原材料</option>
-                                </select>
+                                <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
+                                    <input type="hidden" class="raw-material-id">
                             </div>
                             <div class="col-md-4">
                                 <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
@@ -545,19 +623,11 @@ function editProduct(id) {
                     `;
                     container.append(row);
                     var rowElement = container.children().last();
-                    rowElement.find('.raw-material-select').val(item.raw_material_id);
+                    rowElement.find('.raw-material-id').val(item.raw_material_id);
                     rowElement.find('.bom-quantity').val(item.quantity);
                 });
             }
 
-            loadRawMaterialsToSelect('editBomItems').then(() => {
-                container.find('.bom-row').each(function(index) {
-                    if (bom[index]) {
-                        $(this).find('.raw-material-select').val(bom[index].raw_material_id);
-                        $(this).find('.bom-quantity').val(bom[index].quantity);
-                    }
-                });
-            });
 
             $('#editProductModal').modal('show');
         },
