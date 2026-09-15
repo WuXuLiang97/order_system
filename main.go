@@ -68,6 +68,7 @@ func main() {
 	http.HandleFunc("/api/production", handlers.RequirePermission(handlers.PermProductManage, handlers.ProduceProduct))
 	http.HandleFunc("/outbound/detail", handlers.RequirePermission(handlers.PermProductView, handlers.ProductOutboundPrintPage))
 	http.HandleFunc("/api/outbounds/list", handlers.RequirePermission(handlers.PermProductView, handlers.ListProductOutbounds))
+	http.HandleFunc("/api/outbounds/by-order", handlers.RequirePermission(handlers.PermProductView, handlers.ListProductOutboundsByOrder))
 	http.HandleFunc("/api/outbounds/create", handlers.RequirePermission(handlers.PermProductManage, handlers.CreateProductOutbound))
 	http.HandleFunc("/api/outbounds/delete", handlers.RequirePermission(handlers.PermProductManage, handlers.DeleteProductOutbound))
 
@@ -77,6 +78,8 @@ func main() {
 	http.HandleFunc("/api/customers/orders", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.GetCustomerOrders))
 	http.HandleFunc("/api/orders/detail", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.GetOrderDetail))
 	http.HandleFunc("/api/orders/summary", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.GetOrderSummary))
+	http.HandleFunc("/api/orders/shippable", handlers.RequirePermission(handlers.PermProductView, handlers.ListShippableOrders))
+	http.HandleFunc("/api/orders/shipment-items", handlers.RequirePermission(handlers.PermProductView, handlers.GetOrderShipmentItems))
 	http.HandleFunc("/api/orders/status", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(handlers.UpdateOrderStatus))
 	http.HandleFunc("/api/orders/delete", handlers.RequirePermission(handlers.PermOrderEditAll, handlers.DeleteOrder))
 	http.HandleFunc("/api/orders/update", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(handlers.UpdateOrder))

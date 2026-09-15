@@ -311,6 +311,36 @@
             * 本订单所有产品库存已相应扣减，若库存为负数表示需要补货。
         </div>
 
+        {{if .Outbounds}}
+        <div style="margin-top:14px;">
+            <h3 style="font-size:16px;margin:0 0 6px 0;">关联送货单</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>送货单号</th>
+                        <th>出库日期</th>
+                        <th>结算方式</th>
+                        <th>客户名称</th>
+                        <th>数量</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {{range .Outbounds}}
+                    <tr>
+                        <td>{{.OutboundNo}}</td>
+                        <td>{{.OutDate.Format "2006-01-02"}}</td>
+                        <td>{{if .SettlementMethod}}{{.SettlementMethod}}{{else}}现金{{end}}</td>
+                        <td>{{if .Receiver}}{{.Receiver}}{{else}}—{{end}}</td>
+                        <td>{{printf "%g" .TotalQuantity}}</td>
+                        <td><a href="/outbound/detail?id={{.ID}}" target="_blank">打印送货单</a></td>
+                    </tr>
+                    {{end}}
+                </tbody>
+            </table>
+        </div>
+        {{end}}
+
         <div class="footer">
             打印日期：{{.Now.Format "2006-01-02 15:04:05"}} &nbsp;|&nbsp; 系统自动生成
         </div>

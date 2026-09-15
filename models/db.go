@@ -75,6 +75,26 @@ func ensureColumn(table, column, definition string) error {
 	return err
 }
 
+// ensureIndex 若指定普通索引不存在则创建。
+func ensureIndex(table, indexName, columns string) error {
+	var count int
+	err := DB.QueryRow(`
+        SELECT COUNT(*)
+        FROM information_schema.STATISTICS
+        WHERE TABLE_SCHEMA = DATABASE()
+          AND TABLE_NAME = ?
+          AND INDEX_NAME = ?
+    `, table, indexName).Scan(&count)
+	if err != nil {
+		return err
+	}
+	if count > 0 {
+		return nil
+	}
+	_, err = DB.Exec(fmt.Sprintf("CREATE INDEX `%s` ON `%s` (%s)", indexName, table, columns))
+	return err
+}
+
 // ensureUniqueIndex 若指定唯一索引不存在则创建。
 func ensureUniqueIndex(table, indexName, column string) error {
 	var count int

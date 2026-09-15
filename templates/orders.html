@@ -40,17 +40,15 @@
                                 <th>订单号</th>
                                 <th>客户名称</th>
                                 <th>地区</th>
-                                <th>产品名称</th>
-                                <th>规格型号</th>
-                                <th>单位</th>
+                                <th>产品数</th>
                                 <th>销售数量</th>
-                                <th>单价</th>
-                                <th>金额</th>
+                                <th>订单金额</th>
                                 <th>下单日期</th>
                                 <th>预计发货日期</th>
                                 <th>客户需求到货日</th>
                                 <th>预警</th>
                                 <th>订单状态</th>
+                                <th>发货进度</th>
                                 <th>回款状态</th>
                                 <th>备注</th>
                                 <th>操作</th>
@@ -403,6 +401,25 @@ function orderMoney(order, v) {
     return (order.currency && order.currency !== 'CNY' ? order.currency + ' ' : '¥') + num;
 }
 
+function escapeOrderHtml(value) {
+    if (value === null || value === undefined) return '';
+    return String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function toggleOrderDetails(orderID) {
+    var detailRow = $(`.order-detail-row[data-order-id="${orderID}"]`);
+    var toggle = $(`.order-detail-toggle[data-order-id="${orderID}"]`);
+    var willShow = detailRow.hasClass('d-none');
+    detailRow.toggleClass('d-none', !willShow);
+    toggle.attr('aria-expanded', willShow ? 'true' : 'false');
+    toggle.find('i').toggleClass('bi-chevron-right', !willShow).toggleClass('bi-chevron-down', willShow);
+}
+
 function fillOwnerOptions() {
     if (window.__OWNER_OPTIONS__) return;
     $.ajax({
@@ -579,7 +596,7 @@ function loadOrders(status, keyword) {
             var tbody = $('#orderTableBody');
             tbody.empty();
             if (data.length === 0) {
-                tbody.append('<tr><td colspan="17" class="text-center text-muted">暂无匹配的订单</td></tr>');
+                tbody.append('<tr><td colspan="15" class="text-center text-muted">暂无匹配的订单</td></tr>');
                 return;
             }
 
@@ -602,57 +619,118 @@ function loadOrders(status, keyword) {
             };
             data.forEach(function(order) {
                 var items = order.items && order.items.length ? order.items : [];
+                var itemCount = items.length;
                 if (items.length === 0) {
-                    items = [{product_name:'', spec:'', unit:'', quantity:0, price:0}];
+                    items = [{product_name:'', spec:'', unit:'', quantity:0, price:0, shipped_quantity:0, remaining_quantity:0}];
                 }
-                items.forEach(function(item) {
-                    var amount = (item.price || 0) * (item.quantity || 0);
-                    var payment = order.payment_status === 1
-                        ? '<span class="badge bg-success">是</span>'
-                        : '<span class="badge bg-secondary">否</span>';
-                    var canEditThis = canEditAll || (canEditOwn && isMine(order));
-                    var actions = '';
-                    actions += `<button class="btn btn-info btn-sm me-1" onclick="viewOrder(${order.id})">查看</button>`;
-                    if (canEditThis) {
-                        actions += `<button class="btn btn-warning btn-sm me-1" onclick="editOrder(${order.id})">编辑</button>`;
-                    }
-                    if (canEditAll) {
-                        actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
-                    }
-                    var statusCell;
-                    if (canEditThis) {
-                        statusCell = `<select class="form-select form-select-sm" onchange="updateStatus(${order.id}, this.value)">${statusOptions}</select>`;
-                        statusCell = statusCell.replace(`value="${order.status}"`, `value="${order.status}" selected`);
-                    } else {
-                        var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[order.status] || '未知';
-                        statusCell = `<span class="badge ${statusBadge(order.status)}">${st}</span>`;
-                    }
 
-                    var row = `
-                        <tr>
-                            <td><strong>${order.order_no}</strong></td>
-                            <td>${order.customer_name + (order.owner_name ? ' <span class="small text-muted">负责：' + order.owner_name + '</span>' : '')}</td>
-                            <td>${order.region || '-'}</td>
-                            <td>${item.product_name || '-'}</td>
-                            <td>${item.spec || '-'}</td>
-                            <td>${item.unit || '-'}</td>
-                            <td>${item.quantity}</td>
-                            <td>${orderMoney(order, item.price || 0)}</td>
-                            <td>${orderMoney(order, amount)}</td>
-                            <td>${formatDate(order.order_date)}</td>
-                            <td>${formatDate(order.expected_shipping_date)}</td>
-                            <td>${formatDate(order.customer_required_date)}</td>
-                            <td>${warnHtml(order.warning_level, order.warning_label)}</td>
-                            <td>${statusCell}</td>
-                            <td>${payment}</td>
-                            <td>${order.remark || '-'}</td>
-                            <td>${actions}</td>
-                        </tr>
-                    `;
-                    tbody.append(row);
+                var totalQuantity = 0;
+                var shippedQuantity = 0;
+                var totalAmount = 0;
+                items.forEach(function(item) {
+                    totalQuantity += Number(item.quantity || 0);
+                    shippedQuantity += Number(item.shipped_quantity || 0);
+                    totalAmount += Number(item.price || 0) * Number(item.quantity || 0);
                 });
-            });
-        },
+                var remainingQuantity = Math.max(0, totalQuantity - shippedQuantity);
+                var progressClass = remainingQuantity <= 0 ? 'bg-success' : (shippedQuantity > 0 ? 'bg-info text-dark' : 'bg-secondary');
+                var progressCell = `<span class="badge ${progressClass}">已发 ${shippedQuantity} / ${totalQuantity}</span><div class="small text-muted mt-1">剩余 ${remainingQuantity}</div>`;
+
+                var payment = order.payment_status === 1
+                    ? '<span class="badge bg-success">是</span>'
+                    : '<span class="badge bg-secondary">否</span>';
+                var canEditThis = canEditAll || (canEditOwn && isMine(order));
+                var actions = '';
+                actions += `<button class="btn btn-info btn-sm me-1" onclick="viewOrder(${order.id})">查看</button>`;
+                if ((order.status === 1 || order.status === 2) && P['product:manage']) {
+                    actions += `<button class="btn btn-success btn-sm me-1" onclick="openShipment(${order.id})"><i class="bi bi-truck"></i> 生成送货单</button>`;
+                }
+                if (canEditThis) {
+                    actions += `<button class="btn btn-warning btn-sm me-1" onclick="editOrder(${order.id})">编辑</button>`;
+                }
+                if (canEditAll) {
+                    actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
+                }
+
+                var statusCell;
+                if (canEditThis) {
+                    statusCell = `<select class="form-select form-select-sm" onchange="updateStatus(${order.id}, this.value)">${statusOptions}</select>`;
+                    statusCell = statusCell.replace(`value="${order.status}"`, `value="${order.status}" selected`);
+                } else {
+                    var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[order.status] || '未知';
+                    statusCell = `<span class="badge ${statusBadge(order.status)}">${st}</span>`;
+                }
+
+                var detailHtml = items.map(function(item, index) {
+                    var itemAmount = Number(item.price || 0) * Number(item.quantity || 0);
+                    var itemShipped = Number(item.shipped_quantity || 0);
+                    var itemRemaining = item.remaining_quantity === undefined
+                        ? Math.max(0, Number(item.quantity || 0) - itemShipped)
+                        : Number(item.remaining_quantity || 0);
+                    return `<tr>
+                        <td>${index + 1}</td>
+                        <td class="text-start">${escapeOrderHtml(item.product_name || '-')}</td>
+                        <td class="text-start">${escapeOrderHtml(item.spec || '-')}</td>
+                        <td>${escapeOrderHtml(item.unit || '-')}</td>
+                        <td>${item.quantity || 0}</td>
+                        <td>${itemShipped}</td>
+                        <td><strong>${itemRemaining}</strong></td>
+                        <td>${orderMoney(order, item.price || 0)}</td>
+                        <td>${orderMoney(order, itemAmount)}</td>
+                    </tr>`;
+                }).join('');
+
+                var mainRow = `
+                    <tr class="order-main-row" data-order-id="${order.id}">
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary me-1 order-detail-toggle" data-order-id="${order.id}" onclick="toggleOrderDetails(${order.id})" aria-expanded="false">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                            <strong>${escapeOrderHtml(order.order_no)}</strong>
+                        </td>
+                        <td>${escapeOrderHtml(order.customer_name)}${order.owner_name ? ' <span class="small text-muted">负责：' + escapeOrderHtml(order.owner_name) + '</span>' : ''}</td>
+                        <td>${escapeOrderHtml(order.region || '-')}</td>
+                        <td>${itemCount} 项</td>
+                        <td><strong>${totalQuantity}</strong></td>
+                        <td>${orderMoney(order, order.total_amount || totalAmount)}</td>
+                        <td>${formatDate(order.order_date)}</td>
+                        <td>${formatDate(order.expected_shipping_date)}</td>
+                        <td>${formatDate(order.customer_required_date)}</td>
+                        <td>${warnHtml(order.warning_level, order.warning_label)}</td>
+                        <td>${statusCell}</td>
+                        <td>${progressCell}</td>
+                        <td>${payment}</td>
+                        <td>${escapeOrderHtml(order.remark || '-')}</td>
+                        <td class="text-nowrap">${actions}</td>
+                    </tr>`;
+
+                var detailRow = `
+                    <tr class="order-detail-row d-none" data-order-id="${order.id}">
+                        <td colspan="15" class="bg-light">
+                            <div class="small fw-bold mb-2">订单明细</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered bg-white mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:6%;">序号</th>
+                                            <th style="width:23%;">产品名称</th>
+                                            <th style="width:17%;">规格型号</th>
+                                            <th style="width:8%;">单位</th>
+                                            <th style="width:10%;">销售数量</th>
+                                            <th style="width:9%;">已发</th>
+                                            <th style="width:9%;">剩余</th>
+                                            <th style="width:9%;">单价</th>
+                                            <th style="width:9%;">金额</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${detailHtml}</tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>`;
+
+                tbody.append(mainRow + detailRow);
+            });        },
         error: function(xhr) {
             alert('加载订单失败: ' + xhr.responseText);
         }
@@ -669,6 +747,10 @@ function resetFilter() {
     $('#searchKeyword').val('');
     loadOrders();
     loadOrderSummary();
+}
+
+function openShipment(orderID) {
+    window.location.href = '/products?ship_order_id=' + encodeURIComponent(orderID);
 }
 
 function statusBadge(s) {

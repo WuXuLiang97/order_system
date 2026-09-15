@@ -62,6 +62,7 @@
                         <thead>
                             <tr>
                                 <th>送货单号</th>
+                                <th>订单号</th>
                                 <th>出库日期</th>
                                 <th>结算方式</th>
                                 <th>客户名称</th>
@@ -89,6 +90,8 @@
             </div>
             <div class="modal-body">
                 <form id="outboundForm">
+                    <input type="hidden" id="outboundOrderId">
+                    <div id="outboundOrderInfo" class="alert alert-info d-none"></div>
                     <div class="row">
                         <div class="col-md-3 mb-3">
                             <label class="form-label">出库日期</label>
@@ -107,9 +110,9 @@
                         </div>
                     </div>
                     <div class="mb-3">
-                        <label class="form-label">出库明细（型号 + 数量）</label>
+                        <label class="form-label" id="outboundItemsLabel">出库明细（型号 + 数量）</label>
                         <div id="outboundItems"></div>
-                        <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addOutboundRow()">
+                        <button type="button" id="addOutboundRowBtn" class="btn btn-secondary btn-sm mt-2" onclick="addOutboundRow()">
                             <i class="bi bi-plus"></i> 添加一个型号
                         </button>
                     </div>
@@ -530,6 +533,16 @@ $(document).ready(function() {
     $('#productionModal').on('show.bs.modal', function() {
         loadProductionProducts();
     });
+
+    // 从订单管理跳转过来时，直接打开该订单的发货窗口。
+    var shipOrderID = new URLSearchParams(window.location.search).get('ship_order_id');
+    if (shipOrderID) {
+        if (window.PERMS && window.PERMS['product:manage']) {
+            setTimeout(function() { openOrderShipment(parseInt(shipOrderID)); }, 200);
+        } else {
+            alert('没有成品出库权限，无法生成送货单');
+        }
+    }
 });
 
 // ============================
@@ -801,6 +814,7 @@ function submitProduction() {
 // 成品出库 / 送货单
 // ============================
 var outboundProducts = [];
+var outboundOrderID = 0;
 
 function qtyText(n) {
     var num = Number(n || 0);
@@ -832,6 +846,38 @@ function buildOutboundRow() {
     </div>`;
 }
 
+function buildOrderShipmentRow(item) {
+    return `<div class="row mb-2 outbound-row order-shipment-row align-items-end">
+        <input type="hidden" class="outbound-order-item-id" value="${item.order_item_id}">
+        <input type="hidden" class="outbound-product-id" value="${item.product_id}">
+        <div class="col-md-3">
+            <label class="form-label small text-muted">产品</label>
+            <input type="text" class="form-control" value="${escapeOut(item.product_name)}" readonly>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">规格型号</label>
+            <input type="text" class="form-control" value="${escapeOut(item.spec || '-')}" readonly>
+        </div>
+        <div class="col-md-1">
+            <label class="form-label small text-muted">单位</label>
+            <input type="text" class="form-control" value="${escapeOut(item.unit || '-')}" readonly>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">发货进度</label>
+            <div class="small pt-2">
+                下单 ${qtyText(item.quantity)}<br>
+                已发 ${qtyText(item.shipped_quantity)}，剩余 <strong>${qtyText(item.remaining_quantity)}</strong>
+            </div>
+        </div>
+        <div class="col-md-2">
+            <label class="form-label small text-muted">本次发货</label>
+            <input type="number" class="form-control outbound-order-qty" placeholder="可留空" step="any" min="0"
+                   max="${item.remaining_quantity}" data-remaining="${item.remaining_quantity}">
+        </div>
+        <div class="col-md-2 text-muted small pt-4">不发货的明细留空即可</div>
+    </div>`;
+}
+
 function refreshOutboundRowInfo(row) {
     var pid = parseInt(row.find('.outbound-product-select').val());
     var p = outboundProducts.find(function(x) { return x.id === pid; });
@@ -845,6 +891,7 @@ function refreshOutboundRowInfo(row) {
 }
 
 function addOutboundRow() {
+    if (outboundOrderID) return;
     $('#outboundItems').append(buildOutboundRow());
 }
 
@@ -855,7 +902,13 @@ function todayStr() {
     return d.getFullYear() + '-' + m + '-' + day;
 }
 
-$('#outboundModal').on('show.bs.modal', function() {
+function resetStandaloneOutbound() {
+    outboundOrderID = 0;
+    $('#outboundOrderId').val('');
+    $('#outboundOrderInfo').addClass('d-none').empty();
+    $('#outboundReceiver').prop('readonly', false).val('');
+    $('#outboundItemsLabel').text('出库明细（型号 + 数量）');
+    $('#addOutboundRowBtn').removeClass('d-none');
     $('#outboundForm')[0].reset();
     $('#outboundDate').val(todayStr());
     $('#outboundSettlementMethod').val('现金');
@@ -871,6 +924,58 @@ $('#outboundModal').on('show.bs.modal', function() {
             alert('加载产品列表失败');
         }
     });
+}
+
+function openOrderShipment(orderID) {
+    $.ajax({
+        url: '/api/orders/shipment-items?order_id=' + encodeURIComponent(orderID),
+        method: 'GET',
+        success: function(data) {
+            var items = (data.items || []).filter(function(item) {
+                return Number(item.remaining_quantity) > 0;
+            });
+            if (!items.length) {
+                alert('该订单已经没有可发货数量');
+                return;
+            }
+
+            outboundOrderID = data.order_id;
+            $('#outboundForm')[0].reset();
+            $('#outboundOrderId').val(data.order_id);
+            $('#outboundOrderInfo')
+                .removeClass('d-none')
+                .html(`订单号：<strong>${escapeOut(data.order_no)}</strong>　|　客户：<strong>${escapeOut(data.customer_name)}</strong>`);
+            $('#outboundDate').val(todayStr());
+            $('#outboundSettlementMethod').val(data.default_settlement_method || '现金');
+            $('#outboundReceiver').val(data.customer_name || '').prop('readonly', true);
+            $('#outboundItemsLabel').text('订单发货明细（已发 / 剩余）');
+            $('#addOutboundRowBtn').addClass('d-none');
+            $('#outboundItems').empty();
+            items.forEach(function(item) {
+                $('#outboundItems').append(buildOrderShipmentRow(item));
+            });
+            $('#outboundModal').modal('show');
+            window.history.replaceState({}, '', window.location.pathname);
+        },
+        error: function(xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('加载订单发货明细失败: ' + msg);
+        }
+    });
+}
+
+$('#outboundModal').on('show.bs.modal', function() {
+    if (parseInt($('#outboundOrderId').val()) > 0) {
+        return;
+    }
+    resetStandaloneOutbound();
+});
+
+$('#outboundModal').on('hidden.bs.modal', function() {
+    outboundOrderID = 0;
+    $('#outboundOrderId').val('');
+    $('#outboundItems').empty();
 });
 
 $(document).on('change', '.outbound-product-select', function() {
@@ -889,33 +994,62 @@ function submitOutbound() {
     var items = [];
     var valid = true;
     var errors = [];
-    $('#outboundItems .outbound-row').each(function(index) {
-        var row = $(this);
-        var pid = parseInt(row.find('.outbound-product-select').val());
-        var qty = parseFloat(row.find('.outbound-qty').val());
-        if (!pid) {
-            errors.push('第 ' + (index + 1) + ' 行：请选择产品');
-            valid = false;
-        } else if (!qty || qty <= 0) {
-            errors.push('第 ' + (index + 1) + ' 行：出库数量必须大于 0');
-            valid = false;
-        } else {
-            items.push({product_id: pid, quantity: qty});
-        }
-    });
+    var orderID = parseInt($('#outboundOrderId').val()) || 0;
+
+    if (orderID > 0) {
+        $('#outboundItems .order-shipment-row').each(function(index) {
+            var row = $(this);
+            var qty = parseFloat(row.find('.outbound-order-qty').val());
+            if (isNaN(qty) || qty === 0) return;
+            var remaining = parseFloat(row.find('.outbound-order-qty').attr('data-remaining')) || 0;
+            if (qty < 0) {
+                errors.push('第 ' + (index + 1) + ' 行：发货数量不能为负数');
+                valid = false;
+                return;
+            }
+            if (qty > remaining + 0.0005) {
+                errors.push('第 ' + (index + 1) + ' 行：发货数量不能超过剩余数量 ' + qtyText(remaining));
+                valid = false;
+                return;
+            }
+            items.push({
+                order_item_id: parseInt(row.find('.outbound-order-item-id').val()),
+                product_id: parseInt(row.find('.outbound-product-id').val()),
+                quantity: qty
+            });
+        });
+    } else {
+        $('#outboundItems .outbound-row').each(function(index) {
+            var row = $(this);
+            var pid = parseInt(row.find('.outbound-product-select').val());
+            var qty = parseFloat(row.find('.outbound-qty').val());
+            if (!pid) {
+                errors.push('第 ' + (index + 1) + ' 行：请选择产品');
+                valid = false;
+            } else if (!qty || qty <= 0) {
+                errors.push('第 ' + (index + 1) + ' 行：出库数量必须大于 0');
+                valid = false;
+            } else {
+                items.push({product_id: pid, quantity: qty});
+            }
+        });
+    }
+
     if (!valid) {
         alert(errors.join('\n'));
         return;
     }
     if (items.length === 0) {
-        alert('请至少填写一行出库明细');
+        alert('请至少填写一行发货数量');
         return;
     }
+
     $.ajax({
         url: '/api/outbounds/create',
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({
+            order_id: orderID,
             out_date: $('#outboundDate').val(),
             settlement_method: $('#outboundSettlementMethod').val(),
             receiver: $('#outboundReceiver').val().trim(),
@@ -945,7 +1079,7 @@ function loadOutbounds() {
             var tbody = $('#outboundTableBody');
             tbody.empty();
             if (!data || !data.length) {
-                tbody.append('<tr><td colspan="8" class="text-center text-muted">暂无出库记录</td></tr>');
+                tbody.append('<tr><td colspan="9" class="text-center text-muted">暂无出库记录</td></tr>');
                 return;
             }
             data.forEach(function(o) {
@@ -953,8 +1087,12 @@ function loadOutbounds() {
                 if (window.PERMS && window.PERMS['product:manage']) {
                     actions += `<button class="btn btn-danger btn-sm" onclick="deleteOutbound(${o.id})"><i class="bi bi-trash"></i> 删除</button>`;
                 }
+                var orderCell = o.order_id
+                    ? `<a href="/order/detail?id=${o.order_id}" target="_blank">${escapeOut(o.order_no || ('#' + o.order_id))}</a>`
+                    : '-';
                 tbody.append(`<tr>
                     <td><span class="badge bg-dark">${escapeOut(o.outbound_no)}</span></td>
+                    <td>${orderCell}</td>
                     <td>${o.out_date ? String(o.out_date).slice(0, 10) : '-'}</td>
                     <td><span class="badge ${o.settlement_method === '到付' ? 'bg-warning text-dark' : 'bg-success'}">${escapeOut(o.settlement_method || '现金')}</span></td>
                     <td>${o.receiver ? escapeOut(o.receiver) : '-'}</td>
@@ -972,7 +1110,7 @@ function loadOutbounds() {
 }
 
 function deleteOutbound(id) {
-    if (!confirm('确定删除该出库记录吗？删除后对应成品库存将自动回补。')) return;
+    if (!confirm('确定删除该出库记录吗？删除后对应成品库存将自动回补，关联订单状态也会重新计算。')) return;
     $.ajax({
         url: '/api/outbounds/delete?id=' + id,
         method: 'POST',
@@ -988,7 +1126,6 @@ function deleteOutbound(id) {
         }
     });
 }
-
 function escapeOut(s) {
     if (s === null || s === undefined) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');

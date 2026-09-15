@@ -42,12 +42,14 @@ type OrderCreateRequest struct {
 }
 
 type orderItemView struct {
-	ProductID   int     `json:"product_id"`
-	ProductName string  `json:"product_name"`
-	Spec        string  `json:"spec"`
-	Unit        string  `json:"unit"`
-	Quantity    int     `json:"quantity"`
-	Price       float64 `json:"price"`
+	ProductID         int     `json:"product_id"`
+	ProductName       string  `json:"product_name"`
+	Spec              string  `json:"spec"`
+	Unit              string  `json:"unit"`
+	Quantity          int     `json:"quantity"`
+	Price             float64 `json:"price"`
+	ShippedQuantity   float64 `json:"shipped_quantity"`
+	RemainingQuantity float64 `json:"remaining_quantity"`
 }
 
 type orderListRow struct {
@@ -355,10 +357,13 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 func getOrderItems(orderID int) ([]orderItemView, error) {
 	rows, err := models.DB.Query(`
         SELECT oi.product_id, oi.quantity, oi.price, p.name AS product_name,
-               COALESCE(p.spec, '') AS spec, COALESCE(p.unit, '') AS unit
+               COALESCE(p.spec, '') AS spec, COALESCE(p.unit, '') AS unit,
+               COALESCE(SUM(poi.quantity), 0) AS shipped_quantity
         FROM order_items oi
         JOIN products p ON oi.product_id = p.id
+        LEFT JOIN product_outbound_items poi ON poi.order_item_id = oi.id
         WHERE oi.order_id = ?
+        GROUP BY oi.id, oi.product_id, oi.quantity, oi.price, p.name, p.spec, p.unit
     `, orderID)
 	if err != nil {
 		return nil, err
@@ -368,12 +373,178 @@ func getOrderItems(orderID int) ([]orderItemView, error) {
 	var items []orderItemView
 	for rows.Next() {
 		var it orderItemView
-		if err := rows.Scan(&it.ProductID, &it.Quantity, &it.Price, &it.ProductName, &it.Spec, &it.Unit); err != nil {
+		if err := rows.Scan(&it.ProductID, &it.Quantity, &it.Price, &it.ProductName, &it.Spec, &it.Unit, &it.ShippedQuantity); err != nil {
 			return nil, err
+		}
+		it.RemainingQuantity = float64(it.Quantity) - it.ShippedQuantity
+		if it.RemainingQuantity < 0 {
+			it.RemainingQuantity = 0
 		}
 		items = append(items, it)
 	}
 	return items, rows.Err()
+}
+
+type orderShipmentItemView struct {
+	OrderItemID       int     `json:"order_item_id"`
+	ProductID         int     `json:"product_id"`
+	ProductName       string  `json:"product_name"`
+	Spec              string  `json:"spec"`
+	Unit              string  `json:"unit"`
+	Quantity          float64 `json:"quantity"`
+	ShippedQuantity   float64 `json:"shipped_quantity"`
+	RemainingQuantity float64 `json:"remaining_quantity"`
+}
+
+type shippableOrderView struct {
+	ID                   int        `json:"id"`
+	OrderNo              string     `json:"order_no"`
+	CustomerName         string     `json:"customer_name"`
+	OrderDate            *time.Time `json:"order_date"`
+	ExpectedShippingDate *time.Time `json:"expected_shipping_date"`
+	Status               int        `json:"status"`
+	ItemCount            int        `json:"item_count"`
+	TotalQuantity        float64    `json:"total_quantity"`
+	ShippedQuantity      float64    `json:"shipped_quantity"`
+}
+
+func loadOrderShipmentItems(orderID int) ([]orderShipmentItemView, error) {
+	rows, err := models.DB.Query(`
+        SELECT oi.id, oi.product_id, p.name, COALESCE(p.spec, ''), COALESCE(p.unit, ''),
+               oi.quantity, COALESCE(SUM(poi.quantity), 0) AS shipped_quantity
+        FROM order_items oi
+        JOIN products p ON p.id = oi.product_id
+        LEFT JOIN product_outbound_items poi ON poi.order_item_id = oi.id
+        WHERE oi.order_id = ?
+        GROUP BY oi.id, oi.product_id, p.name, p.spec, p.unit, oi.quantity
+        ORDER BY oi.id ASC
+    `, orderID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var items []orderShipmentItemView
+	for rows.Next() {
+		var item orderShipmentItemView
+		if err := rows.Scan(&item.OrderItemID, &item.ProductID, &item.ProductName, &item.Spec,
+			&item.Unit, &item.Quantity, &item.ShippedQuantity); err != nil {
+			return nil, err
+		}
+		item.RemainingQuantity = item.Quantity - item.ShippedQuantity
+		if item.RemainingQuantity < 0 {
+			item.RemainingQuantity = 0
+		}
+		items = append(items, item)
+	}
+	return items, rows.Err()
+}
+
+// ListShippableOrders 获取可生成送货单的订单。
+func ListShippableOrders(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	rows, err := models.DB.Query(`
+        SELECT id, order_no, customer_name, order_date, expected_shipping_date, status
+        FROM orders
+        WHERE status IN (1, 2)
+        ORDER BY id DESC
+    `)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	defer rows.Close()
+
+	var list []shippableOrderView
+	for rows.Next() {
+		var order shippableOrderView
+		var orderDate, expectedDate sql.NullTime
+		if err := rows.Scan(&order.ID, &order.OrderNo, &order.CustomerName, &orderDate, &expectedDate, &order.Status); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if orderDate.Valid {
+			order.OrderDate = &orderDate.Time
+		}
+		if expectedDate.Valid {
+			order.ExpectedShippingDate = &expectedDate.Time
+		}
+		items, err := loadOrderShipmentItems(order.ID)
+		if err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		for _, item := range items {
+			order.ItemCount++
+			order.TotalQuantity += item.Quantity
+			order.ShippedQuantity += item.ShippedQuantity
+		}
+		if order.TotalQuantity > order.ShippedQuantity+0.0005 {
+			list = append(list, order)
+		}
+	}
+	if err := rows.Err(); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(list)
+}
+
+// GetOrderShipmentItems 获取订单的可发货明细与剩余数量。
+func GetOrderShipmentItems(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	orderID, err := strconv.Atoi(r.URL.Query().Get("order_id"))
+	if err != nil || orderID <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "Invalid order_id")
+		return
+	}
+
+	var orderNo, customerName, freightPayment string
+	var status int
+	err = models.DB.QueryRow(`
+        SELECT order_no, customer_name, status, COALESCE(freight_payment, '')
+        FROM orders
+        WHERE id = ?
+    `, orderID).Scan(&orderNo, &customerName, &status, &freightPayment)
+	if err == sql.ErrNoRows {
+		writeJSONError(w, http.StatusNotFound, "订单不存在")
+		return
+	}
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if status != 1 && status != 2 {
+		writeJSONError(w, http.StatusBadRequest, "当前订单状态不能生成送货单")
+		return
+	}
+
+	items, err := loadOrderShipmentItems(orderID)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	defaultSettlement := "现金"
+	if strings.TrimSpace(freightPayment) == "到付" {
+		defaultSettlement = "到付"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"order_id":                  orderID,
+		"order_no":                  orderNo,
+		"customer_name":             customerName,
+		"status":                    status,
+		"default_settlement_method": defaultSettlement,
+		"items":                     items,
+	})
 }
 
 // customerOrderRow 客户详情页展示的关联订单行
@@ -560,6 +731,16 @@ func DeleteOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	var outboundCount int
+	if err := tx.QueryRow("SELECT COUNT(*) FROM product_outbound WHERE order_id = ?", id).Scan(&outboundCount); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if outboundCount > 0 {
+		http.Error(w, "该订单已有关联送货单，请先删除送货单后再删除订单", http.StatusBadRequest)
 		return
 	}
 
@@ -938,14 +1119,22 @@ func OrderDetailPage(w http.ResponseWriter, r *http.Request) {
 		totalQuantity += it.Quantity
 	}
 
+	outbounds, err := models.GetProductOutboundsByOrder(id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	data := struct {
 		Order         models.Order
 		Items         []Item
+		Outbounds     []models.ProductOutbound
 		Now           time.Time
 		TotalQuantity int
 	}{
 		Order:         order,
 		Items:         items,
+		Outbounds:     outbounds,
 		Now:           time.Now(),
 		TotalQuantity: totalQuantity,
 	}

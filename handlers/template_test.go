@@ -98,6 +98,7 @@ func TestPageTemplates(t *testing.T) {
 			Quantity    int
 			Price       float64
 		}
+		Outbounds     []models.ProductOutbound
 		Now           time.Time
 		TotalQuantity int
 	}{
@@ -110,6 +111,7 @@ func TestPageTemplates(t *testing.T) {
 			Quantity    int
 			Price       float64
 		}{{ProductID: 1, ProductName: "产品A", Spec: "A型", Unit: "个", Quantity: 2, Price: 50}},
+		Outbounds:     []models.ProductOutbound{},
 		Now:           time.Now(),
 		TotalQuantity: 2,
 	}

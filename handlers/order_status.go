@@ -62,6 +62,19 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 有关联送货单的订单不能取消，避免已发货库存与订单状态、库存回补相互冲突。
+	if req.Status == 4 && currentStatus != 4 {
+		var outboundCount int
+		if err := tx.QueryRow("SELECT COUNT(*) FROM product_outbound WHERE order_id = ?", req.ID).Scan(&outboundCount); err != nil {
+			writeJSONError(w, http.StatusInternalServerError, err.Error())
+			return
+		}
+		if outboundCount > 0 {
+			writeJSONError(w, http.StatusBadRequest, "该订单已有关联送货单，请先删除送货单后再取消")
+			return
+		}
+	}
+
 	// 1) 取消订单（且此前不是取消状态）：归还成品与原材料库存。
 	if req.Status == 4 && currentStatus != 4 {
 		if err := restoreOrderStock(tx, req.ID); err != nil {
