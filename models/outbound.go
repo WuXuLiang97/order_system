@@ -8,16 +8,17 @@ import (
 // ============ 成品出库（送货单） ============
 
 type ProductOutbound struct {
-	ID              int       `json:"id"`
-	OutboundNo      string    `json:"outbound_no"`
-	OutDate         time.Time `json:"out_date"`
-	Receiver        string    `json:"receiver"`
-	Remark          string    `json:"remark"`
-	CreatedByUserID int       `json:"created_by_user_id"`
-	CreatedByName   string    `json:"created_by_name"`
-	TotalQuantity   float64   `json:"total_quantity"`
-	ItemCount       int       `json:"item_count"`
-	CreatedAt       time.Time `json:"created_at"`
+	ID               int       `json:"id"`
+	OutboundNo       string    `json:"outbound_no"`
+	OutDate          time.Time `json:"out_date"`
+	Receiver         string    `json:"receiver"`
+	SettlementMethod string    `json:"settlement_method"`
+	Remark           string    `json:"remark"`
+	CreatedByUserID  int       `json:"created_by_user_id"`
+	CreatedByName    string    `json:"created_by_name"`
+	TotalQuantity    float64   `json:"total_quantity"`
+	ItemCount        int       `json:"item_count"`
+	CreatedAt        time.Time `json:"created_at"`
 }
 
 type ProductOutboundItem struct {
@@ -37,7 +38,8 @@ func EnsureProductOutboundTables() error {
             id                 INT AUTO_INCREMENT PRIMARY KEY COMMENT '出库ID',
             outbound_no        VARCHAR(32) NOT NULL DEFAULT '' COMMENT '送货单号',
             out_date           DATE NULL COMMENT '出库日期',
-            receiver           VARCHAR(200) NOT NULL DEFAULT '' COMMENT '收货单位',
+            receiver           VARCHAR(200) NOT NULL DEFAULT '' COMMENT '客户名称',
+            settlement_method  VARCHAR(20) NOT NULL DEFAULT '现金' COMMENT '结算方式：现金/到付',
             remark             VARCHAR(500) NOT NULL DEFAULT '' COMMENT '备注',
             created_by_user_id INT NOT NULL DEFAULT 0 COMMENT '操作人用户ID',
             created_at         DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
@@ -58,19 +60,24 @@ func EnsureProductOutboundTables() error {
             KEY idx_outbound (outbound_id)
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品出库明细表'
     `)
-	return err
+	if err != nil {
+		return err
+	}
+	return ensureColumn("product_outbound", "settlement_method", "VARCHAR(20) NOT NULL DEFAULT '现金' COMMENT '结算方式：现金/到付'")
 }
 
 // ListProductOutbounds 出库记录列表（含明细汇总与操作人）。
 func ListProductOutbounds(limit int) ([]ProductOutbound, error) {
 	rows, err := DB.Query(`
-        SELECT o.id, o.outbound_no, o.out_date, o.receiver, o.remark,
-               o.created_by_user_id, COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
+        SELECT o.id, o.outbound_no, o.out_date, o.receiver,
+               COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
+               o.remark, o.created_by_user_id,
+               COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at, COALESCE(SUM(i.quantity), 0) AS total_quantity, COUNT(i.id) AS item_count
         FROM product_outbound o
         LEFT JOIN product_outbound_items i ON i.outbound_id = o.id
         LEFT JOIN users u ON u.id = o.created_by_user_id
-        GROUP BY o.id, o.outbound_no, o.out_date, o.receiver, o.remark,
+        GROUP BY o.id, o.outbound_no, o.out_date, o.receiver, o.settlement_method, o.remark,
                  o.created_by_user_id, o.created_at
         ORDER BY o.id DESC
         LIMIT ?`, limit)
@@ -83,7 +90,7 @@ func ListProductOutbounds(limit int) ([]ProductOutbound, error) {
 	for rows.Next() {
 		var ob ProductOutbound
 		var outDate sql.NullTime
-		if err := rows.Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.Remark,
+		if err := rows.Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod, &ob.Remark,
 			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount); err != nil {
 			return nil, err
 		}
@@ -123,13 +130,15 @@ func GetProductOutboundByNo(outboundNo string) (*ProductOutbound, error) {
 	var ob ProductOutbound
 	var outDate sql.NullTime
 	err := DB.QueryRow(`
-        SELECT o.id, o.outbound_no, o.out_date, o.receiver, o.remark,
-               o.created_by_user_id, COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
+        SELECT o.id, o.outbound_no, o.out_date, o.receiver,
+               COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
+               o.remark, o.created_by_user_id,
+               COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at, 0 AS total_quantity, 0 AS item_count
         FROM product_outbound o
         LEFT JOIN users u ON u.id = o.created_by_user_id
         WHERE o.outbound_no = ?`, outboundNo).
-		Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.Remark,
+		Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod, &ob.Remark,
 			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount)
 	if err != nil {
 		return nil, err

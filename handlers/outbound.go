@@ -20,10 +20,11 @@ type outboundItemReq struct {
 }
 
 type outboundCreateReq struct {
-	OutDate  string            `json:"out_date"`
-	Receiver string            `json:"receiver"`
-	Remark   string            `json:"remark"`
-	Items    []outboundItemReq `json:"items"`
+	OutDate          string            `json:"out_date"`
+	Receiver         string            `json:"receiver"`
+	SettlementMethod string            `json:"settlement_method"`
+	Remark           string            `json:"remark"`
+	Items            []outboundItemReq `json:"items"`
 }
 
 // CreateProductOutbound 成品出库：扣减库存并生成送货单（可含多个型号）
@@ -39,6 +40,15 @@ func CreateProductOutbound(w http.ResponseWriter, r *http.Request) {
 	}
 	if len(req.Items) == 0 {
 		writeJSONError(w, http.StatusBadRequest, "请至少填写一行出库明细")
+		return
+	}
+
+	settlementMethod := strings.TrimSpace(req.SettlementMethod)
+	if settlementMethod == "" {
+		settlementMethod = "现金"
+	}
+	if settlementMethod != "现金" && settlementMethod != "到付" {
+		writeJSONError(w, http.StatusBadRequest, "结算方式不正确")
 		return
 	}
 
@@ -102,8 +112,8 @@ func CreateProductOutbound(w http.ResponseWriter, r *http.Request) {
 	}
 
 	res, err := tx.Exec(`
-        INSERT INTO product_outbound (outbound_no, out_date, receiver, remark, created_by_user_id)
-        VALUES (?, ?, ?, ?, ?)`, outboundNo, outDateStr, strings.TrimSpace(req.Receiver), strings.TrimSpace(req.Remark), userID)
+        INSERT INTO product_outbound (outbound_no, out_date, receiver, settlement_method, remark, created_by_user_id)
+        VALUES (?, ?, ?, ?, ?, ?)`, outboundNo, outDateStr, strings.TrimSpace(req.Receiver), settlementMethod, strings.TrimSpace(req.Remark), userID)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
@@ -216,13 +226,15 @@ func ProductOutboundPrintPage(w http.ResponseWriter, r *http.Request) {
 	var ob models.ProductOutbound
 	var outDate sql.NullTime
 	err = models.DB.QueryRow(`
-        SELECT o.id, o.outbound_no, o.out_date, o.receiver, o.remark,
-               o.created_by_user_id, COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
+        SELECT o.id, o.outbound_no, o.out_date, o.receiver,
+               COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
+               o.remark, o.created_by_user_id,
+               COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at
         FROM product_outbound o
         LEFT JOIN users u ON u.id = o.created_by_user_id
         WHERE o.id = ?`, id).
-		Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.Remark,
+		Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod, &ob.Remark,
 			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt)
 	if err != nil {
 		http.Error(w, "出库记录不存在", http.StatusNotFound)

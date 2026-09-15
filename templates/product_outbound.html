@@ -72,14 +72,15 @@
         </div>
 
         <div class="header">
-            <div class="company">深圳市印客领科技有限公司</div>
+            <div class="company"></div>
             <h1>送 货 单</h1>
             <div class="doc-no">送货单号：{{.Outbound.OutboundNo}}</div>
         </div>
 
         <div class="info-row">
             <div class="info-item"><span class="label">送货日期：</span>{{.Outbound.OutDate.Format "2006-01-02"}}</div>
-            {{if .Outbound.Receiver}}<div class="info-item"><span class="label">收货单位：</span>{{.Outbound.Receiver}}</div>{{end}}
+            <div class="info-item"><span class="label">结算方式：</span>{{if .Outbound.SettlementMethod}}{{.Outbound.SettlementMethod}}{{else}}现金{{end}}</div>
+            {{if .Outbound.Receiver}}<div class="info-item"><span class="label">客户名称：</span>{{.Outbound.Receiver}}</div>{{end}}
             <div class="info-item"><span class="label">制单人：</span>{{if .Outbound.CreatedByName}}{{.Outbound.CreatedByName}}{{else}}—{{end}}</div>
         </div>
 
@@ -126,7 +127,7 @@
         </div>
 
         <div class="footer">
-            打印日期：{{.Now.Format "2006-01-02 15:04:05"}}　|　本单仅作发货清点使用，不含价格信息　|　系统自动生成
+            打印日期：{{.Now.Format "2006-01-02 15:04:05"}}　
         </div>
     </div>
 </body>

@@ -63,7 +63,8 @@
                             <tr>
                                 <th>送货单号</th>
                                 <th>出库日期</th>
-                                <th>收货单位</th>
+                                <th>结算方式</th>
+                                <th>客户名称</th>
                                 <th>型号数</th>
                                 <th>总数量</th>
                                 <th>操作人</th>
@@ -89,13 +90,20 @@
             <div class="modal-body">
                 <form id="outboundForm">
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">出库日期</label>
                             <input type="date" class="form-control" id="outboundDate">
                         </div>
-                        <div class="col-md-8 mb-3">
-                            <label class="form-label">收货单位（可选，打印在送货单上）</label>
-                            <input type="text" class="form-control" id="outboundReceiver" placeholder="客户名称 / 收货单位">
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label">结算方式 <span class="text-danger">*</span></label>
+                            <select class="form-control" id="outboundSettlementMethod" required>
+                                <option value="现金">现金</option>
+                                <option value="到付">到付</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">客户名称（可选，仅名称会打印在送货单上）</label>
+                            <input type="text" class="form-control" id="outboundReceiver" placeholder="客户名称">
                         </div>
                     </div>
                     <div class="mb-3">
@@ -850,6 +858,7 @@ function todayStr() {
 $('#outboundModal').on('show.bs.modal', function() {
     $('#outboundForm')[0].reset();
     $('#outboundDate').val(todayStr());
+    $('#outboundSettlementMethod').val('现金');
     $('#outboundItems').empty();
     $.ajax({
         url: '/api/products',
@@ -908,6 +917,7 @@ function submitOutbound() {
         contentType: 'application/json',
         data: JSON.stringify({
             out_date: $('#outboundDate').val(),
+            settlement_method: $('#outboundSettlementMethod').val(),
             receiver: $('#outboundReceiver').val().trim(),
             remark: $('#outboundRemark').val().trim(),
             items: items
@@ -935,7 +945,7 @@ function loadOutbounds() {
             var tbody = $('#outboundTableBody');
             tbody.empty();
             if (!data || !data.length) {
-                tbody.append('<tr><td colspan="7" class="text-center text-muted">暂无出库记录</td></tr>');
+                tbody.append('<tr><td colspan="8" class="text-center text-muted">暂无出库记录</td></tr>');
                 return;
             }
             data.forEach(function(o) {
@@ -946,6 +956,7 @@ function loadOutbounds() {
                 tbody.append(`<tr>
                     <td><span class="badge bg-dark">${escapeOut(o.outbound_no)}</span></td>
                     <td>${o.out_date ? String(o.out_date).slice(0, 10) : '-'}</td>
+                    <td><span class="badge ${o.settlement_method === '到付' ? 'bg-warning text-dark' : 'bg-success'}">${escapeOut(o.settlement_method || '现金')}</span></td>
                     <td>${o.receiver ? escapeOut(o.receiver) : '-'}</td>
                     <td>${o.item_count || 0} 项</td>
                     <td><strong>${qtyText(o.total_quantity)}</strong></td>
