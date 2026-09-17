@@ -31,6 +31,9 @@ func InitDB(dataSourceName string) {
 	if err = EnsurePurchaseMaterialsTable(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureExpensesTable(); err != nil {
+		log.Fatal(err)
+	}
 	if err = EnsurePurchaseOrdersTable(); err != nil {
 		log.Fatal(err)
 	}

@@ -111,6 +111,11 @@
                         <a class="nav-link" href="/purchase-materials"><i class="bi bi-cart-plus"></i> 采购物料管理</a>
                     </li>
                     {{end}}
+                    {{if .Can "expense:view"}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/expenses"><i class="bi bi-receipt"></i> 费用管理</a>
+                    </li>
+                    {{end}}
                     {{if .Can "customer:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/customers"><i class="bi bi-people"></i> 客户管理</a>

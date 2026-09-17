@@ -283,6 +283,7 @@ func seedDefaultViewPermissions() error {
 		return nil
 	}
 
+	// 费用管理、数据分析等按需单独授权，不设默认查看权限。
 	defaults := []string{
 		"order:view_all", "product:view", "material:view", "purchase:view", "customer:view",
 	}

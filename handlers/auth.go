@@ -18,7 +18,7 @@ import (
 //   - admin 角色拥有全部权限；
 //   - 普通用户按 user_permissions 表按用户授权。
 //
-// 库存/原材料/采购/客户管理：查看 / 编辑（编辑=manage，隐含查看）。
+// 库存/原材料/采购/费用/客户管理：查看 / 编辑（编辑=manage，隐含查看）。
 // 订单管理：按“查看范围 × 编辑范围”授权：
 //
 //	order:view_own   查看自己创建的
@@ -38,6 +38,8 @@ const (
 	PermMaterialManage = "material:manage"
 	PermPurchaseView   = "purchase:view"
 	PermPurchaseManage = "purchase:manage"
+	PermExpenseView    = "expense:view"
+	PermExpenseManage  = "expense:manage"
 	PermCustomerView   = "customer:view"
 	PermCustomerManage = "customer:manage"
 	PermAnalyticsView  = "analytics:view"
@@ -50,6 +52,7 @@ var allPermissions = []string{
 	PermProductView, PermProductManage,
 	PermMaterialView, PermMaterialManage,
 	PermPurchaseView, PermPurchaseManage,
+	PermExpenseView, PermExpenseManage,
 	PermCustomerView, PermCustomerManage,
 	PermAnalyticsView,
 	PermUserManage,
@@ -62,6 +65,7 @@ var grantableGroups = [][]string{
 	{PermProductView, PermProductManage},
 	{PermMaterialView, PermMaterialManage},
 	{PermPurchaseView, PermPurchaseManage},
+	{PermExpenseView, PermExpenseManage},
 	{PermCustomerView, PermCustomerManage},
 	{PermAnalyticsView},
 }

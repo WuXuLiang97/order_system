@@ -31,9 +31,9 @@ func makePageData(user *models.User) PageData {
 				perms[p] = true
 			}
 		} else {
-			// 测试模拟已迁移的普通用户：数据分析默认不授权。
+			// 测试模拟已迁移的普通用户：数据分析、费用管理默认不授权。
 			for _, g := range grantableGroups {
-				if g[0] == PermAnalyticsView {
+				if g[0] == PermAnalyticsView || g[0] == PermExpenseView {
 					continue
 				}
 				perms[g[0]] = true
@@ -70,6 +70,8 @@ func TestPageTemplates(t *testing.T) {
 		{"analytics-viewer", []string{"../templates/layout.html", "../templates/analytics.html"}, viewer},
 		{"purchase-admin", []string{"../templates/layout.html", "../templates/purchase_materials.html"}, admin},
 		{"purchase-viewer", []string{"../templates/layout.html", "../templates/purchase_materials.html"}, viewer},
+		{"expenses-admin", []string{"../templates/layout.html", "../templates/expenses.html"}, admin},
+		{"expenses-viewer", []string{"../templates/layout.html", "../templates/expenses.html"}, viewer},
 		{"customers-admin", []string{"../templates/layout.html", "../templates/customers.html"}, admin},
 		{"customers-viewer", []string{"../templates/layout.html", "../templates/customers.html"}, viewer},
 		{"customer-detail-admin", []string{"../templates/layout.html", "../templates/customer_detail.html"}, admin},
@@ -177,7 +179,39 @@ func TestAnalyticsVisibilityAndHomeOrder(t *testing.T) {
 	if strings.Contains(viewerHTML, "数据分析") {
 		t.Fatal("普通用户默认不应看到数据分析")
 	}
+	if !strings.Contains(adminHTML, "费用管理") {
+		t.Fatal("管理员首页应显示费用管理")
+	}
+	if strings.Contains(viewerHTML, "费用管理") {
+		t.Fatal("普通用户默认不应看到费用管理")
+	}
+	if strings.Index(adminHTML, "采购物料管理") > strings.Index(adminHTML, "费用管理") ||
+		strings.Index(adminHTML, "费用管理") > strings.Index(adminHTML, "客户管理") {
+		t.Fatal("费用管理应位于采购物料管理之后、客户管理之前")
+	}
 	if strings.LastIndex(adminHTML, "数据分析") < strings.Index(adminHTML, "客户管理") {
 		t.Fatal("数据分析应位于首页模块最后")
+	}
+}
+
+func TestExpensePermissionGrant(t *testing.T) {
+	viewPerms, err := NormalizeGrantedPermissions([]string{PermExpenseView})
+	if err != nil {
+		t.Fatalf("normalize expense view permission: %v", err)
+	}
+	if len(viewPerms) != 1 || viewPerms[0] != PermExpenseView {
+		t.Fatalf("unexpected expense view permissions: %#v", viewPerms)
+	}
+
+	managePerms, err := NormalizeGrantedPermissions([]string{PermExpenseManage})
+	if err != nil {
+		t.Fatalf("normalize expense manage permission: %v", err)
+	}
+	granted := map[string]bool{}
+	for _, permission := range managePerms {
+		granted[permission] = true
+	}
+	if !granted[PermExpenseView] || !granted[PermExpenseManage] {
+		t.Fatalf("expense manage should imply view, got: %#v", managePerms)
 	}
 }

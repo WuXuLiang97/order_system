@@ -48,6 +48,7 @@ func main() {
 	http.HandleFunc("/raw-materials", handlers.RequirePermission(handlers.PermMaterialView, page("templates/layout.html", "templates/raw_materials.html")))
 	http.HandleFunc("/analytics", handlers.RequirePermission(handlers.PermAnalyticsView, page("templates/layout.html", "templates/analytics.html")))
 	http.HandleFunc("/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, page("templates/layout.html", "templates/purchase_materials.html")))
+	http.HandleFunc("/expenses", handlers.RequirePermission(handlers.PermExpenseView, page("templates/layout.html", "templates/expenses.html")))
 	http.HandleFunc("/customers", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customers.html")))
 	http.HandleFunc("/customers/detail", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customer_detail.html")))
 	http.HandleFunc("/order/detail", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.OrderDetailPage))
@@ -110,6 +111,14 @@ func main() {
 	http.HandleFunc("/api/purchase-materials/delete", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.DeletePurchaseMaterial))
 	http.HandleFunc("/api/purchase-materials/upload", handlers.RequirePermission(handlers.PermPurchaseManage, handlers.UploadPurchaseReceipt))
 
+	// API 路由 - 费用管理
+	http.HandleFunc("/api/expenses", handlers.RequirePermission(handlers.PermExpenseView, handlers.ListExpenses))
+	http.HandleFunc("/api/expenses/get", handlers.RequirePermission(handlers.PermExpenseView, handlers.GetExpense))
+	http.HandleFunc("/api/expenses/add", handlers.RequirePermission(handlers.PermExpenseManage, handlers.AddExpense))
+	http.HandleFunc("/api/expenses/update", handlers.RequirePermission(handlers.PermExpenseManage, handlers.UpdateExpense))
+	http.HandleFunc("/api/expenses/delete", handlers.RequirePermission(handlers.PermExpenseManage, handlers.DeleteExpense))
+	http.HandleFunc("/api/expenses/upload", handlers.RequirePermission(handlers.PermExpenseManage, handlers.UploadExpenseVoucher))
+
 	// API 路由 - 原材料（列表/详情/预警需登录，写操作需 material:manage 权限）
 	http.HandleFunc("/api/raw-materials", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.ListRawMaterials))
 	http.HandleFunc("/api/raw-materials/get", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.GetRawMaterial))
@@ -130,6 +139,7 @@ func main() {
 	http.HandleFunc("/api/users/permissions", handlers.RequirePermission(handlers.PermUserManage, handlers.SaveUserPermissions))
 
 	os.MkdirAll("uploads/payment_receipts", 0755)
+	os.MkdirAll("uploads/expense_vouchers", 0755)
 	os.MkdirAll("uploads/raw_material_images", 0755)
 	log.Println("Server started at :6688")
 	log.Fatal(http.ListenAndServe(":6688", nil))

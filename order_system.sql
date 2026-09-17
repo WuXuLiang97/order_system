@@ -24,6 +24,7 @@ DROP TABLE IF EXISTS raw_materials;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS purchase_materials;
 DROP TABLE IF EXISTS purchase_orders;
+DROP TABLE IF EXISTS expenses;
 
 -- =============================================
 -- 3. 创建产品表（成品库存）
@@ -100,6 +101,32 @@ CREATE TABLE purchase_materials (
     INDEX idx_purchase_material_order_id (purchase_order_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料明细表';
 
+-- =============================================
+-- 4.7 创建费用记录表
+-- =============================================
+CREATE TABLE expenses (
+    id                       INT AUTO_INCREMENT PRIMARY KEY COMMENT '费用ID',
+    expense_no               VARCHAR(32) NOT NULL UNIQUE COMMENT '费用编号',
+    expense_date             DATE NOT NULL COMMENT '费用日期',
+    expense_month            CHAR(7) NOT NULL COMMENT '所属月份(YYYY-MM)',
+    category                 VARCHAR(30) NOT NULL COMMENT '费用类别',
+    amount                   DECIMAL(12,2) NOT NULL DEFAULT 0 COMMENT '金额(含税)',
+    tax_amount               DECIMAL(12,2) NULL COMMENT '税额',
+    amount_excluding_tax     DECIMAL(12,2) NULL COMMENT '不含税金额',
+    counterparty_type        VARCHAR(20) NOT NULL DEFAULT '' COMMENT '往来对象类型',
+    counterparty_name        VARCHAR(100) NOT NULL DEFAULT '' COMMENT '往来对象名称',
+    payment_status           VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
+    payment_method           VARCHAR(30) NOT NULL DEFAULT '' COMMENT '支付方式',
+    vouchers                 TEXT COMMENT '发票或支付凭证路径(JSON数组)',
+    remark                   TEXT COMMENT '备注',
+    created_by_user_id       INT NULL COMMENT '创建人用户ID',
+    created_at               DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    updated_at               DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
+    INDEX idx_expenses_date (expense_date),
+    INDEX idx_expenses_month (expense_month),
+    INDEX idx_expenses_category (category),
+    INDEX idx_expenses_payment_status (payment_status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用记录表';
 -- =============================================
 -- 5. 创建订单主表
 -- =============================================
