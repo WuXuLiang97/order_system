@@ -1,11 +1,13 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"html/template"
 	"io"
 	"order-system/models"
 	"order-system/utils"
+	"strings"
 	"testing"
 	"time"
 )
@@ -29,8 +31,11 @@ func makePageData(user *models.User) PageData {
 				perms[p] = true
 			}
 		} else {
-			// 测试模拟已迁移的普通用户：默认拥有各模块查看权限
+			// 测试模拟已迁移的普通用户：数据分析默认不授权。
 			for _, g := range grantableGroups {
+				if g[0] == PermAnalyticsView {
+					continue
+				}
 				perms[g[0]] = true
 			}
 		}
@@ -61,6 +66,8 @@ func TestPageTemplates(t *testing.T) {
 		{"products-viewer", []string{"../templates/layout.html", "../templates/products.html"}, viewer},
 		{"rawmaterials-admin", []string{"../templates/layout.html", "../templates/raw_materials.html"}, admin},
 		{"rawmaterials-viewer", []string{"../templates/layout.html", "../templates/raw_materials.html"}, viewer},
+		{"analytics-admin", []string{"../templates/layout.html", "../templates/analytics.html"}, admin},
+		{"analytics-viewer", []string{"../templates/layout.html", "../templates/analytics.html"}, viewer},
 		{"purchase-admin", []string{"../templates/layout.html", "../templates/purchase_materials.html"}, admin},
 		{"purchase-viewer", []string{"../templates/layout.html", "../templates/purchase_materials.html"}, viewer},
 		{"customers-admin", []string{"../templates/layout.html", "../templates/customers.html"}, admin},
@@ -143,5 +150,34 @@ func TestPageTemplates(t *testing.T) {
 	}
 	if err := tmpl2.Execute(io.Discard, outboundData); err != nil {
 		t.Fatalf("product_outbound execute error: %v", err)
+	}
+}
+
+func TestAnalyticsVisibilityAndHomeOrder(t *testing.T) {
+	admin := &models.User{ID: 1, Username: "admin", DisplayName: "管理员", Role: models.RoleAdmin, CreatedAt: time.Now()}
+	viewer := &models.User{ID: 2, Username: "viewer", DisplayName: "普通用户", Role: models.RoleUser, CreatedAt: time.Now()}
+
+	tmpl, err := template.ParseFiles("../templates/layout.html", "../templates/index.html")
+	if err != nil {
+		t.Fatalf("parse index template: %v", err)
+	}
+	render := func(user *models.User) string {
+		var buf bytes.Buffer
+		if err := tmpl.Execute(&buf, makePageData(user)); err != nil {
+			t.Fatalf("render index template: %v", err)
+		}
+		return buf.String()
+	}
+
+	adminHTML := render(admin)
+	viewerHTML := render(viewer)
+	if !strings.Contains(adminHTML, "数据分析") {
+		t.Fatal("管理员首页应显示数据分析")
+	}
+	if strings.Contains(viewerHTML, "数据分析") {
+		t.Fatal("普通用户默认不应看到数据分析")
+	}
+	if strings.LastIndex(adminHTML, "数据分析") < strings.Index(adminHTML, "客户管理") {
+		t.Fatal("数据分析应位于首页模块最后")
 	}
 }

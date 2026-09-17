@@ -1,0 +1,448 @@
+{{define "content"}}
+<style>
+    .analytics-hero {
+        background: linear-gradient(135deg, #172554 0%, #1d4ed8 55%, #0f766e 100%);
+        color: #fff;
+        border: 0;
+        overflow: hidden;
+    }
+    .analytics-hero .card-body {
+        position: relative;
+    }
+    .analytics-hero::after {
+        content: "";
+        position: absolute;
+        width: 260px;
+        height: 260px;
+        border-radius: 50%;
+        right: -90px;
+        top: -130px;
+        background: rgba(255,255,255,.12);
+    }
+    .analytics-kpi {
+        border: 0;
+        border-left: 5px solid var(--accent, #0d6efd);
+        height: 100%;
+    }
+    .analytics-kpi .kpi-label {
+        color: #6c757d;
+        font-size: .88rem;
+        margin-bottom: .35rem;
+    }
+    .analytics-kpi .kpi-value {
+        font-size: 1.65rem;
+        font-weight: 700;
+        line-height: 1.2;
+    }
+    .analytics-kpi .kpi-note {
+        color: #6c757d;
+        font-size: .8rem;
+        margin-top: .35rem;
+    }
+    .composition-bar {
+        display: flex;
+        width: 100%;
+        height: 28px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e9ecef;
+    }
+    .composition-cost {
+        background: linear-gradient(90deg, #f59e0b, #f97316);
+        transition: width .35s ease;
+    }
+    .composition-profit {
+        background: linear-gradient(90deg, #198754, #20c997);
+        transition: width .35s ease;
+    }
+    .mini-composition {
+        display: flex;
+        width: 92px;
+        height: 10px;
+        overflow: hidden;
+        border-radius: 999px;
+        background: #e9ecef;
+    }
+    .mini-composition.cost {
+        background: linear-gradient(90deg, #f59e0b, #f97316);
+    }
+    .mini-composition.profit {
+        background: linear-gradient(90deg, #198754, #20c997);
+    }
+    .profit-champion {
+        background: linear-gradient(135deg, #ecfdf5, #f0fdfa);
+        border: 1px solid #a7f3d0;
+        height: 100%;
+    }
+    .analytics-table td, .analytics-table th {
+        vertical-align: middle;
+        white-space: nowrap;
+    }
+    .rank-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: #e9ecef;
+        color: #495057;
+        font-weight: 700;
+    }
+    .rank-badge.top {
+        background: linear-gradient(135deg, #f59e0b, #fbbf24);
+        color: #fff;
+        box-shadow: 0 3px 8px rgba(245,158,11,.35);
+    }
+    @media (max-width: 767.98px) {
+        .analytics-kpi .kpi-value { font-size: 1.35rem; }
+    }
+</style>
+
+<div class="card analytics-hero mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-3">
+            <div>
+                <h3 class="mb-2"><i class="bi bi-graph-up-arrow"></i> 数据分析</h3>
+                <p class="mb-0 opacity-75">查看每期收入中材料成本与毛利的占比，并识别更赚钱的产品。</p>
+            </div>
+            <span class="badge bg-light text-primary align-self-center px-3 py-2">统计口径：已发货订单</span>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-body">
+        <div class="row g-3 align-items-end">
+            <div class="col-sm-4 col-lg-2">
+                <label class="form-label">统计周期</label>
+                <select id="analyticsRange" class="form-select" onchange="toggleAnalyticsRange()">
+                    <option value="month">按月</option>
+                    <option value="year">按年</option>
+                    <option value="all">全部</option>
+                </select>
+            </div>
+            <div class="col-sm-5 col-lg-3" id="analyticsMonthWrap">
+                <label class="form-label">选择月份</label>
+                <input type="month" id="analyticsMonth" class="form-control">
+            </div>
+            <div class="col-sm-5 col-lg-3 d-none" id="analyticsYearWrap">
+                <label class="form-label">选择年份</label>
+                <input type="number" id="analyticsYear" class="form-control" min="2000" max="2100" step="1">
+            </div>
+            <div class="col-sm-3 col-lg-2">
+                <button type="button" class="btn btn-primary w-100" onclick="loadAnalytics()">
+                    <i class="bi bi-search"></i> 查询
+                </button>
+            </div>
+            <div class="col-lg-5 text-lg-end">
+                <span class="text-muted">当前统计范围：</span>
+                <strong id="analyticsScopeLabel" class="text-primary">本月</strong>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div id="analyticsError" class="alert alert-danger d-none"></div>
+
+<div class="row g-3 mb-4">
+    <div class="col-sm-6 col-xl-3">
+        <div class="card analytics-kpi" style="--accent:#0d6efd;">
+            <div class="card-body">
+                <div class="kpi-label">收入</div>
+                <div class="kpi-value text-primary" id="analyticsRevenue">¥0.00</div>
+                <div class="kpi-note"><span id="analyticsOrders">0</span> 个订单，销量 <span id="analyticsQuantity">0</span></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card analytics-kpi" style="--accent:#f59e0b;">
+            <div class="card-body">
+                <div class="kpi-label">材料成本</div>
+                <div class="kpi-value text-warning" id="analyticsCost">¥0.00</div>
+                <div class="kpi-note">收入占比 <strong id="analyticsCostRatio">0%</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card analytics-kpi" style="--accent:#198754;">
+            <div class="card-body">
+                <div class="kpi-label">毛利</div>
+                <div class="kpi-value text-success" id="analyticsProfit">¥0.00</div>
+                <div class="kpi-note">毛利率 <strong id="analyticsProfitMargin">0%</strong></div>
+            </div>
+        </div>
+    </div>
+    <div class="col-sm-6 col-xl-3">
+        <div class="card analytics-kpi" style="--accent:#6f42c1;">
+            <div class="card-body">
+                <div class="kpi-label">最赚钱产品</div>
+                <div class="kpi-value text-truncate" id="analyticsTopProduct" title="">暂无</div>
+                <div class="kpi-note">毛利 <strong id="analyticsTopProfit">¥0.00</strong></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header"><strong><i class="bi bi-pie-chart"></i> 当前范围收入构成</strong></div>
+            <div class="card-body">
+                <div class="d-flex justify-content-between mb-2">
+                    <span><span class="d-inline-block rounded-circle bg-warning" style="width:10px;height:10px;"></span> 材料成本：<strong id="analyticsCostShareText">0%</strong></span>
+                    <span><span class="d-inline-block rounded-circle bg-success" style="width:10px;height:10px;"></span> 毛利：<strong id="analyticsProfitShareText">0%</strong></span>
+                </div>
+                <div class="composition-bar">
+                    <div id="analyticsCostBar" class="composition-cost" style="width:0%;"></div>
+                    <div id="analyticsProfitBar" class="composition-profit" style="width:0%;"></div>
+                </div>
+                <div id="analyticsLossHint" class="alert alert-danger mt-3 mb-0 d-none">
+                    当前范围材料成本高于收入，毛利为负数，请重点核查产品售价和原材料成本。
+                </div>
+                <div class="text-muted small mt-3">成本占比 + 毛利率正常应为 100%；若成本单价未维护，成本可能被低估。</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-lg-4">
+        <div class="card profit-champion">
+            <div class="card-body">
+                <div class="text-success fw-semibold mb-2"><i class="bi bi-trophy"></i> 利润冠军</div>
+                <h5 class="mb-1 text-truncate" id="analyticsChampionName">暂无数据</h5>
+                <div class="small text-muted mb-3" id="analyticsChampionSpec">-</div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <div class="small text-muted">毛利额</div>
+                        <div class="fw-bold fs-5 text-success" id="analyticsChampionProfit">¥0.00</div>
+                    </div>
+                    <div class="col-6">
+                        <div class="small text-muted">毛利率</div>
+                        <div class="fw-bold fs-5" id="analyticsChampionMargin">0%</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <strong><i class="bi bi-calendar3"></i> 每期收入、成本与毛利</strong>
+        <span class="text-muted small">显示所有已有发货数据的月份</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-striped table-hover analytics-table mb-0">
+            <thead>
+                <tr>
+                    <th>月份</th>
+                    <th>收入</th>
+                    <th>材料成本</th>
+                    <th>毛利</th>
+                    <th>成本占比</th>
+                    <th>毛利率</th>
+                    <th>订单数</th>
+                    <th>销量</th>
+                </tr>
+            </thead>
+            <tbody id="analyticsMonthlyBody">
+                <tr><td colspan="8" class="text-center text-muted py-4">正在加载...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="card mb-4">
+    <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+        <strong><i class="bi bi-bar-chart-line"></i> 多产品盈利排行</strong>
+        <span class="text-muted small">按毛利额从高到低排序</span>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover analytics-table mb-0">
+            <thead>
+                <tr>
+                    <th>排名</th>
+                    <th>产品</th>
+                    <th>销量</th>
+                    <th>收入</th>
+                    <th>材料成本</th>
+                    <th>毛利</th>
+                    <th>毛利率</th>
+                    <th>利润贡献</th>
+                </tr>
+            </thead>
+            <tbody id="analyticsProductBody">
+                <tr><td colspan="8" class="text-center text-muted py-4">正在加载...</td></tr>
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="alert alert-light border">
+    <strong><i class="bi bi-info-circle"></i> 计算说明：</strong>
+    收入 = 订单明细数量 × 下单单价；材料成本 = 订单 BOM 快照用量 × 当前原材料单价。
+    历史订单没有 BOM 快照时按当前产品 BOM 估算；未维护原材料单价时成本可能为 0。
+    此处“毛利”仅扣除材料成本，不包含人工、运费、税费、设备折旧等费用。
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+    function currentAnalyticsMonth() {
+        var now = new Date();
+        return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+    }
+
+    function toggleAnalyticsRange() {
+        var range = $('#analyticsRange').val();
+        $('#analyticsMonthWrap').toggleClass('d-none', range !== 'month');
+        $('#analyticsYearWrap').toggleClass('d-none', range !== 'year');
+    }
+
+    function escapeAnalyticsHtml(value) {
+        return $('<div>').text(value == null ? '' : String(value)).html();
+    }
+
+    function formatAnalyticsMoney(value) {
+        var number = Number(value || 0);
+        return '¥' + number.toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+    }
+
+    function formatAnalyticsPercent(value) {
+        return Number(value || 0).toFixed(2) + '%';
+    }
+
+    function formatAnalyticsQuantity(value, unit) {
+        var number = Number(value || 0);
+        return number.toLocaleString('zh-CN', {maximumFractionDigits: 3}) + (unit || '');
+    }
+
+    function loadAnalytics() {
+        var range = $('#analyticsRange').val();
+        var params = {range: range};
+        if (range === 'month') {
+            params.month = $('#analyticsMonth').val() || currentAnalyticsMonth();
+        } else if (range === 'year') {
+            params.month = ($('#analyticsYear').val() || new Date().getFullYear()) + '-01';
+        }
+
+        $('#analyticsError').addClass('d-none').text('');
+        $.ajax({
+            url: '/api/analytics',
+            method: 'GET',
+            data: params,
+            dataType: 'json'
+        }).done(function (data) {
+            renderAnalytics(data || {});
+        }).fail(function (xhr) {
+            var message = '数据分析加载失败';
+            if (xhr.responseJSON && xhr.responseJSON.error) {
+                message = xhr.responseJSON.error;
+            }
+            $('#analyticsError').removeClass('d-none').text(message);
+        });
+    }
+
+    function renderAnalytics(data) {
+        var summary = data.summary || {};
+        var products = data.products || [];
+        var monthly = (data.monthly || []).slice().reverse();
+
+        $('#analyticsScopeLabel').text((data.scope && data.scope.label) || '当前范围');
+        $('#analyticsRevenue').text(formatAnalyticsMoney(summary.revenue));
+        $('#analyticsCost').text(formatAnalyticsMoney(summary.cost));
+        $('#analyticsProfit').text(formatAnalyticsMoney(summary.profit));
+        $('#analyticsCostRatio').text(formatAnalyticsPercent(summary.cost_ratio));
+        $('#analyticsProfitMargin').text(formatAnalyticsPercent(summary.profit_margin));
+        $('#analyticsOrders').text(Number(summary.order_count || 0).toLocaleString('zh-CN'));
+        $('#analyticsQuantity').text(Number(summary.quantity || 0).toLocaleString('zh-CN', {maximumFractionDigits: 3}));
+
+        var costShare = Math.max(0, Math.min(100, Number(summary.cost_ratio || 0)));
+        var profitShare = Math.max(0, Math.min(100, Number(summary.profit_margin || 0)));
+        if (Number(summary.profit || 0) < 0) {
+            costShare = 100;
+            profitShare = 0;
+            $('#analyticsLossHint').removeClass('d-none');
+        } else {
+            $('#analyticsLossHint').addClass('d-none');
+        }
+        $('#analyticsCostBar').css('width', costShare + '%');
+        $('#analyticsProfitBar').css('width', profitShare + '%');
+        $('#analyticsCostShareText').text(formatAnalyticsPercent(summary.cost_ratio));
+        $('#analyticsProfitShareText').text(formatAnalyticsPercent(summary.profit_margin));
+
+        var champion = products.length ? products[0] : null;
+        if (champion) {
+            var championName = champion.product_name || ('产品#' + champion.product_id);
+            $('#analyticsTopProduct').text(championName).attr('title', championName);
+            $('#analyticsTopProfit').text(formatAnalyticsMoney(champion.profit));
+            $('#analyticsChampionName').text(championName);
+            $('#analyticsChampionSpec').text((champion.spec ? champion.spec + ' · ' : '') + '销量 ' + formatAnalyticsQuantity(champion.quantity, champion.unit));
+            $('#analyticsChampionProfit').text(formatAnalyticsMoney(champion.profit));
+            $('#analyticsChampionMargin').text(formatAnalyticsPercent(champion.profit_margin));
+        } else {
+            $('#analyticsTopProduct').text('暂无').attr('title', '');
+            $('#analyticsTopProfit').text('¥0.00');
+            $('#analyticsChampionName').text('暂无数据');
+            $('#analyticsChampionSpec').text('-');
+            $('#analyticsChampionProfit').text('¥0.00');
+            $('#analyticsChampionMargin').text('0.00%');
+        }
+
+        renderAnalyticsMonthly(monthly);
+        renderAnalyticsProducts(products);
+    }
+
+    function renderAnalyticsMonthly(rows) {
+        var html = '';
+        rows.forEach(function (row) {
+            var profitClass = Number(row.profit) < 0 ? 'text-danger' : 'text-success';
+            html += '<tr>' +
+                '<td><strong>' + escapeAnalyticsHtml(row.period) + '</strong></td>' +
+                '<td>' + formatAnalyticsMoney(row.revenue) + '</td>' +
+                '<td>' + formatAnalyticsMoney(row.cost) + '</td>' +
+                '<td class="' + profitClass + ' fw-semibold">' + formatAnalyticsMoney(row.profit) + '</td>' +
+                '<td><span class="badge bg-warning text-dark">' + formatAnalyticsPercent(row.cost_ratio) + '</span></td>' +
+                '<td><span class="badge ' + (Number(row.profit_margin) < 0 ? 'bg-danger' : 'bg-success') + '">' + formatAnalyticsPercent(row.profit_margin) + '</span></td>' +
+                '<td>' + Number(row.order_count || 0) + '</td>' +
+                '<td>' + Number(row.quantity || 0).toLocaleString('zh-CN', {maximumFractionDigits: 3}) + '</td>' +
+            '</tr>';
+        });
+        if (!html) {
+            html = '<tr><td colspan="8" class="text-center text-muted py-4">暂无已发货订单数据</td></tr>';
+        }
+        $('#analyticsMonthlyBody').html(html);
+    }
+
+    function renderAnalyticsProducts(products) {
+        var html = '';
+        products.forEach(function (product, index) {
+            var name = product.product_name || ('产品#' + product.product_id);
+            var spec = product.spec ? '<div class="small text-muted">' + escapeAnalyticsHtml(product.spec) + '</div>' : '';
+            var profitClass = Number(product.profit) < 0 ? 'text-danger' : 'text-success';
+            var topBadge = index === 0 ? ' <span class="badge bg-warning text-dark">最赚钱</span>' : '';
+            html += '<tr class="' + (index === 0 ? 'table-success' : '') + '">' +
+                '<td><span class="rank-badge ' + (index === 0 ? 'top' : '') + '">' + (index + 1) + '</span></td>' +
+                '<td><div class="fw-semibold">' + escapeAnalyticsHtml(name) + topBadge + '</div>' + spec + '</td>' +
+                '<td>' + formatAnalyticsQuantity(product.quantity, product.unit) + '</td>' +
+                '<td>' + formatAnalyticsMoney(product.revenue) + '</td>' +
+                '<td>' + formatAnalyticsMoney(product.cost) + '</td>' +
+                '<td class="' + profitClass + ' fw-semibold">' + formatAnalyticsMoney(product.profit) + '</td>' +
+                '<td><span class="badge ' + (Number(product.profit_margin) < 0 ? 'bg-danger' : 'bg-success') + '">' + formatAnalyticsPercent(product.profit_margin) + '</span></td>' +
+                '<td>' + formatAnalyticsPercent(product.profit_share) + '</td>' +
+            '</tr>';
+        });
+        if (!html) {
+            html = '<tr><td colspan="8" class="text-center text-muted py-4">当前范围暂无产品盈利数据</td></tr>';
+        }
+        $('#analyticsProductBody').html(html);
+    }
+
+    $(function () {
+        var month = currentAnalyticsMonth();
+        $('#analyticsMonth').val(month);
+        $('#analyticsYear').val(month.slice(0, 4));
+        toggleAnalyticsRange();
+        loadAnalytics();
+    });
+</script>
+{{end}}

@@ -62,6 +62,7 @@
     .home-card .card.bg-warning .card-title i   { background: linear-gradient(135deg, #fd7e14, #ffc107); }
     .home-card .card.bg-secondary .card-title i { background: linear-gradient(135deg, #6c757d, #adb5bd); }
     .home-card .card.bg-primary .card-title i   { background: linear-gradient(135deg, #4e5cc4, #7b5dd6); }
+    .home-card .card.bg-dark .card-title i      { background: linear-gradient(135deg, #334155, #0f766e); }
 
     /* “进入”按钮：半透明玻璃按钮 */
     .home-card .card .btn-light {
@@ -86,7 +87,7 @@
         color: rgba(255, 255, 255, 0.72) !important;
     }
 </style>
-{{if .CanAny "order:view_all" "order:view_own" "product:view" "material:view" "purchase:view" "customer:view"}}
+{{if .CanAny "order:view_all" "order:view_own" "product:view" "material:view" "purchase:view" "customer:view" "analytics:view"}}
 <div class="row home-card">
     {{if .CanAny "order:view_all" "order:view_own"}}
     <div class="col-md-4">
@@ -139,6 +140,17 @@
                 <h5 class="card-title"><i class="bi bi-people"></i> 客户管理</h5>
                 <p class="card-text">维护客户资料与联系方式</p>
                 <a href="/customers" class="btn btn-light btn-sm">进入 <i class="bi bi-arrow-right"></i></a>
+            </div>
+        </div>
+    </div>
+    {{end}}
+    {{if .Can "analytics:view"}}
+    <div class="col-md-4">
+        <div class="card bg-dark text-white mb-3">
+            <div class="card-body">
+                <h5 class="card-title"><i class="bi bi-graph-up-arrow"></i> 数据分析</h5>
+                <p class="card-text">查看每期成本、毛利占比和多产品盈利排行</p>
+                <a href="/analytics" class="btn btn-light btn-sm">进入 <i class="bi bi-arrow-right"></i></a>
             </div>
         </div>
     </div>

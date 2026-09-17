@@ -135,7 +135,8 @@ var PERM_MODULES = [
     { key: 'product', name: '库存管理', view: 'product:view', edits: ['product:manage'] },
     { key: 'material', name: '原材料管理', view: 'material:view', edits: ['material:manage'] },
     { key: 'purchase', name: '采购物料管理', view: 'purchase:view', edits: ['purchase:manage'] },
-    { key: 'customer', name: '客户管理', view: 'customer:view', edits: ['customer:manage'] }
+    { key: 'customer', name: '客户管理', view: 'customer:view', edits: ['customer:manage'] },
+    { key: 'analytics', name: '数据分析', view: 'analytics:view', edits: [], viewOnly: true }
 ];
 
 // 订单管理授权档位（范围式：查看范围 x 编辑范围）
@@ -176,10 +177,13 @@ function moduleRowsHtml(prefix, perms) {
         }
         var view = !!has[m.view];
         var edit = m.edits.some(function (p) { return has[p]; });
+        var editCell = m.viewOnly
+            ? '<span class="text-muted">—</span>'
+            : `<input type="checkbox" class="perm-edit" id="${prefix}_edit_${m.key}" data-prefix="${prefix}" data-module="${m.key}" ${edit ? 'checked' : ''}>`;
         rows += `<tr>
             <td>${m.name}</td>
             <td><input type="checkbox" id="${prefix}_view_${m.key}" ${view ? 'checked' : ''}></td>
-            <td><input type="checkbox" class="perm-edit" id="${prefix}_edit_${m.key}" data-prefix="${prefix}" data-module="${m.key}" ${edit ? 'checked' : ''}></td>
+            <td>${editCell}</td>
         </tr>`;
     });
     return `<table class="table table-sm table-bordered align-middle mb-0"><thead><tr><th>模块</th><th style="width:90px">查看</th><th style="width:90px">编辑</th></tr></thead><tbody>${rows}</tbody></table>`;
@@ -199,7 +203,7 @@ function collectPerms(prefix) {
             return;
         }
         var view = $('#' + prefix + '_view_' + m.key).prop('checked');
-        var edit = $('#' + prefix + '_edit_' + m.key).prop('checked');
+        var edit = !m.viewOnly && $('#' + prefix + '_edit_' + m.key).prop('checked');
         if (edit) {
             list.push(m.view);
             m.edits.forEach(function (p) { list.push(p); });

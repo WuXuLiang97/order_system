@@ -116,6 +116,11 @@
                         <a class="nav-link" href="/customers"><i class="bi bi-people"></i> 客户管理</a>
                     </li>
                     {{end}}
+                    {{if .Can "analytics:view"}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/analytics"><i class="bi bi-graph-up-arrow"></i> 数据分析</a>
+                    </li>
+                    {{end}}
                     {{if .Can "user:manage"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/users"><i class="bi bi-people"></i> 用户管理</a>

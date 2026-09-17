@@ -40,6 +40,7 @@ const (
 	PermPurchaseManage = "purchase:manage"
 	PermCustomerView   = "customer:view"
 	PermCustomerManage = "customer:manage"
+	PermAnalyticsView  = "analytics:view"
 	PermUserManage     = "user:manage"
 )
 
@@ -50,6 +51,7 @@ var allPermissions = []string{
 	PermMaterialView, PermMaterialManage,
 	PermPurchaseView, PermPurchaseManage,
 	PermCustomerView, PermCustomerManage,
+	PermAnalyticsView,
 	PermUserManage,
 }
 
@@ -61,6 +63,7 @@ var grantableGroups = [][]string{
 	{PermMaterialView, PermMaterialManage},
 	{PermPurchaseView, PermPurchaseManage},
 	{PermCustomerView, PermCustomerManage},
+	{PermAnalyticsView},
 }
 
 // NormalizeGrantedPermissions 校验并规整授权列表：只允许授予 grantableGroups 内的权限；
