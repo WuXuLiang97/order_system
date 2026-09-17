@@ -3,13 +3,15 @@ package models
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
 	"strings"
 	"time"
 )
 
-// PurchaseMaterial 采购物料
+// PurchaseMaterial 采购单中的一条物料明细。
 type PurchaseMaterial struct {
 	ID                  int        `json:"id"`
+	PurchaseOrderID     int        `json:"purchase_order_id"`
 	MaterialName        string     `json:"material_name"`
 	MaterialType        string     `json:"material_type"`
 	Spec                string     `json:"spec"`
@@ -30,6 +32,26 @@ type PurchaseMaterial struct {
 	CreatedAt           time.Time  `json:"created_at"`
 }
 
+// PurchaseOrder 采购单主表，一张采购单可以包含多条物料明细。
+type PurchaseOrder struct {
+	ID                  int                `json:"id"`
+	PurchaseNo          string             `json:"purchase_no"`
+	Supplier            string             `json:"supplier"`
+	Freight             float64            `json:"freight"`
+	PurchaseDate        *time.Time         `json:"purchase_date"`
+	ExpectedArrivalDate *time.Time         `json:"expected_arrival_date"`
+	ActualArrivalDate   *time.Time         `json:"actual_arrival_date"`
+	PaymentStatus       string             `json:"payment_status"`
+	Status              int                `json:"status"`
+	Remark              string             `json:"remark"`
+	PaymentReceipts     []string           `json:"payment_receipts"`
+	CreatedAt           time.Time          `json:"created_at"`
+	Items               []PurchaseMaterial `json:"items"`
+	TotalAmount         float64            `json:"total_amount"`
+	TotalQuantity       float64            `json:"total_quantity"`
+	ItemCount           int                `json:"item_count"`
+}
+
 func parsePaymentReceipts(raw string) []string {
 	if raw == "" {
 		return []string{}
@@ -44,11 +66,12 @@ func parsePaymentReceipts(raw string) []string {
 	return urls
 }
 
-// EnsurePurchaseMaterialsTable 创建采购物料表（如果不存在）
+// EnsurePurchaseMaterialsTable 创建采购物料明细表（如果不存在）。
 func EnsurePurchaseMaterialsTable() error {
 	_, err := DB.Exec(`
         CREATE TABLE IF NOT EXISTS purchase_materials (
-            id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料ID',
+            id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料明细ID',
+            purchase_order_id      INT NULL COMMENT '采购单ID',
             material_name         VARCHAR(100) NOT NULL COMMENT '物料名称',
             material_type         VARCHAR(20)  NOT NULL DEFAULT '原材料' COMMENT '物料类型',
             spec                  VARCHAR(100) NOT NULL DEFAULT '' COMMENT '规格型号',
@@ -60,14 +83,19 @@ func EnsurePurchaseMaterialsTable() error {
             freight               DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '运费',
             purchase_date         DATE NULL COMMENT '采购日期',
             expected_arrival_date DATE NULL COMMENT '预计到货日期',
+            actual_arrival_date   DATE NULL COMMENT '实际到货日期',
             status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货',
+            payment_status        VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
             remark                TEXT COMMENT '备注',
             payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
             stock_added           TINYINT NOT NULL DEFAULT 0 COMMENT '是否已加入原材料库存',
             created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
-        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料表'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料明细表'
     `)
 	if err != nil {
+		return err
+	}
+	if err := ensureColumn("purchase_materials", "purchase_order_id", "INT NULL COMMENT '采购单ID'"); err != nil {
 		return err
 	}
 	if err := ensureColumn("purchase_materials", "actual_arrival_date", "DATE NULL"); err != nil {
@@ -76,7 +104,130 @@ func EnsurePurchaseMaterialsTable() error {
 	if err := ensureColumn("purchase_materials", "payment_status", "VARCHAR(20) NOT NULL DEFAULT '未付款'"); err != nil {
 		return err
 	}
-	return ensurePaymentReceiptColumnText()
+	if err := ensurePaymentReceiptColumnText(); err != nil {
+		return err
+	}
+	return ensureIndex("purchase_materials", "idx_purchase_material_order_id", "purchase_order_id")
+}
+
+// EnsurePurchaseOrdersTable 创建采购单主表，并把旧的单条采购记录迁移成单明细采购单。
+func EnsurePurchaseOrdersTable() error {
+	_, err := DB.Exec(`
+        CREATE TABLE IF NOT EXISTS purchase_orders (
+            id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购单ID',
+            purchase_no           VARCHAR(32) NOT NULL UNIQUE COMMENT '采购单号',
+            supplier              VARCHAR(100) NOT NULL DEFAULT '' COMMENT '供应商',
+            freight               DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '运费',
+            purchase_date         DATE NULL COMMENT '采购日期',
+            expected_arrival_date DATE NULL COMMENT '预计到货日期',
+            actual_arrival_date   DATE NULL COMMENT '实际到货日期',
+            payment_status        VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
+            status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货',
+            remark                TEXT COMMENT '备注',
+            payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
+            created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购单主表'
+    `)
+	if err != nil {
+		return err
+	}
+	return migrateLegacyPurchaseMaterials()
+}
+
+// migrateLegacyPurchaseMaterials 将新增 purchase_order_id 前的旧采购记录逐条迁移成采购单。
+func migrateLegacyPurchaseMaterials() error {
+	type legacyRow struct {
+		ID                  int
+		MaterialName        string
+		MaterialType        string
+		Spec                string
+		Unit                string
+		Quantity            float64
+		Price               float64
+		Amount              float64
+		Supplier            string
+		Freight             float64
+		PurchaseDate        sql.NullTime
+		ExpectedArrivalDate sql.NullTime
+		ActualArrivalDate   sql.NullTime
+		PaymentStatus       string
+		Status              int
+		Remark              string
+		PaymentReceipt      string
+		CreatedAt           time.Time
+	}
+
+	rows, err := DB.Query(`
+        SELECT id, material_name, material_type, spec, unit, quantity, price, amount,
+               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
+               COALESCE(payment_status, '未付款'), status, COALESCE(remark, ''),
+               COALESCE(payment_receipt, ''), created_at
+        FROM purchase_materials
+        WHERE purchase_order_id IS NULL OR purchase_order_id = 0
+        ORDER BY id ASC
+    `)
+	if err != nil {
+		return err
+	}
+	var legacy []legacyRow
+	for rows.Next() {
+		var item legacyRow
+		if err := rows.Scan(
+			&item.ID, &item.MaterialName, &item.MaterialType, &item.Spec, &item.Unit,
+			&item.Quantity, &item.Price, &item.Amount, &item.Supplier, &item.Freight,
+			&item.PurchaseDate, &item.ExpectedArrivalDate, &item.ActualArrivalDate,
+			&item.PaymentStatus, &item.Status, &item.Remark, &item.PaymentReceipt, &item.CreatedAt,
+		); err != nil {
+			rows.Close()
+			return err
+		}
+		legacy = append(legacy, item)
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+	if len(legacy) == 0 {
+		return nil
+	}
+
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	for _, item := range legacy {
+		datePart := item.CreatedAt.Format("20060102")
+		if item.PurchaseDate.Valid {
+			datePart = item.PurchaseDate.Time.Format("20060102")
+		}
+		purchaseNo := fmt.Sprintf("CG%s-%05d", datePart, item.ID)
+		result, err := tx.Exec(`
+            INSERT INTO purchase_orders
+                (purchase_no, supplier, freight, purchase_date, expected_arrival_date,
+                 actual_arrival_date, payment_status, status, remark, payment_receipt, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, purchaseNo, item.Supplier, item.Freight, nullableTime(item.PurchaseDate), nullableTime(item.ExpectedArrivalDate),
+			nullableTime(item.ActualArrivalDate), item.PaymentStatus, item.Status, item.Remark, item.PaymentReceipt, item.CreatedAt)
+		if err != nil {
+			return err
+		}
+		orderID, err := result.LastInsertId()
+		if err != nil {
+			return err
+		}
+		if _, err := tx.Exec("UPDATE purchase_materials SET purchase_order_id = ? WHERE id = ?", orderID, item.ID); err != nil {
+			return err
+		}
+	}
+	return tx.Commit()
+}
+
+func nullableTime(value sql.NullTime) interface{} {
+	if !value.Valid {
+		return nil
+	}
+	return value.Time
 }
 
 // ensurePaymentReceiptColumnText 兼容旧版本：将支付水单字段从 VARCHAR 升级为 TEXT。
@@ -99,83 +250,204 @@ func ensurePaymentReceiptColumnText() error {
 	return err
 }
 
-// GetAllPurchaseMaterials 获取所有采购物料
-func GetAllPurchaseMaterials() ([]PurchaseMaterial, error) {
+// GetAllPurchaseOrders 获取所有采购单，按采购日期倒序排列，最新采购单在最上方。
+func GetAllPurchaseOrders() ([]PurchaseOrder, error) {
 	rows, err := DB.Query(`
-        SELECT id, material_name, material_type, spec, unit, quantity, price, amount,
-               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date, payment_status, status,
-               COALESCE(remark, '') AS remark, COALESCE(payment_receipt, '') AS payment_receipt,
-               stock_added, created_at
-        FROM purchase_materials
-        ORDER BY id DESC
+        SELECT po.id, po.purchase_no, po.supplier, po.freight, po.purchase_date,
+               po.expected_arrival_date, po.actual_arrival_date, po.payment_status,
+               po.status, COALESCE(po.remark, ''), COALESCE(po.payment_receipt, ''), po.created_at,
+               COALESCE((SELECT SUM(pm.amount) FROM purchase_materials pm WHERE pm.purchase_order_id = po.id), 0),
+               COALESCE((SELECT SUM(pm.quantity) FROM purchase_materials pm WHERE pm.purchase_order_id = po.id), 0),
+               (SELECT COUNT(*) FROM purchase_materials pm WHERE pm.purchase_order_id = po.id)
+        FROM purchase_orders po
+        ORDER BY po.purchase_date DESC, po.id DESC
     `)
+	if err != nil {
+		return nil, err
+	}
+	var orders []PurchaseOrder
+	for rows.Next() {
+		order, err := scanPurchaseOrder(rows)
+		if err != nil {
+			rows.Close()
+			return nil, err
+		}
+		orders = append(orders, *order)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := attachPurchaseItems(orders); err != nil {
+		return nil, err
+	}
+	return orders, nil
+}
+
+// GetPurchaseOrderByID 获取一张采购单及其全部物料明细。
+func GetPurchaseOrderByID(id int) (*PurchaseOrder, error) {
+	row := DB.QueryRow(`
+        SELECT po.id, po.purchase_no, po.supplier, po.freight, po.purchase_date,
+               po.expected_arrival_date, po.actual_arrival_date, po.payment_status,
+               po.status, COALESCE(po.remark, ''), COALESCE(po.payment_receipt, ''), po.created_at,
+               COALESCE((SELECT SUM(pm.amount) FROM purchase_materials pm WHERE pm.purchase_order_id = po.id), 0),
+               COALESCE((SELECT SUM(pm.quantity) FROM purchase_materials pm WHERE pm.purchase_order_id = po.id), 0),
+               (SELECT COUNT(*) FROM purchase_materials pm WHERE pm.purchase_order_id = po.id)
+        FROM purchase_orders po
+        WHERE po.id = ?
+    `, id)
+	order, err := scanPurchaseOrder(row)
+	if err != nil {
+		return nil, err
+	}
+	items, err := getPurchaseItemsByOrderID(id)
+	if err != nil {
+		return nil, err
+	}
+	order.Items = items
+	return order, nil
+}
+
+type purchaseOrderScanner interface {
+	Scan(dest ...interface{}) error
+}
+
+func scanPurchaseOrder(scanner purchaseOrderScanner) (*PurchaseOrder, error) {
+	var order PurchaseOrder
+	var purchaseDate, expectedDate, actualDate sql.NullTime
+	var receiptRaw string
+	if err := scanner.Scan(
+		&order.ID, &order.PurchaseNo, &order.Supplier, &order.Freight, &purchaseDate,
+		&expectedDate, &actualDate, &order.PaymentStatus, &order.Status, &order.Remark,
+		&receiptRaw, &order.CreatedAt, &order.TotalAmount, &order.TotalQuantity, &order.ItemCount,
+	); err != nil {
+		return nil, err
+	}
+	if purchaseDate.Valid {
+		order.PurchaseDate = &purchaseDate.Time
+	}
+	if expectedDate.Valid {
+		order.ExpectedArrivalDate = &expectedDate.Time
+	}
+	if actualDate.Valid {
+		order.ActualArrivalDate = &actualDate.Time
+	}
+	order.PaymentReceipts = parsePaymentReceipts(receiptRaw)
+	order.Items = []PurchaseMaterial{}
+	return &order, nil
+}
+
+func attachPurchaseItems(orders []PurchaseOrder) error {
+	if len(orders) == 0 {
+		return nil
+	}
+	rows, err := DB.Query(`
+        SELECT id, purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
+               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
+               payment_status, status, COALESCE(remark, ''), COALESCE(payment_receipt, ''), stock_added, created_at
+        FROM purchase_materials
+        WHERE purchase_order_id IS NOT NULL
+        ORDER BY purchase_order_id ASC, id ASC
+    `)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+
+	itemsByOrder := make(map[int][]PurchaseMaterial)
+	for rows.Next() {
+		item, err := scanPurchaseMaterial(rows)
+		if err != nil {
+			return err
+		}
+		itemsByOrder[item.PurchaseOrderID] = append(itemsByOrder[item.PurchaseOrderID], *item)
+	}
+	if err := rows.Err(); err != nil {
+		return err
+	}
+	for i := range orders {
+		items := itemsByOrder[orders[i].ID]
+		if items == nil {
+			items = []PurchaseMaterial{}
+		}
+		orders[i].Items = items
+	}
+	return nil
+}
+
+func getPurchaseItemsByOrderID(orderID int) ([]PurchaseMaterial, error) {
+	rows, err := DB.Query(`
+        SELECT id, purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
+               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
+               payment_status, status, COALESCE(remark, ''), COALESCE(payment_receipt, ''), stock_added, created_at
+        FROM purchase_materials
+        WHERE purchase_order_id = ?
+        ORDER BY id ASC
+    `, orderID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var list []PurchaseMaterial
+	items := []PurchaseMaterial{}
 	for rows.Next() {
-		var p PurchaseMaterial
-		var purchaseDate sql.NullTime
-		var expectedDate sql.NullTime
-		var actualDate sql.NullTime
-		var paymentReceiptRaw string
-		err := rows.Scan(&p.ID, &p.MaterialName, &p.MaterialType, &p.Spec, &p.Unit,
-			&p.Quantity, &p.Price, &p.Amount, &p.Supplier, &p.Freight,
-			&purchaseDate, &expectedDate, &actualDate, &p.PaymentStatus, &p.Status, &p.Remark, &paymentReceiptRaw,
-			&p.StockAdded, &p.CreatedAt)
+		item, err := scanPurchaseMaterial(rows)
 		if err != nil {
 			return nil, err
 		}
-		if purchaseDate.Valid {
-			p.PurchaseDate = &purchaseDate.Time
-		}
-		if expectedDate.Valid {
-			p.ExpectedArrivalDate = &expectedDate.Time
-		}
-		if actualDate.Valid {
-			p.ActualArrivalDate = &actualDate.Time
-		}
-		p.PaymentReceipts = parsePaymentReceipts(paymentReceiptRaw)
-		list = append(list, p)
+		items = append(items, *item)
 	}
-	return list, nil
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-// GetPurchaseMaterialByID 获取单个采购物料
-func GetPurchaseMaterialByID(id int) (*PurchaseMaterial, error) {
-	var p PurchaseMaterial
-	var purchaseDate sql.NullTime
-	var expectedDate sql.NullTime
-	var actualDate sql.NullTime
-	var paymentReceiptRaw string
-	err := DB.QueryRow(`
-        SELECT id, material_name, material_type, spec, unit, quantity, price, amount,
-               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date, payment_status, status,
-               COALESCE(remark, '') AS remark, COALESCE(payment_receipt, '') AS payment_receipt,
-               stock_added, created_at
-        FROM purchase_materials
-        WHERE id = ?
-    `, id).Scan(&p.ID, &p.MaterialName, &p.MaterialType, &p.Spec, &p.Unit,
-		&p.Quantity, &p.Price, &p.Amount, &p.Supplier, &p.Freight,
-		&purchaseDate, &expectedDate, &actualDate, &p.PaymentStatus, &p.Status, &p.Remark, &paymentReceiptRaw,
-		&p.StockAdded, &p.CreatedAt)
-	if err != nil {
+func scanPurchaseMaterial(scanner purchaseOrderScanner) (*PurchaseMaterial, error) {
+	var item PurchaseMaterial
+	var purchaseDate, expectedDate, actualDate sql.NullTime
+	var receiptRaw string
+	if err := scanner.Scan(
+		&item.ID, &item.PurchaseOrderID, &item.MaterialName, &item.MaterialType, &item.Spec, &item.Unit,
+		&item.Quantity, &item.Price, &item.Amount, &item.Supplier, &item.Freight,
+		&purchaseDate, &expectedDate, &actualDate, &item.PaymentStatus, &item.Status,
+		&item.Remark, &receiptRaw, &item.StockAdded, &item.CreatedAt,
+	); err != nil {
 		return nil, err
 	}
 	if purchaseDate.Valid {
-		p.PurchaseDate = &purchaseDate.Time
+		item.PurchaseDate = &purchaseDate.Time
 	}
 	if expectedDate.Valid {
-		p.ExpectedArrivalDate = &expectedDate.Time
+		item.ExpectedArrivalDate = &expectedDate.Time
 	}
-	p.PaymentReceipts = parsePaymentReceipts(paymentReceiptRaw)
-	return &p, nil
+	if actualDate.Valid {
+		item.ActualArrivalDate = &actualDate.Time
+	}
+	item.PaymentReceipts = parsePaymentReceipts(receiptRaw)
+	return &item, nil
 }
 
-// DeletePurchaseMaterial 删除采购物料
-func DeletePurchaseMaterial(id int) error {
-	_, err := DB.Exec("DELETE FROM purchase_materials WHERE id = ?", id)
-	return err
+// DeletePurchaseOrder 删除一张采购单及其全部明细。
+func DeletePurchaseOrder(id int) error {
+	tx, err := DB.Begin()
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	result, err := tx.Exec("DELETE FROM purchase_orders WHERE id = ?", id)
+	if err != nil {
+		return err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+	if affected == 0 {
+		return sql.ErrNoRows
+	}
+	if _, err := tx.Exec("DELETE FROM purchase_materials WHERE purchase_order_id = ?", id); err != nil {
+		return err
+	}
+	return tx.Commit()
 }

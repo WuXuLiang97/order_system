@@ -23,6 +23,7 @@ DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS raw_materials;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS purchase_materials;
+DROP TABLE IF EXISTS purchase_orders;
 
 -- =============================================
 -- 3. 创建产品表（成品库存）
@@ -55,10 +56,29 @@ CREATE TABLE raw_materials (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='原材料库存表';
 
 -- =============================================
--- 4.5 创建采购物料表
+-- 4.5 创建采购单主表
+-- =============================================
+CREATE TABLE purchase_orders (
+    id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购单ID',
+    purchase_no           VARCHAR(32) NOT NULL UNIQUE COMMENT '采购单号',
+    supplier              VARCHAR(100) NOT NULL DEFAULT '' COMMENT '供应商',
+    freight               DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '运费',
+    purchase_date         DATE NULL COMMENT '采购日期',
+    expected_arrival_date DATE NULL COMMENT '预计到货日期',
+    actual_arrival_date   DATE NULL COMMENT '实际到货日期',
+    payment_status        VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
+    status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货',
+    remark                TEXT COMMENT '备注',
+    payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
+    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购单主表';
+
+-- =============================================
+-- 4.6 创建采购物料明细表
 -- =============================================
 CREATE TABLE purchase_materials (
-    id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料ID',
+    id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料明细ID',
+    purchase_order_id     INT NULL COMMENT '采购单ID',
     material_name         VARCHAR(100) NOT NULL COMMENT '物料名称',
     material_type         VARCHAR(20)  NOT NULL DEFAULT '原材料' COMMENT '物料类型',
     spec                  VARCHAR(100) NOT NULL DEFAULT '' COMMENT '规格型号',
@@ -70,12 +90,15 @@ CREATE TABLE purchase_materials (
     freight               DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '运费',
     purchase_date         DATE NULL COMMENT '采购日期',
     expected_arrival_date DATE NULL COMMENT '预计到货日期',
+    actual_arrival_date   DATE NULL COMMENT '实际到货日期',
     status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货',
+    payment_status        VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
     remark                TEXT COMMENT '备注',
     payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
     stock_added           TINYINT NOT NULL DEFAULT 0 COMMENT '是否已加入原材料库存',
-    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料表';
+    created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
+    INDEX idx_purchase_material_order_id (purchase_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料明细表';
 
 -- =============================================
 -- 5. 创建订单主表

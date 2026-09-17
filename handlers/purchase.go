@@ -31,23 +31,39 @@ var purchaseMaterialTypes = map[string]bool{
 	PurchaseMaterialTypeEquipment:   true,
 }
 
-type purchaseMaterialRequest struct {
-	MaterialName        string   `json:"material_name"`
-	MaterialType        string   `json:"material_type"`
-	Spec                string   `json:"spec"`
-	Unit                string   `json:"unit"`
-	Quantity            float64  `json:"quantity"`
-	Price               float64  `json:"price"`
-	Amount              float64  `json:"amount"`
-	Supplier            string   `json:"supplier"`
-	Freight             float64  `json:"freight"`
-	PurchaseDate        string   `json:"purchase_date"`
-	ExpectedArrivalDate string   `json:"expected_arrival_date"`
-	ActualArrivalDate   string   `json:"actual_arrival_date"`
-	PaymentStatus       string   `json:"payment_status"`
-	Status              int      `json:"status"`
-	Remark              string   `json:"remark"`
-	PaymentReceipts     []string `json:"payment_receipts"`
+type purchaseItemRequest struct {
+	ID           int     `json:"id"`
+	MaterialName string  `json:"material_name"`
+	MaterialType string  `json:"material_type"`
+	Spec         string  `json:"spec"`
+	Unit         string  `json:"unit"`
+	Quantity     float64 `json:"quantity"`
+	Price        float64 `json:"price"`
+}
+
+type purchaseOrderRequest struct {
+	ID                  int                   `json:"id"`
+	Supplier            string                `json:"supplier"`
+	Freight             float64               `json:"freight"`
+	PurchaseDate        string                `json:"purchase_date"`
+	ExpectedArrivalDate string                `json:"expected_arrival_date"`
+	ActualArrivalDate   string                `json:"actual_arrival_date"`
+	PaymentStatus       string                `json:"payment_status"`
+	Status              int                   `json:"status"`
+	Remark              string                `json:"remark"`
+	PaymentReceipts     []string              `json:"payment_receipts"`
+	Items               []purchaseItemRequest `json:"items"`
+}
+
+func parsePurchaseOrderDate(s string) (*time.Time, error) {
+	if strings.TrimSpace(s) == "" {
+		return nil, nil
+	}
+	t, err := time.Parse("2006-01-02", strings.TrimSpace(s))
+	if err != nil {
+		return nil, err
+	}
+	return &t, nil
 }
 
 func parsePurchaseDate(s string) (interface{}, error) {
@@ -60,19 +76,9 @@ func parsePurchaseDate(s string) (interface{}, error) {
 	}
 	return t, nil
 }
-
-func validatePurchaseRequest(req purchaseMaterialRequest) string {
-	if strings.TrimSpace(req.MaterialName) == "" {
-		return "物料名称不能为空"
-	}
-	if !purchaseMaterialTypes[req.MaterialType] {
-		return "物料类型不正确"
-	}
-	if req.Quantity <= 0 {
-		return "采购数量必须大于0"
-	}
-	if req.Price < 0 || req.Freight < 0 {
-		return "单价和运费不能为负数"
+func validatePurchaseOrderRequest(req purchaseOrderRequest) string {
+	if req.Freight < 0 {
+		return "运费不能为负数"
 	}
 	if req.Status != 0 && req.Status != 1 {
 		return "采购状态不正确"
@@ -80,10 +86,44 @@ func validatePurchaseRequest(req purchaseMaterialRequest) string {
 	if req.PaymentStatus != "" && req.PaymentStatus != "未付款" && req.PaymentStatus != "已付款" {
 		return "付款状态不正确"
 	}
+	if len(req.Items) == 0 {
+		return "请至少添加一种采购物料"
+	}
+	for index, item := range req.Items {
+		if strings.TrimSpace(item.MaterialName) == "" {
+			return fmt.Sprintf("第%d行物料名称不能为空", index+1)
+		}
+		if !purchaseMaterialTypes[item.MaterialType] {
+			return fmt.Sprintf("第%d行物料类型不正确", index+1)
+		}
+		if item.Quantity <= 0 {
+			return fmt.Sprintf("第%d行采购数量必须大于0", index+1)
+		}
+		if item.Price < 0 {
+			return fmt.Sprintf("第%d行单价不能为负数", index+1)
+		}
+	}
 	return ""
 }
 
-// addRawMaterialStockTx 根据物料名称和规格型号，将采购数量加入原材料库存。
+func normalizePurchaseOrderRequest(req *purchaseOrderRequest) {
+	req.Supplier = strings.TrimSpace(req.Supplier)
+	req.PaymentStatus = strings.TrimSpace(req.PaymentStatus)
+	if req.PaymentStatus == "" {
+		req.PaymentStatus = "未付款"
+	}
+	req.Remark = strings.TrimSpace(req.Remark)
+	for i := range req.Items {
+		req.Items[i].MaterialName = strings.TrimSpace(req.Items[i].MaterialName)
+		req.Items[i].MaterialType = strings.TrimSpace(req.Items[i].MaterialType)
+		req.Items[i].Spec = strings.TrimSpace(req.Items[i].Spec)
+		req.Items[i].Unit = strings.TrimSpace(req.Items[i].Unit)
+		if req.Items[i].Unit == "" {
+			req.Items[i].Unit = "个"
+		}
+	}
+}
+
 func addRawMaterialStockTx(tx *sql.Tx, name, spec, unit string, quantity, price float64) error {
 	var id int
 	err := tx.QueryRow("SELECT id FROM raw_materials WHERE name = ? AND COALESCE(spec, '') = ? ORDER BY id ASC LIMIT 1", name, spec).Scan(&id)
@@ -98,13 +138,43 @@ func addRawMaterialStockTx(tx *sql.Tx, name, spec, unit string, quantity, price 
 	return err
 }
 
-// ListPurchaseMaterials 获取采购物料列表
+func insertPurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req purchaseOrderRequest,
+	purchaseDate, expectedDate, actualDate *time.Time, receiptJSON string, stockAdded int) error {
+	amount := item.Quantity * item.Price
+	_, err := tx.Exec(`
+        INSERT INTO purchase_materials
+            (purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
+             supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
+             payment_status, status, remark, payment_receipt, stock_added)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, orderID, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
+		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, req.PaymentStatus, req.Status,
+		req.Remark, receiptJSON, stockAdded)
+	return err
+}
+
+func updatePurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req purchaseOrderRequest,
+	purchaseDate, expectedDate, actualDate *time.Time, receiptJSON string, stockAdded int) error {
+	amount := item.Quantity * item.Price
+	_, err := tx.Exec(`
+        UPDATE purchase_materials SET
+            material_name = ?, material_type = ?, spec = ?, unit = ?, quantity = ?, price = ?, amount = ?,
+            supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?, actual_arrival_date = ?,
+            payment_status = ?, status = ?, remark = ?, payment_receipt = ?, stock_added = ?
+        WHERE id = ? AND purchase_order_id = ?
+    `, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
+		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, req.PaymentStatus, req.Status,
+		req.Remark, receiptJSON, stockAdded, item.ID, orderID)
+	return err
+}
+
+// ListPurchaseMaterials 获取采购单列表（接口地址保持不变，返回结构已升级为采购单+明细）。
 func ListPurchaseMaterials(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	list, err := models.GetAllPurchaseMaterials()
+	list, err := models.GetAllPurchaseOrders()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -121,7 +191,6 @@ type purchaseRawMaterialOption struct {
 }
 
 // ListPurchaseRawMaterialOptions 获取采购原材料可索引的名称、规格型号和单位。
-// 该接口只暴露采购表单所需字段，并仅要求采购查看权限。
 func ListPurchaseRawMaterialOptions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -148,7 +217,7 @@ func ListPurchaseRawMaterialOptions(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(options)
 }
 
-// GetPurchaseMaterial 获取单个采购物料
+// GetPurchaseMaterial 获取单张采购单及其明细。
 func GetPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -159,64 +228,57 @@ func GetPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
 	}
-	p, err := models.GetPurchaseMaterialByID(id)
+	order, err := models.GetPurchaseOrderByID(id)
 	if err != nil {
-		http.Error(w, "Purchase material not found", http.StatusNotFound)
+		http.Error(w, "Purchase order not found", http.StatusNotFound)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(p)
+	json.NewEncoder(w).Encode(order)
 }
 
-// AddPurchaseMaterial 添加采购物料
+// AddPurchaseMaterial 新增一张包含多种物料的采购单。
 func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req purchaseMaterialRequest
+	var req purchaseOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if msg := validatePurchaseRequest(req); msg != "" {
+	normalizePurchaseOrderRequest(&req)
+	if msg := validatePurchaseOrderRequest(req); msg != "" {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	paymentStatus := strings.TrimSpace(req.PaymentStatus)
-	if paymentStatus == "" {
-		paymentStatus = "未付款"
-	}
 
-	purchaseDate, err := parsePurchaseDate(req.PurchaseDate)
+	purchaseDate, err := parsePurchaseOrderDate(req.PurchaseDate)
 	if err != nil {
 		http.Error(w, "采购日期格式不正确", http.StatusBadRequest)
 		return
 	}
-	expectedDate, err := parsePurchaseDate(req.ExpectedArrivalDate)
+	expectedDate, err := parsePurchaseOrderDate(req.ExpectedArrivalDate)
 	if err != nil {
 		http.Error(w, "预计到货日期格式不正确", http.StatusBadRequest)
 		return
 	}
-	actualDate, err := parsePurchaseDate(req.ActualArrivalDate)
+	actualDate, err := parsePurchaseOrderDate(req.ActualArrivalDate)
 	if err != nil {
 		http.Error(w, "实际到货日期格式不正确", http.StatusBadRequest)
 		return
 	}
 	if req.Status == 1 && actualDate == nil {
-		actualDate = time.Now()
+		now := time.Now()
+		actualDate = &now
 	}
-
-	amount := req.Quantity * req.Price
-	paymentReceiptJSON, err := json.Marshal(req.PaymentReceipts)
+	receiptJSONBytes, err := json.Marshal(req.PaymentReceipts)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	stockAdded := 0
-	if req.Status == 1 && req.MaterialType == PurchaseMaterialTypeRawMaterial {
-		stockAdded = 1
-	}
+	receiptJSON := string(receiptJSONBytes)
 
 	tx, err := models.DB.Begin()
 	if err != nil {
@@ -225,23 +287,50 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	placeholderNo := fmt.Sprintf("TMP-%d", time.Now().UnixNano())
 	result, err := tx.Exec(`
-        INSERT INTO purchase_materials
-        (material_name, material_type, spec, unit, quantity, price, amount, supplier, freight,
-         purchase_date, expected_arrival_date, actual_arrival_date, payment_status, status, remark, payment_receipt, stock_added)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, req.MaterialName, req.MaterialType, req.Spec, req.Unit, req.Quantity, req.Price, amount,
-		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, paymentStatus, req.Status, req.Remark, string(paymentReceiptJSON), stockAdded)
+        INSERT INTO purchase_orders
+            (purchase_no, supplier, freight, purchase_date, expected_arrival_date,
+             actual_arrival_date, payment_status, status, remark, payment_receipt)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, placeholderNo, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
+		req.PaymentStatus, req.Status, req.Remark, receiptJSON)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	id, _ := result.LastInsertId()
+	orderID64, err := result.LastInsertId()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	orderID := int(orderID64)
 
-	if req.Status == 1 && req.MaterialType == PurchaseMaterialTypeRawMaterial {
-		if err := addRawMaterialStockTx(tx, req.MaterialName, req.Spec, req.Unit, req.Quantity, req.Price); err != nil {
-			http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
+	datePart := time.Now().Format("20060102")
+	if purchaseDate != nil {
+		datePart = purchaseDate.Format("20060102")
+	}
+	purchaseNo := fmt.Sprintf("CG%s-%05d", datePart, orderID)
+	if _, err := tx.Exec("UPDATE purchase_orders SET purchase_no = ? WHERE id = ?", purchaseNo, orderID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, item := range req.Items {
+		stockAdded := 0
+		needAddStock := req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial
+		if needAddStock {
+			stockAdded = 1
+		}
+		if err := insertPurchaseItemTx(tx, orderID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		if needAddStock {
+			if err := addRawMaterialStockTx(tx, item.MaterialName, item.Spec, item.Unit, item.Quantity, item.Price); err != nil {
+				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -253,21 +342,19 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"id":      id,
-		"message": "采购物料添加成功",
+		"id":          orderID,
+		"purchase_no": purchaseNo,
+		"message":     "采购单添加成功",
 	})
 }
 
-// UpdatePurchaseMaterial 更新采购物料
+// UpdatePurchaseMaterial 更新采购单及全部明细；保留明细 ID 和原入库状态，避免重复增加库存。
 func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 		return
 	}
-	var req struct {
-		ID int `json:"id"`
-		purchaseMaterialRequest
-	}
+	var req purchaseOrderRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
@@ -276,40 +363,37 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
 	}
-	if msg := validatePurchaseRequest(req.purchaseMaterialRequest); msg != "" {
+	normalizePurchaseOrderRequest(&req)
+	if msg := validatePurchaseOrderRequest(req); msg != "" {
 		http.Error(w, msg, http.StatusBadRequest)
 		return
 	}
-	paymentStatus := strings.TrimSpace(req.PaymentStatus)
-	if paymentStatus == "" {
-		paymentStatus = "未付款"
-	}
 
-	purchaseDate, err := parsePurchaseDate(req.PurchaseDate)
+	purchaseDate, err := parsePurchaseOrderDate(req.PurchaseDate)
 	if err != nil {
 		http.Error(w, "采购日期格式不正确", http.StatusBadRequest)
 		return
 	}
-	expectedDate, err := parsePurchaseDate(req.ExpectedArrivalDate)
+	expectedDate, err := parsePurchaseOrderDate(req.ExpectedArrivalDate)
 	if err != nil {
 		http.Error(w, "预计到货日期格式不正确", http.StatusBadRequest)
 		return
 	}
-	actualDate, err := parsePurchaseDate(req.ActualArrivalDate)
+	actualDate, err := parsePurchaseOrderDate(req.ActualArrivalDate)
 	if err != nil {
 		http.Error(w, "实际到货日期格式不正确", http.StatusBadRequest)
 		return
 	}
 	if req.Status == 1 && actualDate == nil {
-		actualDate = time.Now()
+		now := time.Now()
+		actualDate = &now
 	}
-
-	amount := req.Quantity * req.Price
-	paymentReceiptJSON, err := json.Marshal(req.PaymentReceipts)
+	receiptJSONBytes, err := json.Marshal(req.PaymentReceipts)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
+	receiptJSON := string(receiptJSONBytes)
 
 	tx, err := models.DB.Begin()
 	if err != nil {
@@ -318,40 +402,93 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	var stockAdded int
-	err = tx.QueryRow("SELECT stock_added FROM purchase_materials WHERE id = ? FOR UPDATE", req.ID).Scan(&stockAdded)
-	if err == sql.ErrNoRows {
-		http.Error(w, "Purchase material not found", http.StatusNotFound)
+	var existingID int
+	if err := tx.QueryRow("SELECT id FROM purchase_orders WHERE id = ? FOR UPDATE", req.ID).Scan(&existingID); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Purchase order not found", http.StatusNotFound)
+		} else {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+		}
 		return
 	}
+
+	existingStockAdded := make(map[int]int)
+	rows, err := tx.Query("SELECT id, stock_added FROM purchase_materials WHERE purchase_order_id = ? FOR UPDATE", req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	newStockAdded := stockAdded
-	if req.Status == 1 && req.MaterialType == PurchaseMaterialTypeRawMaterial && stockAdded == 0 {
-		newStockAdded = 1
-	}
-
-	_, err = tx.Exec(`
-        UPDATE purchase_materials SET
-            material_name = ?, material_type = ?, spec = ?, unit = ?, quantity = ?, price = ?, amount = ?,
-            supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?, actual_arrival_date = ?, payment_status = ?, status = ?,
-            remark = ?, payment_receipt = ?, stock_added = ?
-        WHERE id = ?
-    `, req.MaterialName, req.MaterialType, req.Spec, req.Unit, req.Quantity, req.Price, amount,
-		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, paymentStatus, req.Status, req.Remark, string(paymentReceiptJSON),
-		newStockAdded, req.ID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	if req.Status == 1 && req.MaterialType == PurchaseMaterialTypeRawMaterial && stockAdded == 0 {
-		if err := addRawMaterialStockTx(tx, req.MaterialName, req.Spec, req.Unit, req.Quantity, req.Price); err != nil {
-			http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
+	for rows.Next() {
+		var itemID, stockAdded int
+		if err := rows.Scan(&itemID, &stockAdded); err != nil {
+			rows.Close()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
+		}
+		existingStockAdded[itemID] = stockAdded
+	}
+	if err := rows.Close(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	incomingIDs := make(map[int]bool)
+	for _, item := range req.Items {
+		if item.ID > 0 {
+			if _, ok := existingStockAdded[item.ID]; !ok {
+				http.Error(w, "采购明细不存在或不属于当前采购单", http.StatusBadRequest)
+				return
+			}
+			incomingIDs[item.ID] = true
+		}
+	}
+	for itemID := range existingStockAdded {
+		if !incomingIDs[itemID] {
+			if _, err := tx.Exec("DELETE FROM purchase_materials WHERE id = ? AND purchase_order_id = ?", itemID, req.ID); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+	}
+
+	if _, err := tx.Exec(`
+        UPDATE purchase_orders SET
+            supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?, actual_arrival_date = ?,
+            payment_status = ?, status = ?, remark = ?, payment_receipt = ?
+        WHERE id = ?
+    `, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
+		req.PaymentStatus, req.Status, req.Remark, receiptJSON, req.ID); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	for _, item := range req.Items {
+		oldStockAdded := 0
+		if item.ID > 0 {
+			oldStockAdded = existingStockAdded[item.ID]
+		}
+		stockAdded := oldStockAdded
+		needAddStock := req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial && oldStockAdded == 0
+		if needAddStock {
+			stockAdded = 1
+		}
+
+		if item.ID > 0 {
+			if err := updatePurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		} else {
+			if err := insertPurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		if needAddStock {
+			if err := addRawMaterialStockTx(tx, item.MaterialName, item.Spec, item.Unit, item.Quantity, item.Price); err != nil {
+				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
+				return
+			}
 		}
 	}
 
@@ -361,10 +498,10 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "采购物料更新成功"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "采购单更新成功"})
 }
 
-// deleteReceiptFiles 删除采购物料关联的支付水单图片文件。
+// deleteReceiptFiles 删除采购单关联的支付水单图片文件。
 func deleteReceiptFiles(urls []string) {
 	for _, url := range urls {
 		rel := strings.TrimPrefix(url, "/")
@@ -379,7 +516,7 @@ func deleteReceiptFiles(urls []string) {
 	}
 }
 
-// DeletePurchaseMaterial 删除采购物料
+// DeletePurchaseMaterial 删除整张采购单及其全部明细。
 func DeletePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -390,21 +527,25 @@ func DeletePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
 		return
 	}
-	p, err := models.GetPurchaseMaterialByID(id)
+	order, err := models.GetPurchaseOrderByID(id)
 	if err != nil {
-		http.Error(w, "Purchase material not found", http.StatusNotFound)
+		http.Error(w, "Purchase order not found", http.StatusNotFound)
 		return
 	}
-	if err := models.DeletePurchaseMaterial(id); err != nil {
+	if err := models.DeletePurchaseOrder(id); err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, "Purchase order not found", http.StatusNotFound)
+			return
+		}
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	deleteReceiptFiles(p.PaymentReceipts)
+	deleteReceiptFiles(order.PaymentReceipts)
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "采购物料删除成功"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "采购单删除成功"})
 }
 
-// GetPurchaseMaterialsSummary 获取指定月份的采购汇总金额（仅统计已到货）
+// GetPurchaseMaterialsSummary 获取指定月份的采购汇总金额（仅统计已到货采购单）。
 func GetPurchaseMaterialsSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -422,25 +563,35 @@ func GetPurchaseMaterialsSummary(w http.ResponseWriter, r *http.Request) {
 	year := month[:4]
 
 	var monthlyTotal float64
-	if err := models.DB.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM purchase_materials WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y-%m') = ?", month).Scan(&monthlyTotal); err != nil {
+	if err := models.DB.QueryRow(`
+        SELECT COALESCE(SUM(pm.amount), 0)
+        FROM purchase_orders po
+        LEFT JOIN purchase_materials pm ON pm.purchase_order_id = po.id
+        WHERE po.status = 1 AND DATE_FORMAT(po.purchase_date, '%Y-%m') = ?
+    `, month).Scan(&monthlyTotal); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var yearlyTotal float64
-	if err := models.DB.QueryRow("SELECT COALESCE(SUM(amount), 0) FROM purchase_materials WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y') = ?", year).Scan(&yearlyTotal); err != nil {
+	if err := models.DB.QueryRow(`
+        SELECT COALESCE(SUM(pm.amount), 0)
+        FROM purchase_orders po
+        LEFT JOIN purchase_materials pm ON pm.purchase_order_id = po.id
+        WHERE po.status = 1 AND DATE_FORMAT(po.purchase_date, '%Y') = ?
+    `, year).Scan(&yearlyTotal); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var monthlyFreight float64
-	if err := models.DB.QueryRow("SELECT COALESCE(SUM(freight), 0) FROM purchase_materials WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y-%m') = ?", month).Scan(&monthlyFreight); err != nil {
+	if err := models.DB.QueryRow("SELECT COALESCE(SUM(freight), 0) FROM purchase_orders WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y-%m') = ?", month).Scan(&monthlyFreight); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var yearlyFreight float64
-	if err := models.DB.QueryRow("SELECT COALESCE(SUM(freight), 0) FROM purchase_materials WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y') = ?", year).Scan(&yearlyFreight); err != nil {
+	if err := models.DB.QueryRow("SELECT COALESCE(SUM(freight), 0) FROM purchase_orders WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y') = ?", year).Scan(&yearlyFreight); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -456,7 +607,7 @@ func GetPurchaseMaterialsSummary(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// UploadPurchaseReceipt 上传支付水单图片
+// UploadPurchaseReceipt 上传支付水单图片。
 func UploadPurchaseReceipt(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)

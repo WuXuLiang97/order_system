@@ -6,27 +6,23 @@
                 <h4 class="mb-0"><i class="bi bi-cart-plus"></i> 采购物料管理</h4>
                 {{if .Can "purchase:manage"}}
                 <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addPurchaseModal">
-                    <i class="bi bi-plus-circle"></i> 添加采购物料
+                    <i class="bi bi-plus-circle"></i> 新建采购单
                 </button>
                 {{end}}
             </div>
             <div class="card-body">
                 <div class="mb-3">
-                    <input type="text" id="searchPurchase" class="form-control" placeholder="搜索物料名称或供应商...">
+                    <input type="text" id="searchPurchase" class="form-control" placeholder="搜索采购单号、物料名称或供应商...">
                 </div>
                 <div class="table-responsive">
                     <table class="table table-striped table-hover" id="purchaseTable">
                         <thead>
                             <tr>
-                                <th>序号</th>
+                                <th>采购单号</th>
                                 <th>采购日期</th>
-                                <th>物料名称</th>
-                                <th>物料类型</th>
-                                <th>规格型号</th>
-                                <th>单位</th>
+                                <th>物料数</th>
                                 <th>采购数量</th>
-                                <th>单价</th>
-                                <th>金额</th>
+                                <th>采购金额</th>
                                 <th>运费</th>
                                 <th>供应商</th>
                                 <th>预计到货日期</th>
@@ -70,95 +66,87 @@
     </div>
 </div>
 
-<!-- 添加采购物料 -->
+<datalist id="rawMaterialOptions"></datalist>
+
+<!-- 新建采购单 -->
 <div class="modal fade" id="addPurchaseModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">添加采购物料</h5>
+                <h5 class="modal-title">新建采购单</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="addPurchaseForm">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">物料类型 <span class="text-danger">*</span></label>
-                            <select class="form-control" id="addMaterialType">
-                                <option value="原材料">原材料</option>
-                                <option value="固定资产">固定资产</option>
-                                <option value="办公用品">办公用品</option>
-                                <option value="设备">设备</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">物料名称 <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="addMaterialName" list="addRawMaterialOptions" autocomplete="off" required>
-                            <datalist id="addRawMaterialOptions"></datalist>
-                            <div class="form-text" id="addRawMaterialHint">输入名称可从已有原材料中选择并自动带出规格和单位，也可直接手动输入。</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">规格型号</label>
-                            <input type="text" class="form-control" id="addSpec">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">单位</label>
-                            <input type="text" class="form-control" id="addUnit" value="个">
-                        </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label">采购数量 <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" id="addQuantity" step="0.001" min="0.001" oninput="calcPurchaseAmount('add')">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">单价</label>
-                            <input type="number" class="form-control" id="addPrice" min="0" step="0.01" oninput="calcPurchaseAmount('add')">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">金额</label>
-                            <input type="number" class="form-control" id="addAmount" readonly>
-                        </div>
-                        <div class="col-md-6 mb-3">
                             <label class="form-label">供应商</label>
                             <input type="text" class="form-control" id="addSupplier">
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运费</label>
-                            <input type="number" class="form-control" id="addFreight" min="0" step="0.01" value="0">
-                        </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">采购日期</label>
                             <input type="date" class="form-control" id="addPurchaseDate">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">预计到货日期</label>
                             <input type="date" class="form-control" id="addExpectedDate">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">实际到货日期</label>
                             <input type="date" class="form-control" id="addActualDate">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">付款状态</label>
                             <select class="form-control" id="addPaymentStatus">
                                 <option value="未付款">未付款</option>
                                 <option value="已付款">已付款</option>
                             </select>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">采购状态</label>
                             <select class="form-control" id="addStatus">
                                 <option value="0">采购中</option>
                                 <option value="1">已到货</option>
                             </select>
                         </div>
-                        <div class="col-md-12 mb-3">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">运费</label>
+                            <input type="number" class="form-control" id="addFreight" min="0" step="0.01" value="0">
+                        </div>
+                        <div class="col-md-8 mb-3">
                             <label class="form-label">备注</label>
-                            <textarea class="form-control" id="addRemark" rows="2"></textarea>
+                            <input type="text" class="form-control" id="addRemark">
                         </div>
                         <div class="col-md-12 mb-3">
                             <label class="form-label">支付水单</label>
                             <input type="file" class="form-control" id="addReceiptFile" accept="image/*" multiple onchange="uploadReceiptFile(this, 'add')">
                             <div id="addReceiptPreviews" class="d-flex flex-wrap gap-2 mt-2"></div>
                         </div>
+                    </div>
+
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0"><i class="bi bi-list-ul"></i> 采购物料明细</h6>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="appendPurchaseItem('add')">
+                            <i class="bi bi-plus-circle"></i> 添加物料
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="min-width:105px;">物料类型 <span class="text-danger">*</span></th>
+                                    <th style="min-width:170px;">物料名称 <span class="text-danger">*</span></th>
+                                    <th style="min-width:130px;">规格型号</th>
+                                    <th style="min-width:80px;">单位</th>
+                                    <th style="min-width:100px;">采购数量 <span class="text-danger">*</span></th>
+                                    <th style="min-width:100px;">单价</th>
+                                    <th style="min-width:110px;">金额</th>
+                                    <th style="min-width:60px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="addPurchaseItems"></tbody>
+                        </table>
                     </div>
                 </form>
             </div>
@@ -170,96 +158,90 @@
     </div>
 </div>
 
-<!-- 编辑采购物料 -->
+<!-- 编辑采购单 -->
 <div class="modal fade" id="editPurchaseModal" tabindex="-1">
     <div class="modal-dialog modal-xl">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title">编辑采购物料</h5>
+                <h5 class="modal-title">编辑采购单</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
             </div>
             <div class="modal-body">
                 <form id="editPurchaseForm">
                     <input type="hidden" id="editPurchaseId">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">物料类型 <span class="text-danger">*</span></label>
-                            <select class="form-control" id="editMaterialType">
-                                <option value="原材料">原材料</option>
-                                <option value="固定资产">固定资产</option>
-                                <option value="办公用品">办公用品</option>
-                                <option value="设备">设备</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">物料名称 <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="editMaterialName" list="editRawMaterialOptions" autocomplete="off" required>
-                            <datalist id="editRawMaterialOptions"></datalist>
-                            <div class="form-text" id="editRawMaterialHint">输入名称可从已有原材料中选择并自动带出规格和单位，也可直接手动输入。</div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">规格型号</label>
-                            <input type="text" class="form-control" id="editSpec">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">单位</label>
-                            <input type="text" class="form-control" id="editUnit">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">采购单号</label>
+                            <input type="text" class="form-control" id="editPurchaseNo" readonly>
                         </div>
                         <div class="col-md-4 mb-3">
-                            <label class="form-label">采购数量 <span class="text-danger">*</span></label>
-                            <input type="number" class="form-control" id="editQuantity" step="0.001" min="0.001" oninput="calcPurchaseAmount('edit')">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">单价</label>
-                            <input type="number" class="form-control" id="editPrice" min="0" step="0.01" oninput="calcPurchaseAmount('edit')">
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">金额</label>
-                            <input type="number" class="form-control" id="editAmount" readonly>
-                        </div>
-                        <div class="col-md-6 mb-3">
                             <label class="form-label">供应商</label>
                             <input type="text" class="form-control" id="editSupplier">
                         </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运费</label>
-                            <input type="number" class="form-control" id="editFreight" min="0" step="0.01">
-                        </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">采购日期</label>
                             <input type="date" class="form-control" id="editPurchaseDate">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">预计到货日期</label>
                             <input type="date" class="form-control" id="editExpectedDate">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">实际到货日期</label>
                             <input type="date" class="form-control" id="editActualDate">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">付款状态</label>
                             <select class="form-control" id="editPaymentStatus">
                                 <option value="未付款">未付款</option>
                                 <option value="已付款">已付款</option>
                             </select>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">采购状态</label>
                             <select class="form-control" id="editStatus">
                                 <option value="0">采购中</option>
                                 <option value="1">已到货</option>
                             </select>
                         </div>
-                        <div class="col-md-12 mb-3">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">运费</label>
+                            <input type="number" class="form-control" id="editFreight" min="0" step="0.01">
+                        </div>
+                        <div class="col-md-4 mb-3">
                             <label class="form-label">备注</label>
-                            <textarea class="form-control" id="editRemark" rows="2"></textarea>
+                            <input type="text" class="form-control" id="editRemark">
                         </div>
                         <div class="col-md-12 mb-3">
                             <label class="form-label">支付水单</label>
                             <input type="file" class="form-control" id="editReceiptFile" accept="image/*" multiple onchange="uploadReceiptFile(this, 'edit')">
                             <div id="editReceiptPreviews" class="d-flex flex-wrap gap-2 mt-2"></div>
                         </div>
+                    </div>
+
+                    <hr>
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <h6 class="mb-0"><i class="bi bi-list-ul"></i> 采购物料明细</h6>
+                        <button type="button" class="btn btn-outline-primary btn-sm" onclick="appendPurchaseItem('edit')">
+                            <i class="bi bi-plus-circle"></i> 添加物料
+                        </button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th style="min-width:105px;">物料类型 <span class="text-danger">*</span></th>
+                                    <th style="min-width:170px;">物料名称 <span class="text-danger">*</span></th>
+                                    <th style="min-width:130px;">规格型号</th>
+                                    <th style="min-width:80px;">单位</th>
+                                    <th style="min-width:100px;">采购数量 <span class="text-danger">*</span></th>
+                                    <th style="min-width:100px;">单价</th>
+                                    <th style="min-width:110px;">金额</th>
+                                    <th style="min-width:60px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="editPurchaseItems"></tbody>
+                        </table>
                     </div>
                 </form>
             </div>
@@ -294,6 +276,35 @@ var editReceiptUrls = [];
 var rawMaterialOptions = [];
 var rawMaterialOptionIndex = new Map();
 
+function escapePurchaseHtml(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
+function escapePurchaseAttr(value) {
+    return escapePurchaseHtml(value).replace(/`/g, '&#96;');
+}
+
+function formatDate(value) {
+    if (!value) return '-';
+    return String(value).slice(0, 10);
+}
+
+function currentDate() {
+    var now = new Date();
+    var m = ('0' + (now.getMonth() + 1)).slice(-2);
+    var d = ('0' + now.getDate()).slice(-2);
+    return now.getFullYear() + '-' + m + '-' + d;
+}
+
+function currentMonth() {
+    return currentDate().slice(0, 7);
+}
+
 function rawMaterialDisplayValue(material, duplicateNameCount) {
     var name = (material.name || '').trim();
     if (duplicateNameCount <= 1) return name;
@@ -326,10 +337,8 @@ function rawMaterialOptionDescription(material) {
     return details.join('，');
 }
 
-function populateRawMaterialDatalist(prefix) {
-    var datalist = $('#' + prefix + 'RawMaterialOptions');
-    if (!datalist.length) return;
-
+function populateRawMaterialDatalist() {
+    var datalist = $('#rawMaterialOptions');
     datalist.empty();
     rawMaterialOptionIndex.forEach(function(material, value) {
         datalist.append($('<option>').attr('value', value).attr('label', rawMaterialOptionDescription(material)));
@@ -343,8 +352,7 @@ function loadRawMaterialOptions() {
         success: function(list) {
             rawMaterialOptions = Array.isArray(list) ? list : [];
             rebuildRawMaterialOptionIndex();
-            populateRawMaterialDatalist('add');
-            populateRawMaterialDatalist('edit');
+            populateRawMaterialDatalist();
         },
         error: function(xhr) {
             console.error('加载原材料建议失败: ' + xhr.responseText);
@@ -352,41 +360,119 @@ function loadRawMaterialOptions() {
     });
 }
 
-function toggleRawMaterialSuggestions(prefix) {
-    var isRawMaterial = $('#' + prefix + 'MaterialType').val() === '原材料';
-    var input = $('#' + prefix + 'MaterialName');
-    if (isRawMaterial) {
-        input.attr('list', prefix + 'RawMaterialOptions');
-    } else {
-        input.removeAttr('list');
-    }
-    $('#' + prefix + 'RawMaterialHint').toggleClass('d-none', !isRawMaterial);
+function purchaseItemRowHtml(item) {
+    item = item || {};
+    var type = item.material_type || '原材料';
+    var id = parseInt(item.id, 10) || 0;
+    var name = escapePurchaseAttr(item.material_name || '');
+    var spec = escapePurchaseAttr(item.spec || '');
+    var unit = escapePurchaseAttr(item.unit || '个');
+    var quantity = item.quantity == null ? '' : item.quantity;
+    var price = item.price == null ? '' : item.price;
+    var amount = item.amount == null ? '' : Number(item.amount || 0).toFixed(2);
+    var typeOptions = ['原材料', '固定资产', '办公用品', '设备'].map(function(value) {
+        return '<option value="' + value + '"' + (value === type ? ' selected' : '') + '>' + value + '</option>';
+    }).join('');
+
+    return `<tr class="purchase-item-row" data-item-id="${id}">
+        <td>
+            <select class="form-select form-select-sm item-material-type" onchange="togglePurchaseItemRawMaterial(this)">${typeOptions}</select>
+        </td>
+        <td>
+            <input type="text" class="form-control form-control-sm item-material-name" value="${name}" ${type === '原材料' ? 'list="rawMaterialOptions"' : ''} autocomplete="off" onchange="applyPurchaseItemMaterialSelection(this)">
+        </td>
+        <td><input type="text" class="form-control form-control-sm item-spec" value="${spec}"></td>
+        <td><input type="text" class="form-control form-control-sm item-unit" value="${unit}"></td>
+        <td><input type="number" class="form-control form-control-sm item-quantity" min="0.001" step="0.001" value="${quantity}" oninput="calcPurchaseItemAmount(this)"></td>
+        <td><input type="number" class="form-control form-control-sm item-price" min="0" step="0.01" value="${price}" oninput="calcPurchaseItemAmount(this)"></td>
+        <td><input type="number" class="form-control form-control-sm item-amount bg-light" value="${amount}" readonly></td>
+        <td class="text-nowrap"><button type="button" class="btn btn-danger btn-sm" onclick="removePurchaseItem(this)">删除</button></td>
+    </tr>`;
 }
 
-function applyRawMaterialSelection(prefix) {
-    if ($('#' + prefix + 'MaterialType').val() !== '原材料') return;
+function appendPurchaseItem(prefix, item) {
+    $('#' + prefix + 'PurchaseItems').append(purchaseItemRowHtml(item));
+}
 
-    var input = $('#' + prefix + 'MaterialName');
-    var selectedValue = (input.val() || '').trim();
+function removePurchaseItem(button) {
+    var body = $(button).closest('tbody');
+    if (body.find('.purchase-item-row').length <= 1) {
+        alert('采购单至少需要保留一种物料');
+        return;
+    }
+    $(button).closest('tr').remove();
+}
+
+function togglePurchaseItemRawMaterial(select) {
+    var row = $(select).closest('tr');
+    var nameInput = row.find('.item-material-name');
+    if ($(select).val() === '原材料') {
+        nameInput.attr('list', 'rawMaterialOptions');
+    } else {
+        nameInput.removeAttr('list');
+    }
+}
+
+function applyPurchaseItemMaterialSelection(input) {
+    var row = $(input).closest('tr');
+    if (row.find('.item-material-type').val() !== '原材料') return;
+    var selectedValue = ($(input).val() || '').trim();
     var material = rawMaterialOptionIndex.get(selectedValue);
     if (!material) return;
-
-    if (selectedValue !== material.name) {
-        input.val(material.name || '');
-    }
-    $('#' + prefix + 'Spec').val(material.spec || '');
-    $('#' + prefix + 'Unit').val(material.unit || '');
+    $(input).val(material.name || '');
+    row.find('.item-spec').val(material.spec || '');
+    row.find('.item-unit').val(material.unit || '');
 }
 
-function formatDate(value) {
-    if (!value) return '-';
-    return value.slice(0, 10);
+function calcPurchaseItemAmount(input) {
+    var row = $(input).closest('tr');
+    var quantity = parseFloat(row.find('.item-quantity').val()) || 0;
+    var price = parseFloat(row.find('.item-price').val()) || 0;
+    row.find('.item-amount').val((quantity * price).toFixed(2));
 }
 
-function calcPurchaseAmount(prefix) {
-    var qty = parseFloat($('#' + prefix + 'Quantity').val()) || 0;
-    var price = parseFloat($('#' + prefix + 'Price').val()) || 0;
-    $('#' + prefix + 'Amount').val((qty * price).toFixed(2));
+function collectPurchaseItems(prefix) {
+    var items = [];
+    var valid = true;
+    $('#' + prefix + 'PurchaseItems .purchase-item-row').each(function() {
+        var row = $(this);
+        var name = (row.find('.item-material-name').val() || '').trim();
+        var quantity = parseFloat(row.find('.item-quantity').val()) || 0;
+        if (!name || quantity <= 0) {
+            alert('请完整填写每种物料的名称和采购数量');
+            valid = false;
+            return false;
+        }
+        items.push({
+            id: parseInt(row.attr('data-item-id'), 10) || 0,
+            material_type: row.find('.item-material-type').val(),
+            material_name: name,
+            spec: (row.find('.item-spec').val() || '').trim(),
+            unit: (row.find('.item-unit').val() || '').trim() || '个',
+            quantity: quantity,
+            price: parseFloat(row.find('.item-price').val()) || 0
+        });
+    });
+    return valid ? items : null;
+}
+
+function collectPurchaseOrder(prefix) {
+    var items = collectPurchaseItems(prefix);
+    if (!items) return null;
+    var receipts = prefix === 'add' ? addReceiptUrls : editReceiptUrls;
+    return {
+        id: prefix === 'edit' ? (parseInt($('#editPurchaseId').val(), 10) || 0) : 0,
+        supplier: ($('#' + prefix + 'Supplier').val() || '').trim(),
+        freight: parseFloat($('#' + prefix + 'Freight').val()) || 0,
+        purchase_date: $('#' + prefix + 'PurchaseDate').val(),
+        expected_arrival_date: $('#' + prefix + 'ExpectedDate').val(),
+        actual_arrival_date: $('#' + prefix + 'ActualDate').val(),
+        payment_status: $('#' + prefix + 'PaymentStatus').val(),
+        status: parseInt($('#' + prefix + 'Status').val(), 10) || 0,
+        remark: ($('#' + prefix + 'Remark').val() || '').trim(),
+        payment_receipts: receipts || [],
+        items: items
+    };
 }
 
 function renderReceiptPreviews(prefix) {
@@ -396,7 +482,7 @@ function renderReceiptPreviews(prefix) {
     urls.forEach(function(url, idx) {
         container.append(`
             <div class="position-relative" style="display:inline-block;">
-                <img src="${url}" style="height:90px;width:90px;object-fit:cover;cursor:pointer;" onclick="viewReceipt('${url}')">
+                <img src="${escapePurchaseAttr(url)}" style="height:90px;width:90px;object-fit:cover;cursor:pointer;" data-url="${escapePurchaseAttr(url)}" onclick="viewReceipt(this.dataset.url)">
                 <button type="button" class="btn-close position-absolute top-0 end-0" onclick="removeReceipt('${prefix}', ${idx})"></button>
             </div>
         `);
@@ -445,22 +531,14 @@ function viewReceipt(url) {
     var img = $('#viewReceiptImage');
     var modal = $('#viewReceiptModal');
     img.off('load.receipt error.receipt');
-    img.attr('src', url);
-    // 图片加载完成后再弹出，窗口按图片实际大小自适应
+    img.attr('src', url || '');
     if (img[0].complete) {
         modal.modal('show');
     } else {
-        img.on('load.receipt error.receipt', function () {
+        img.on('load.receipt error.receipt', function() {
             modal.modal('show');
         });
     }
-}
-
-function currentMonth() {
-    var now = new Date();
-    var y = now.getFullYear();
-    var m = ('0' + (now.getMonth() + 1)).slice(-2);
-    return y + '-' + m;
 }
 
 function loadSummary(month) {
@@ -479,6 +557,14 @@ function loadSummary(month) {
         }
     });
 }
+
+function receiptCell(receipts) {
+    if (!receipts || !receipts.length) return '-';
+    return receipts.map(function(url) {
+        return `<img src="${escapePurchaseAttr(url)}" style="height:40px;width:40px;object-fit:cover;cursor:pointer;margin-right:4px;" data-url="${escapePurchaseAttr(url)}" onclick="viewReceipt(this.dataset.url)">`;
+    }).join('');
+}
+
 function loadPurchaseMaterials() {
     $.ajax({
         url: '/api/purchase-materials',
@@ -486,65 +572,128 @@ function loadPurchaseMaterials() {
         success: function(data) {
             var tbody = $('#purchaseTableBody');
             tbody.empty();
-            data.forEach(function(p, index) {
-                var status = p.status === 1
+            (Array.isArray(data) ? data : []).forEach(function(order) {
+                var items = Array.isArray(order.items) ? order.items : [];
+                var status = order.status === 1
                     ? '<span class="badge bg-success">已到货</span>'
                     : '<span class="badge bg-warning">采购中</span>';
-                var typeClass = p.material_type === '原材料' ? 'info' : (p.material_type === '固定资产' ? 'secondary' : (p.material_type === '办公用品' ? 'primary' : 'dark'));
-                var receipts = p.payment_receipts || [];
-                var receipt = '-';
-                if (receipts.length > 0) {
-                    receipt = receipts.map(function(url) {
-                        return `<img src="${url}" style="height:40px;width:40px;object-fit:cover;cursor:pointer;margin-right:4px;" onclick="viewReceipt('${url}')">`;
-                    }).join('');
-                }
+                var payment = order.payment_status === '已付款'
+                    ? '<span class="badge bg-success">已付款</span>'
+                    : '<span class="badge bg-secondary">未付款</span>';
                 var actions = '';
                 if (window.PERMS && window.PERMS['purchase:manage']) {
-                    actions = `<button class="btn btn-warning btn-sm me-1" onclick="editPurchase(${p.id})">编辑</button>
-                               <button class="btn btn-danger btn-sm" onclick="deletePurchase(${p.id})">删除</button>`;
+                    actions = `<button class="btn btn-warning btn-sm me-1" onclick="editPurchase(${order.id})">编辑</button>
+                               <button class="btn btn-danger btn-sm" onclick="deletePurchase(${order.id})">删除</button>`;
                 }
-                var row = `
-                    <tr>
+                var detailHtml = items.map(function(item, index) {
+                    return `<tr>
                         <td>${index + 1}</td>
-                        <td>${formatDate(p.purchase_date)}</td>
-                        <td><strong>${p.material_name}</strong></td>
-                        <td><span class="badge bg-${typeClass}">${p.material_type}</span></td>
-                        <td>${p.spec || '-'}</td>
-                        <td>${p.unit || '-'}</td>
-                        <td>${p.quantity}</td>
-                        <td>¥${p.price.toFixed(2)}</td>
-                        <td>¥${p.amount.toFixed(2)}</td>
-                        <td>¥${p.freight.toFixed(2)}</td>
-                        <td>${p.supplier || '-'}</td>
-                        <td>${formatDate(p.expected_arrival_date)}</td>
-                        <td>${formatDate(p.actual_arrival_date)}</td>
-                        <td>${p.payment_status === '已付款' ? '<span class="badge bg-success">已付款</span>' : '<span class="badge bg-secondary">未付款</span>'}</td>
+                        <td>${escapePurchaseHtml(item.material_type || '-')}</td>
+                        <td><strong>${escapePurchaseHtml(item.material_name || '-')}</strong></td>
+                        <td>${escapePurchaseHtml(item.spec || '-')}</td>
+                        <td>${escapePurchaseHtml(item.unit || '-')}</td>
+                        <td>${parseFloat(item.quantity || 0)}</td>
+                        <td>¥${parseFloat(item.price || 0).toFixed(2)}</td>
+                        <td>¥${parseFloat(item.amount || 0).toFixed(2)}</td>
+                    </tr>`;
+                }).join('');
+                if (!detailHtml) {
+                    detailHtml = '<tr><td colspan="8" class="text-center text-muted">暂无物料明细</td></tr>';
+                }
+
+                var mainRow = `
+                    <tr class="purchase-main-row" data-order-id="${order.id}">
+                        <td class="text-nowrap">
+                            <button type="button" class="btn btn-sm btn-outline-secondary me-1 purchase-detail-toggle" data-order-id="${order.id}" onclick="togglePurchaseDetails(${order.id})" aria-expanded="false">
+                                <i class="bi bi-chevron-right"></i>
+                            </button>
+                            <strong>${escapePurchaseHtml(order.purchase_no || '-')}</strong>
+                        </td>
+                        <td>${formatDate(order.purchase_date)}</td>
+                        <td>${parseInt(order.item_count || items.length, 10)} 项</td>
+                        <td><strong>${parseFloat(order.total_quantity || 0)}</strong></td>
+                        <td>¥${parseFloat(order.total_amount || 0).toFixed(2)}</td>
+                        <td>¥${parseFloat(order.freight || 0).toFixed(2)}</td>
+                        <td>${escapePurchaseHtml(order.supplier || '-')}</td>
+                        <td>${formatDate(order.expected_arrival_date)}</td>
+                        <td>${formatDate(order.actual_arrival_date)}</td>
+                        <td>${payment}</td>
                         <td>${status}</td>
-                        <td>${receipt}</td>
-                        <td>${p.remark || '-'}</td>
-                        <td>${actions}</td>
-                    </tr>
-                `;
-                tbody.append(row);
+                        <td class="text-nowrap">${receiptCell(order.payment_receipts)}</td>
+                        <td>${escapePurchaseHtml(order.remark || '-')}</td>
+                        <td class="text-nowrap">${actions}</td>
+                    </tr>`;
+
+                var detailRow = `
+                    <tr class="purchase-detail-row d-none" data-order-id="${order.id}">
+                        <td colspan="14" class="bg-light">
+                            <div class="small fw-bold mb-2">采购物料明细</div>
+                            <div class="table-responsive">
+                                <table class="table table-sm table-bordered bg-white mb-0">
+                                    <thead>
+                                        <tr>
+                                            <th style="width:6%;">序号</th>
+                                            <th style="width:13%;">物料类型</th>
+                                            <th style="width:22%;">物料名称</th>
+                                            <th style="width:17%;">规格型号</th>
+                                            <th style="width:8%;">单位</th>
+                                            <th style="width:11%;">采购数量</th>
+                                            <th style="width:11%;">单价</th>
+                                            <th style="width:12%;">金额</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>${detailHtml}</tbody>
+                                </table>
+                            </div>
+                        </td>
+                    </tr>`;
+                tbody.append(mainRow + detailRow);
             });
             applyPurchaseSearch();
         },
         error: function(xhr) {
-            alert('加载采购物料失败: ' + xhr.responseText);
+            alert('加载采购单失败: ' + xhr.responseText);
         }
     });
 }
 
+function togglePurchaseDetails(orderID) {
+    var detailRow = $(`.purchase-detail-row[data-order-id="${orderID}"]`);
+    var toggle = $(`.purchase-detail-toggle[data-order-id="${orderID}"]`);
+    var willShow = detailRow.hasClass('d-none');
+    detailRow.toggleClass('d-none', !willShow);
+    toggle.attr('aria-expanded', willShow ? 'true' : 'false');
+    toggle.find('i').toggleClass('bi-chevron-right', !willShow).toggleClass('bi-chevron-down', willShow);
+}
+
 function applyPurchaseSearch() {
-    var searchText = $('#searchPurchase').val().toLowerCase();
-    $('#purchaseTableBody tr').each(function() {
-        var name = $(this).find('td:eq(2)').text().toLowerCase();
-        var supplier = $(this).find('td:eq(10)').text().toLowerCase();
-        $(this).toggle(name.indexOf(searchText) > -1 || supplier.indexOf(searchText) > -1);
+    var searchText = ($('#searchPurchase').val() || '').toLowerCase();
+    $('#purchaseTableBody .purchase-main-row').each(function() {
+        var mainRow = $(this);
+        var orderID = mainRow.data('order-id');
+        var detailRow = $(`.purchase-detail-row[data-order-id="${orderID}"]`);
+        var matches = (mainRow.text() + ' ' + detailRow.text()).toLowerCase().indexOf(searchText) > -1;
+        mainRow.toggle(matches);
+        if (!matches) {
+            detailRow.addClass('d-none');
+        } else if (mainRow.find('.purchase-detail-toggle').attr('aria-expanded') === 'true') {
+            detailRow.removeClass('d-none');
+        }
     });
 }
 
+function resetAddPurchaseForm() {
+    $('#addPurchaseForm')[0].reset();
+    $('#addPurchaseDate').val(currentDate());
+    $('#addPurchaseItems').empty();
+    appendPurchaseItem('add');
+    addReceiptUrls = [];
+    renderReceiptPreviews('add');
+    $('#addReceiptFile').val('');
+}
+
 $(document).ready(function() {
+    resetAddPurchaseForm();
     loadPurchaseMaterials();
     loadRawMaterialOptions();
     $('#searchPurchase').on('keyup', applyPurchaseSearch);
@@ -553,61 +702,21 @@ $(document).ready(function() {
     $('#summaryMonth').on('change', function() {
         loadSummary($(this).val());
     });
-    $('#addMaterialType').on('change', function() {
-        toggleRawMaterialSuggestions('add');
-    });
-    $('#editMaterialType').on('change', function() {
-        toggleRawMaterialSuggestions('edit');
-    });
-    $('#addMaterialName').on('change', function() {
-        applyRawMaterialSelection('add');
-    });
-    $('#editMaterialName').on('change', function() {
-        applyRawMaterialSelection('edit');
-    });
-    toggleRawMaterialSuggestions('add');
-    toggleRawMaterialSuggestions('edit');
 });
 
 function addPurchase() {
-    var materialName = $('#addMaterialName').val().trim();
-    if (!materialName) {
-        alert('请输入物料名称');
-        return;
-    }
-    var data = {
-        material_name: materialName,
-        material_type: $('#addMaterialType').val(),
-        spec: $('#addSpec').val().trim(),
-        unit: $('#addUnit').val().trim(),
-        quantity: parseFloat($('#addQuantity').val()) || 0,
-        price: parseFloat($('#addPrice').val()) || 0,
-        amount: parseFloat($('#addAmount').val()) || 0,
-        supplier: $('#addSupplier').val().trim(),
-        freight: parseFloat($('#addFreight').val()) || 0,
-        purchase_date: $('#addPurchaseDate').val(),
-        expected_arrival_date: $('#addExpectedDate').val(),
-        actual_arrival_date: $('#addActualDate').val(),
-        payment_status: $('#addPaymentStatus').val(),
-        status: parseInt($('#addStatus').val()),
-        remark: $('#addRemark').val().trim(),
-        payment_receipts: addReceiptUrls
-    };
+    var data = collectPurchaseOrder('add');
+    if (!data) return;
     $.ajax({
         url: '/api/purchase-materials/add',
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(data),
         success: function() {
-            alert('添加成功');
-            loadSummary($('#summaryMonth').val());
+            alert('采购单添加成功');
             $('#addPurchaseModal').modal('hide');
-            $('#addPurchaseForm')[0].reset();
-            toggleRawMaterialSuggestions('add');
-            $('#addAmount').val('');
-            addReceiptUrls = [];
-            renderReceiptPreviews('add');
-            $('#addReceiptFile').val('');
+            resetAddPurchaseForm();
+            loadSummary($('#summaryMonth').val());
             loadPurchaseMaterials();
         },
         error: function(xhr) {
@@ -622,68 +731,42 @@ function editPurchase(id) {
         method: 'GET',
         success: function(data) {
             $('#editPurchaseId').val(data.id);
-            $('#editMaterialType').val(data.material_type);
-            toggleRawMaterialSuggestions('edit');
-            $('#editMaterialName').val(data.material_name);
-            $('#editSpec').val(data.spec || '');
-            $('#editUnit').val(data.unit || '');
-            $('#editQuantity').val(data.quantity);
-            $('#editPrice').val(data.price);
-            $('#editAmount').val(data.amount);
+            $('#editPurchaseNo').val(data.purchase_no || '');
             $('#editSupplier').val(data.supplier || '');
-            $('#editFreight').val(data.freight);
+            $('#editFreight').val(data.freight || 0);
             $('#editPurchaseDate').val(formatDate(data.purchase_date) === '-' ? '' : formatDate(data.purchase_date));
             $('#editExpectedDate').val(formatDate(data.expected_arrival_date) === '-' ? '' : formatDate(data.expected_arrival_date));
             $('#editActualDate').val(formatDate(data.actual_arrival_date) === '-' ? '' : formatDate(data.actual_arrival_date));
             $('#editPaymentStatus').val(data.payment_status || '未付款');
-            $('#editStatus').val(data.status);
+            $('#editStatus').val(String(data.status == null ? 0 : data.status));
             $('#editRemark').val(data.remark || '');
+            $('#editPurchaseItems').empty();
+            var items = Array.isArray(data.items) ? data.items : [];
+            if (!items.length) items = [{}];
+            items.forEach(function(item) { appendPurchaseItem('edit', item); });
             editReceiptUrls = data.payment_receipts || [];
             renderReceiptPreviews('edit');
             $('#editReceiptFile').val('');
             $('#editPurchaseModal').modal('show');
         },
         error: function(xhr) {
-            alert('加载采购物料失败: ' + xhr.responseText);
+            alert('加载采购单失败: ' + xhr.responseText);
         }
     });
 }
 
 function updatePurchase() {
-    var id = parseInt($('#editPurchaseId').val());
-    var materialName = $('#editMaterialName').val().trim();
-    if (!materialName) {
-        alert('请输入物料名称');
-        return;
-    }
-    var data = {
-        id: id,
-        material_name: materialName,
-        material_type: $('#editMaterialType').val(),
-        spec: $('#editSpec').val().trim(),
-        unit: $('#editUnit').val().trim(),
-        quantity: parseFloat($('#editQuantity').val()) || 0,
-        price: parseFloat($('#editPrice').val()) || 0,
-        amount: parseFloat($('#editAmount').val()) || 0,
-        supplier: $('#editSupplier').val().trim(),
-        freight: parseFloat($('#editFreight').val()) || 0,
-        purchase_date: $('#editPurchaseDate').val(),
-        expected_arrival_date: $('#editExpectedDate').val(),
-        actual_arrival_date: $('#editActualDate').val(),
-        payment_status: $('#editPaymentStatus').val(),
-        status: parseInt($('#editStatus').val()),
-        remark: $('#editRemark').val().trim(),
-        payment_receipts: editReceiptUrls
-    };
+    var data = collectPurchaseOrder('edit');
+    if (!data) return;
     $.ajax({
         url: '/api/purchase-materials/update',
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify(data),
         success: function() {
-            alert('更新成功');
-            loadSummary($('#summaryMonth').val());
+            alert('采购单更新成功');
             $('#editPurchaseModal').modal('hide');
+            loadSummary($('#summaryMonth').val());
             loadPurchaseMaterials();
         },
         error: function(xhr) {
@@ -693,12 +776,12 @@ function updatePurchase() {
 }
 
 function deletePurchase(id) {
-    if (!confirm('确定要删除该采购物料吗？')) return;
+    if (!confirm('确定要删除这张采购单及其全部物料明细吗？')) return;
     $.ajax({
         url: `/api/purchase-materials/delete?id=${id}`,
         method: 'POST',
         success: function() {
-            alert('删除成功');
+            alert('采购单删除成功');
             loadSummary($('#summaryMonth').val());
             loadPurchaseMaterials();
         },
