@@ -15,30 +15,33 @@ import (
 )
 
 type OrderCreateRequest struct {
-	CustomerName         string `json:"customer_name"`
-	CustomerID           int    `json:"customer_id"`
-	OwnerUserID          int    `json:"owner_user_id"`
-	Region               string `json:"region"`
-	CustomerAddress      string `json:"customer_address"`
-	CustomerPhone        string `json:"customer_phone"`
-	Currency             string `json:"currency"`
-	TradeTerms           string `json:"trade_terms"`
-	ShippingMark         string `json:"shipping_mark"`
-	OrderDate            string `json:"order_date"`
-	ExpectedShippingDate string `json:"expected_shipping_date"`
-	CustomerRequiredDate string `json:"customer_required_date"`
-	LogisticsDays        int    `json:"logistics_days"`
-	PaymentStatus        int    `json:"payment_status"`
-	PreparedBy           string `json:"prepared_by"`
-	PaymentSettlement    string `json:"payment_settlement"`
-	FreightPayment       string `json:"freight_payment"`
-	FreightRecovery      string `json:"freight_recovery"`
-	TransportMethod      string `json:"transport_method"`
-	Remark               string `json:"remark"`
-	Items                []struct {
-		ProductID int `json:"product_id"`
-		Quantity  int `json:"quantity"`
-	} `json:"items"`
+	CustomerName         string            `json:"customer_name"`
+	CustomerID           int               `json:"customer_id"`
+	OwnerUserID          int               `json:"owner_user_id"`
+	Region               string            `json:"region"`
+	CustomerAddress      string            `json:"customer_address"`
+	CustomerPhone        string            `json:"customer_phone"`
+	Currency             string            `json:"currency"`
+	TradeTerms           string            `json:"trade_terms"`
+	ShippingMark         string            `json:"shipping_mark"`
+	OrderDate            string            `json:"order_date"`
+	ExpectedShippingDate string            `json:"expected_shipping_date"`
+	CustomerRequiredDate string            `json:"customer_required_date"`
+	LogisticsDays        int               `json:"logistics_days"`
+	PaymentStatus        int               `json:"payment_status"`
+	PreparedBy           string            `json:"prepared_by"`
+	PaymentSettlement    string            `json:"payment_settlement"`
+	FreightPayment       string            `json:"freight_payment"`
+	FreightRecovery      string            `json:"freight_recovery"`
+	TransportMethod      string            `json:"transport_method"`
+	Remark               string            `json:"remark"`
+	Items                []OrderCreateItem `json:"items"`
+}
+
+type OrderCreateItem struct {
+	ProductID int      `json:"product_id"`
+	Quantity  int      `json:"quantity"`
+	Price     *float64 `json:"price"`
 }
 
 type orderItemView struct {
@@ -116,15 +119,26 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// 计算总金额
+	// 计算总金额。单价由客户端按客户报价传入；未传时兼容使用产品默认单价。
+	itemPrices := make([]float64, len(req.Items))
 	var total float64
-	for _, item := range req.Items {
-		var price float64
-		err := tx.QueryRow("SELECT price FROM products WHERE id = ?", item.ProductID).Scan(&price)
+	for i, item := range req.Items {
+		var productPrice float64
+		err := tx.QueryRow("SELECT price FROM products WHERE id = ?", item.ProductID).Scan(&productPrice)
 		if err != nil {
 			http.Error(w, fmt.Sprintf("Product ID %d not found", item.ProductID), http.StatusBadRequest)
 			return
 		}
+
+		price := productPrice
+		if item.Price != nil {
+			price = *item.Price
+		}
+		if price < 0 {
+			http.Error(w, "产品单价不能小于0", http.StatusBadRequest)
+			return
+		}
+		itemPrices[i] = price
 		total += price * float64(item.Quantity)
 	}
 
@@ -186,14 +200,8 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	// 插入订单明细、扣减成品库存、收集原材料扣减量
 	rawMaterialDeductions := make(map[int]float64)
 
-	for _, item := range req.Items {
-		var price float64
-		err := tx.QueryRow("SELECT price FROM products WHERE id = ?", item.ProductID).Scan(&price)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-
+	for i, item := range req.Items {
+		price := itemPrices[i]
 		_, err = tx.Exec("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
 			orderID, item.ProductID, item.Quantity, price)
 		if err != nil {
