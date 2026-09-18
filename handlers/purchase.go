@@ -32,13 +32,14 @@ var purchaseMaterialTypes = map[string]bool{
 }
 
 type purchaseItemRequest struct {
-	ID           int     `json:"id"`
-	MaterialName string  `json:"material_name"`
-	MaterialType string  `json:"material_type"`
-	Spec         string  `json:"spec"`
-	Unit         string  `json:"unit"`
-	Quantity     float64 `json:"quantity"`
-	Price        float64 `json:"price"`
+	ID            int     `json:"id"`
+	RawMaterialID int     `json:"raw_material_id"`
+	MaterialName  string  `json:"material_name"`
+	MaterialType  string  `json:"material_type"`
+	Spec          string  `json:"spec"`
+	Unit          string  `json:"unit"`
+	Quantity      float64 `json:"quantity"`
+	Price         float64 `json:"price"`
 }
 
 type purchaseOrderRequest struct {
@@ -90,7 +91,8 @@ func validatePurchaseOrderRequest(req purchaseOrderRequest) string {
 		return "请至少添加一种采购物料"
 	}
 	for index, item := range req.Items {
-		if strings.TrimSpace(item.MaterialName) == "" {
+		if strings.TrimSpace(item.MaterialName) == "" &&
+			(item.MaterialType != PurchaseMaterialTypeRawMaterial || item.RawMaterialID <= 0) {
 			return fmt.Sprintf("第%d行物料名称不能为空", index+1)
 		}
 		if !purchaseMaterialTypes[item.MaterialType] {
@@ -121,7 +123,31 @@ func normalizePurchaseOrderRequest(req *purchaseOrderRequest) {
 		if req.Items[i].Unit == "" {
 			req.Items[i].Unit = "个"
 		}
+		if req.Items[i].MaterialType != PurchaseMaterialTypeRawMaterial || req.Items[i].RawMaterialID < 0 {
+			req.Items[i].RawMaterialID = 0
+		}
 	}
+}
+
+// resolvePurchaseRawMaterialLinksTx 将采购明细的原材料ID解析为当前名称、规格和单位；失效ID会降级为自由录入。
+func resolvePurchaseRawMaterialLinksTx(tx *sql.Tx, items []purchaseItemRequest) error {
+	for i := range items {
+		if items[i].MaterialType != PurchaseMaterialTypeRawMaterial || items[i].RawMaterialID <= 0 {
+			continue
+		}
+		name, spec, unit, err := models.GetRawMaterialIdentityTx(tx, items[i].RawMaterialID)
+		if err == sql.ErrNoRows {
+			items[i].RawMaterialID = 0
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		items[i].MaterialName = name
+		items[i].Spec = spec
+		items[i].Unit = unit
+	}
+	return nil
 }
 
 func purchaseFreightAllocations(items []purchaseItemRequest, totalFreight float64) []float64 {
@@ -155,9 +181,21 @@ func purchaseFreightAllocations(items []purchaseItemRequest, totalFreight float6
 }
 
 func addPurchaseItemStockTx(tx *sql.Tx, itemID int64, item purchaseItemRequest, landedUnitCost float64, userID int) error {
-	rawMaterialID, err := models.AddRawMaterialByKeyTx(tx, item.MaterialName, item.Spec, item.Unit, item.Price)
-	if err != nil {
-		return err
+	rawMaterialID := item.RawMaterialID
+	if rawMaterialID > 0 {
+		_, _, _, err := models.GetRawMaterialIdentityTx(tx, rawMaterialID)
+		if err == sql.ErrNoRows {
+			rawMaterialID = 0
+		} else if err != nil {
+			return err
+		}
+	}
+	if rawMaterialID <= 0 {
+		var err error
+		rawMaterialID, err = models.AddRawMaterialByKeyTx(tx, item.MaterialName, item.Spec, item.Unit, item.Price)
+		if err != nil {
+			return err
+		}
 	}
 	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
 		ItemType:        models.InventoryItemRawMaterial,
@@ -173,7 +211,7 @@ func addPurchaseItemStockTx(tx *sql.Tx, itemID int64, item purchaseItemRequest, 
 	}); err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE purchase_materials SET stock_added = 1 WHERE id = ?", itemID)
+	_, err := tx.Exec("UPDATE purchase_materials SET raw_material_id = ?, stock_added = 1 WHERE id = ?", rawMaterialID, itemID)
 	return err
 }
 
@@ -213,13 +251,15 @@ func reversePurchaseItemStockTx(tx *sql.Tx, itemID int64, userID int) error {
 func reverseLegacyPurchaseItemStockTx(tx *sql.Tx, itemID int64, userID int) error {
 	var materialName, spec, purchaseNo string
 	var quantity float64
+	var linkedRawMaterialID int
 	err := tx.QueryRow(`
-		SELECT pm.material_name, COALESCE(pm.spec, ''), pm.quantity, COALESCE(po.purchase_no, '')
+		SELECT pm.material_name, COALESCE(pm.spec, ''), pm.quantity, COALESCE(po.purchase_no, ''),
+		       COALESCE(pm.raw_material_id, 0)
 		FROM purchase_materials pm
 		LEFT JOIN purchase_orders po ON po.id = pm.purchase_order_id
 		WHERE pm.id = ?
 		FOR UPDATE
-	`, itemID).Scan(&materialName, &spec, &quantity, &purchaseNo)
+	`, itemID).Scan(&materialName, &spec, &quantity, &purchaseNo, &linkedRawMaterialID)
 	if err != nil {
 		return err
 	}
@@ -227,16 +267,25 @@ func reverseLegacyPurchaseItemStockTx(tx *sql.Tx, itemID int64, userID int) erro
 		return fmt.Errorf("采购数量异常，无法冲回库存")
 	}
 
-	var rawMaterialID int
+	rawMaterialID := linkedRawMaterialID
 	var unitCost float64
-	err = tx.QueryRow(`
-		SELECT id, COALESCE(NULLIF(avg_cost, 0), price, 0)
-		FROM raw_materials
-		WHERE name = ? AND COALESCE(spec, '') = ?
-		ORDER BY id ASC
-		LIMIT 1
-		FOR UPDATE
-	`, materialName, spec).Scan(&rawMaterialID, &unitCost)
+	if rawMaterialID > 0 {
+		err = tx.QueryRow(`
+			SELECT id, COALESCE(NULLIF(avg_cost, 0), price, 0)
+			FROM raw_materials
+			WHERE id = ?
+			FOR UPDATE
+		`, rawMaterialID).Scan(&rawMaterialID, &unitCost)
+	} else {
+		err = tx.QueryRow(`
+			SELECT id, COALESCE(NULLIF(avg_cost, 0), price, 0)
+			FROM raw_materials
+			WHERE name = ? AND COALESCE(spec, '') = ?
+			ORDER BY id ASC
+			LIMIT 1
+			FOR UPDATE
+		`, materialName, spec).Scan(&rawMaterialID, &unitCost)
+	}
 	if err == sql.ErrNoRows {
 		return fmt.Errorf("找不到采购物料对应的原材料，无法冲回库存")
 	}
@@ -268,11 +317,11 @@ func insertPurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req
 	amount := item.Quantity * item.Price
 	result, err := tx.Exec(`
         INSERT INTO purchase_materials
-            (purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
+            (purchase_order_id, raw_material_id, material_name, material_type, spec, unit, quantity, price, amount,
              supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
              payment_status, status, remark, payment_receipt, stock_added)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, orderID, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, orderID, item.RawMaterialID, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
 		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, req.PaymentStatus, req.Status,
 		req.Remark, receiptJSON, stockAdded)
 	if err != nil {
@@ -286,11 +335,11 @@ func updatePurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req
 	amount := item.Quantity * item.Price
 	_, err := tx.Exec(`
         UPDATE purchase_materials SET
-            material_name = ?, material_type = ?, spec = ?, unit = ?, quantity = ?, price = ?, amount = ?,
+            raw_material_id = ?, material_name = ?, material_type = ?, spec = ?, unit = ?, quantity = ?, price = ?, amount = ?,
             supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?, actual_arrival_date = ?,
             payment_status = ?, status = ?, remark = ?, payment_receipt = ?, stock_added = ?
         WHERE id = ? AND purchase_order_id = ?
-    `, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
+    `, item.RawMaterialID, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
 		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, req.PaymentStatus, req.Status,
 		req.Remark, receiptJSON, stockAdded, item.ID, orderID)
 	return err
@@ -415,6 +464,15 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
+	if err := resolvePurchaseRawMaterialLinksTx(tx, req.Items); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if msg := validatePurchaseOrderRequest(req); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
+
 	placeholderNo := fmt.Sprintf("TMP-%d", time.Now().UnixNano())
 	result, err := tx.Exec(`
         INSERT INTO purchase_orders
@@ -534,6 +592,15 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer tx.Rollback()
+
+	if err := resolvePurchaseRawMaterialLinksTx(tx, req.Items); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if msg := validatePurchaseOrderRequest(req); msg != "" {
+		http.Error(w, msg, http.StatusBadRequest)
+		return
+	}
 
 	var existingID int
 	if err := tx.QueryRow("SELECT id FROM purchase_orders WHERE id = ? FOR UPDATE", req.ID).Scan(&existingID); err != nil {

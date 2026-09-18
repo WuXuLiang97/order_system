@@ -12,6 +12,7 @@ import (
 type PurchaseMaterial struct {
 	ID                  int        `json:"id"`
 	PurchaseOrderID     int        `json:"purchase_order_id"`
+	RawMaterialID       int        `json:"raw_material_id"`
 	MaterialName        string     `json:"material_name"`
 	MaterialType        string     `json:"material_type"`
 	Spec                string     `json:"spec"`
@@ -72,6 +73,7 @@ func EnsurePurchaseMaterialsTable() error {
         CREATE TABLE IF NOT EXISTS purchase_materials (
             id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料明细ID',
             purchase_order_id      INT NULL COMMENT '采购单ID',
+            raw_material_id       INT NOT NULL DEFAULT 0 COMMENT '关联原材料ID',
             material_name         VARCHAR(100) NOT NULL COMMENT '物料名称',
             material_type         VARCHAR(20)  NOT NULL DEFAULT '原材料' COMMENT '物料类型',
             spec                  VARCHAR(100) NOT NULL DEFAULT '' COMMENT '规格型号',
@@ -98,6 +100,9 @@ func EnsurePurchaseMaterialsTable() error {
 	if err := ensureColumn("purchase_materials", "purchase_order_id", "INT NULL COMMENT '采购单ID'"); err != nil {
 		return err
 	}
+	if err := ensureColumn("purchase_materials", "raw_material_id", "INT NOT NULL DEFAULT 0 COMMENT '关联原材料ID'"); err != nil {
+		return err
+	}
 	if err := ensureColumn("purchase_materials", "actual_arrival_date", "DATE NULL"); err != nil {
 		return err
 	}
@@ -107,7 +112,30 @@ func EnsurePurchaseMaterialsTable() error {
 	if err := ensurePaymentReceiptColumnText(); err != nil {
 		return err
 	}
-	return ensureIndex("purchase_materials", "idx_purchase_material_order_id", "purchase_order_id")
+	if err := ensureIndex("purchase_materials", "idx_purchase_material_order_id", "purchase_order_id"); err != nil {
+		return err
+	}
+	if err := ensureIndex("purchase_materials", "idx_purchase_material_raw_material_id", "raw_material_id"); err != nil {
+		return err
+	}
+	return backfillPurchaseMaterialRawMaterialIDs()
+}
+
+// backfillPurchaseMaterialRawMaterialIDs 为升级前没有关联ID、且名称和规格唯一匹配的采购明细补齐原材料ID。
+func backfillPurchaseMaterialRawMaterialIDs() error {
+	_, err := DB.Exec(`
+		UPDATE purchase_materials pm
+		JOIN (
+			SELECT name, COALESCE(spec, '') AS material_spec, MIN(id) AS raw_material_id
+			FROM raw_materials
+			GROUP BY name, COALESCE(spec, '')
+			HAVING COUNT(*) = 1
+		) rm ON pm.material_name = rm.name AND COALESCE(pm.spec, '') = rm.material_spec
+		SET pm.raw_material_id = rm.raw_material_id
+		WHERE pm.raw_material_id = 0
+		  AND pm.material_type = '原材料'
+	`)
+	return err
 }
 
 // EnsurePurchaseOrdersTable 创建采购单主表，并把旧的单条采购记录迁移成单明细采购单。
@@ -341,12 +369,17 @@ func attachPurchaseItems(orders []PurchaseOrder) error {
 		return nil
 	}
 	rows, err := DB.Query(`
-        SELECT id, purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
-               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
-               payment_status, status, COALESCE(remark, ''), COALESCE(payment_receipt, ''), stock_added, created_at
-        FROM purchase_materials
-        WHERE purchase_order_id IS NOT NULL
-        ORDER BY purchase_order_id ASC, id ASC
+        SELECT pm.id, pm.purchase_order_id, pm.raw_material_id,
+               COALESCE(rm.name, pm.material_name), pm.material_type,
+               COALESCE(rm.spec, pm.spec), COALESCE(rm.unit, pm.unit),
+               pm.quantity, pm.price, pm.amount, pm.supplier, pm.freight,
+               pm.purchase_date, pm.expected_arrival_date, pm.actual_arrival_date,
+               pm.payment_status, pm.status, COALESCE(pm.remark, ''),
+               COALESCE(pm.payment_receipt, ''), pm.stock_added, pm.created_at
+        FROM purchase_materials pm
+        LEFT JOIN raw_materials rm ON rm.id = pm.raw_material_id
+        WHERE pm.purchase_order_id IS NOT NULL
+        ORDER BY pm.purchase_order_id ASC, pm.id ASC
     `)
 	if err != nil {
 		return err
@@ -376,12 +409,17 @@ func attachPurchaseItems(orders []PurchaseOrder) error {
 
 func getPurchaseItemsByOrderID(orderID int) ([]PurchaseMaterial, error) {
 	rows, err := DB.Query(`
-        SELECT id, purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
-               supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
-               payment_status, status, COALESCE(remark, ''), COALESCE(payment_receipt, ''), stock_added, created_at
-        FROM purchase_materials
-        WHERE purchase_order_id = ?
-        ORDER BY id ASC
+        SELECT pm.id, pm.purchase_order_id, pm.raw_material_id,
+               COALESCE(rm.name, pm.material_name), pm.material_type,
+               COALESCE(rm.spec, pm.spec), COALESCE(rm.unit, pm.unit),
+               pm.quantity, pm.price, pm.amount, pm.supplier, pm.freight,
+               pm.purchase_date, pm.expected_arrival_date, pm.actual_arrival_date,
+               pm.payment_status, pm.status, COALESCE(pm.remark, ''),
+               COALESCE(pm.payment_receipt, ''), pm.stock_added, pm.created_at
+        FROM purchase_materials pm
+        LEFT JOIN raw_materials rm ON rm.id = pm.raw_material_id
+        WHERE pm.purchase_order_id = ?
+        ORDER BY pm.id ASC
     `, orderID)
 	if err != nil {
 		return nil, err
@@ -407,7 +445,7 @@ func scanPurchaseMaterial(scanner purchaseOrderScanner) (*PurchaseMaterial, erro
 	var purchaseDate, expectedDate, actualDate sql.NullTime
 	var receiptRaw string
 	if err := scanner.Scan(
-		&item.ID, &item.PurchaseOrderID, &item.MaterialName, &item.MaterialType, &item.Spec, &item.Unit,
+		&item.ID, &item.PurchaseOrderID, &item.RawMaterialID, &item.MaterialName, &item.MaterialType, &item.Spec, &item.Unit,
 		&item.Quantity, &item.Price, &item.Amount, &item.Supplier, &item.Freight,
 		&purchaseDate, &expectedDate, &actualDate, &item.PaymentStatus, &item.Status,
 		&item.Remark, &receiptRaw, &item.StockAdded, &item.CreatedAt,

@@ -84,6 +84,7 @@ CREATE TABLE purchase_orders (
 CREATE TABLE purchase_materials (
     id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料明细ID',
     purchase_order_id     INT NULL COMMENT '采购单ID',
+    raw_material_id       INT NOT NULL DEFAULT 0 COMMENT '关联原材料ID',
     material_name         VARCHAR(100) NOT NULL COMMENT '物料名称',
     material_type         VARCHAR(20)  NOT NULL DEFAULT '原材料' COMMENT '物料类型',
     spec                  VARCHAR(100) NOT NULL DEFAULT '' COMMENT '规格型号',
@@ -102,7 +103,8 @@ CREATE TABLE purchase_materials (
     payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
     stock_added           TINYINT NOT NULL DEFAULT 0 COMMENT '是否已加入原材料库存',
     created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
-    INDEX idx_purchase_material_order_id (purchase_order_id)
+    INDEX idx_purchase_material_order_id (purchase_order_id),
+    INDEX idx_purchase_material_raw_material_id (raw_material_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料明细表';
 
 -- =============================================

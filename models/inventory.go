@@ -621,25 +621,31 @@ func GetPurchaseDemand() ([]PurchaseDemandItem, error) {
 		return nil, err
 	}
 
-	inTransit := make(map[string]float64)
+	inTransitByRawMaterial := make(map[int]float64)
+	inTransitByName := make(map[string]float64)
 	transitRows, err := DB.Query(`
-		SELECT pm.material_name, COALESCE(pm.spec, ''), SUM(pm.quantity)
+		SELECT COALESCE(pm.raw_material_id, 0), pm.material_name, COALESCE(pm.spec, ''), SUM(pm.quantity)
 		FROM purchase_materials pm
 		JOIN purchase_orders po ON po.id = pm.purchase_order_id
 		WHERE po.status = 0 AND pm.material_type = '原材料'
-		GROUP BY pm.material_name, COALESCE(pm.spec, '')
+		GROUP BY pm.raw_material_id, pm.material_name, COALESCE(pm.spec, '')
 	`)
 	if err != nil {
 		return nil, err
 	}
 	for transitRows.Next() {
+		var rawMaterialID int
 		var name, spec string
 		var qty float64
-		if err := transitRows.Scan(&name, &spec, &qty); err != nil {
+		if err := transitRows.Scan(&rawMaterialID, &name, &spec, &qty); err != nil {
 			transitRows.Close()
 			return nil, err
 		}
-		inTransit[name+"\x00"+spec] = qty
+		if rawMaterialID > 0 {
+			inTransitByRawMaterial[rawMaterialID] += qty
+		} else {
+			inTransitByName[name+"\x00"+spec] += qty
+		}
 	}
 	if err := transitRows.Close(); err != nil {
 		return nil, err
@@ -672,7 +678,9 @@ func GetPurchaseDemand() ([]PurchaseDemandItem, error) {
 		}
 		item.AvailableStock = canonicalQty(item.ActualStock - item.ReservedStock)
 		item.ProductionDemand = canonicalQty(rawDemand[item.RawMaterialID])
-		item.InTransitPurchase = canonicalQty(inTransit[item.Name+"\x00"+item.Spec])
+		item.InTransitPurchase = canonicalQty(
+			inTransitByRawMaterial[item.RawMaterialID] + inTransitByName[item.Name+"\x00"+item.Spec],
+		)
 		item.NetDemand = canonicalQty(item.AvailableStock + item.InTransitPurchase - item.ProductionDemand - item.SafetyStock)
 		if item.NetDemand < 0 {
 			item.SuggestedPurchase = canonicalQty(-item.NetDemand)

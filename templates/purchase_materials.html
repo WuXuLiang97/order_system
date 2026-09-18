@@ -314,6 +314,7 @@ var addReceiptUrls = [];
 var editReceiptUrls = [];
 var rawMaterialOptions = [];
 var rawMaterialOptionIndex = new Map();
+var rawMaterialById = new Map();
 
 function escapePurchaseHtml(value) {
     return String(value == null ? '' : value)
@@ -356,6 +357,7 @@ function rawMaterialDisplayValue(material, duplicateNameCount) {
 
 function rebuildRawMaterialOptionIndex() {
     rawMaterialOptionIndex = new Map();
+    rawMaterialById = new Map();
     var nameCounts = {};
     rawMaterialOptions.forEach(function(material) {
         var name = (material.name || '').trim();
@@ -366,7 +368,24 @@ function rebuildRawMaterialOptionIndex() {
         var name = (material.name || '').trim();
         if (!name) return;
         rawMaterialOptionIndex.set(rawMaterialDisplayValue(material, nameCounts[name] || 0), material);
+        rawMaterialById.set(parseInt(material.id, 10) || 0, material);
     });
+}
+
+function resolveRawMaterialSelection(row, value) {
+    var material = rawMaterialOptionIndex.get(value);
+    if (material) return material;
+
+    var currentID = parseInt(row.find('.item-raw-material-id').val(), 10) || 0;
+    if (currentID > 0) {
+        material = rawMaterialById.get(currentID);
+        if (material && (material.name || '').trim() === value) return material;
+    }
+
+    var matches = rawMaterialOptions.filter(function(candidate) {
+        return (candidate.name || '').trim() === value;
+    });
+    return matches.length === 1 ? matches[0] : null;
 }
 
 function rawMaterialOptionDescription(material) {
@@ -403,6 +422,7 @@ function purchaseItemRowHtml(item) {
     item = item || {};
     var type = item.material_type || '原材料';
     var id = parseInt(item.id, 10) || 0;
+    var rawMaterialId = parseInt(item.raw_material_id, 10) || 0;
     var name = escapePurchaseAttr(item.material_name || '');
     var spec = escapePurchaseAttr(item.spec || '');
     var unit = escapePurchaseAttr(item.unit || '个');
@@ -418,7 +438,8 @@ function purchaseItemRowHtml(item) {
             <select class="form-select form-select-sm item-material-type" onchange="togglePurchaseItemRawMaterial(this)">${typeOptions}</select>
         </td>
         <td>
-            <input type="text" class="form-control form-control-sm item-material-name" value="${name}" ${type === '原材料' ? 'list="rawMaterialOptions"' : ''} autocomplete="off" onchange="applyPurchaseItemMaterialSelection(this)">
+            <input type="hidden" class="item-raw-material-id" value="${rawMaterialId}">
+            <input type="text" class="form-control form-control-sm item-material-name" value="${name}" ${type === '原材料' ? 'list="rawMaterialOptions"' : ''} autocomplete="off" oninput="clearPurchaseItemRawMaterialSelection(this)" onchange="applyPurchaseItemMaterialSelection(this)">
         </td>
         <td><input type="text" class="form-control form-control-sm item-spec" value="${spec}"></td>
         <td><input type="text" class="form-control form-control-sm item-unit" value="${unit}"></td>
@@ -449,6 +470,14 @@ function togglePurchaseItemRawMaterial(select) {
         nameInput.attr('list', 'rawMaterialOptions');
     } else {
         nameInput.removeAttr('list');
+        row.find('.item-raw-material-id').val(0);
+    }
+}
+
+function clearPurchaseItemRawMaterialSelection(input) {
+    var row = $(input).closest('tr');
+    if (row.find('.item-material-type').val() === '原材料') {
+        row.find('.item-raw-material-id').val(0);
     }
 }
 
@@ -456,8 +485,12 @@ function applyPurchaseItemMaterialSelection(input) {
     var row = $(input).closest('tr');
     if (row.find('.item-material-type').val() !== '原材料') return;
     var selectedValue = ($(input).val() || '').trim();
-    var material = rawMaterialOptionIndex.get(selectedValue);
-    if (!material) return;
+    var material = resolveRawMaterialSelection(row, selectedValue);
+    if (!material) {
+        row.find('.item-raw-material-id').val(0);
+        return;
+    }
+    row.find('.item-raw-material-id').val(parseInt(material.id, 10) || 0);
     $(input).val(material.name || '');
     row.find('.item-spec').val(material.spec || '');
     row.find('.item-unit').val(material.unit || '');
@@ -482,9 +515,18 @@ function collectPurchaseItems(prefix) {
             valid = false;
             return false;
         }
+        var materialType = row.find('.item-material-type').val();
+        var rawMaterialId = materialType === '原材料'
+            ? (parseInt(row.find('.item-raw-material-id').val(), 10) || 0)
+            : 0;
+        if (materialType === '原材料' && rawMaterialId <= 0) {
+            var matchedMaterial = resolveRawMaterialSelection(row, name);
+            if (matchedMaterial) rawMaterialId = parseInt(matchedMaterial.id, 10) || 0;
+        }
         items.push({
             id: parseInt(row.attr('data-item-id'), 10) || 0,
-            material_type: row.find('.item-material-type').val(),
+            raw_material_id: rawMaterialId,
+            material_type: materialType,
             material_name: name,
             spec: (row.find('.item-spec').val() || '').trim(),
             unit: (row.find('.item-unit').val() || '').trim() || '个',

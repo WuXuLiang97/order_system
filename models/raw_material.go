@@ -1,6 +1,7 @@
 package models
 
 import (
+	"database/sql"
 	"encoding/json"
 	"time"
 )
@@ -97,6 +98,17 @@ func GetRawMaterialByID(id int) (*RawMaterial, error) {
 	return scanRawMaterial(DB.QueryRow(rawMaterialSelect+" WHERE rm.id = ?", id))
 }
 
+// GetRawMaterialIdentityTx 在事务内读取原材料当前的名称、规格和单位，用于采购明细按ID同步。
+func GetRawMaterialIdentityTx(tx *sql.Tx, id int) (string, string, string, error) {
+	var name, spec, unit string
+	err := tx.QueryRow(`
+		SELECT name, COALESCE(spec, ''), COALESCE(unit, '')
+		FROM raw_materials
+		WHERE id = ?
+	`, id).Scan(&name, &spec, &unit)
+	return name, spec, unit, err
+}
+
 // AddRawMaterial 兼容原有调用，默认不包含图鉴图片。
 func AddRawMaterial(name, spec, unit string, stock float64, minStock float64, price float64) (int64, error) {
 	return AddRawMaterialWithImages(name, spec, unit, stock, minStock, price, nil)
@@ -171,6 +183,13 @@ func UpdateRawMaterialWithImages(id int, name, spec, unit string, stock float64,
 		SET name = ?, spec = ?, unit = ?, min_stock = ?, price = ?, images = ?
 		WHERE id = ?
 	`, name, spec, unit, minStock, price, imagesJSON, id); err != nil {
+		return err
+	}
+	if _, err := tx.Exec(`
+		UPDATE purchase_materials
+		SET material_name = ?, spec = ?, unit = ?
+		WHERE raw_material_id = ?
+	`, name, spec, unit, id); err != nil {
 		return err
 	}
 	delta := stock - currentStock
