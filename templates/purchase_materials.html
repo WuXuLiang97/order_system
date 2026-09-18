@@ -13,27 +13,34 @@
             <div class="card-body">
                 <div class="card border-warning mb-3">
                     <div class="card-header d-flex justify-content-between align-items-center">
-                        <strong><i class="bi bi-calculator"></i> 原材料净需求与采购建议</strong>
+                        <button class="btn btn-link text-dark text-decoration-none p-0 d-flex align-items-center" type="button"
+                                data-bs-toggle="collapse" data-bs-target="#purchaseDemandCollapse"
+                                aria-expanded="false" aria-controls="purchaseDemandCollapse">
+                            <i class="bi bi-chevron-right me-2 purchase-demand-chevron"></i>
+                            <strong><i class="bi bi-calculator"></i> 原材料净需求与采购建议</strong>
+                        </button>
                         <button type="button" class="btn btn-outline-warning btn-sm" onclick="loadPurchaseDemand()">刷新</button>
                     </div>
-                    <div class="table-responsive">
-                        <table class="table table-sm table-hover mb-0">
-                            <thead>
-                                <tr>
-                                    <th>原材料</th>
-                                    <th>实际库存</th>
-                                    <th>订单占用</th>
-                                    <th>可用库存</th>
-                                    <th>生产/历史需求</th>
-                                    <th>在途采购</th>
-                                    <th>安全库存</th>
-                                    <th>净需求</th>
-                                    <th>建议采购</th>
-                                    <th>平均成本</th>
-                                </tr>
-                            </thead>
-                            <tbody id="purchaseDemandTableBody"></tbody>
-                        </table>
+                    <div class="collapse" id="purchaseDemandCollapse">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-hover mb-0">
+                                <thead>
+                                    <tr>
+                                        <th>原材料</th>
+                                        <th>实际库存</th>
+                                        <th>订单占用</th>
+                                        <th>可用库存</th>
+                                        <th>生产/历史需求</th>
+                                        <th>在途采购</th>
+                                        <th>安全库存</th>
+                                        <th>净需求</th>
+                                        <th>建议采购</th>
+                                        <th>平均成本</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="purchaseDemandTableBody"></tbody>
+                            </table>
+                        </div>
                     </div>
                 </div>
                 <div class="mb-3">
@@ -296,6 +303,13 @@
 
 {{define "scripts"}}
 <script>
+document.getElementById('purchaseDemandCollapse').addEventListener('show.bs.collapse', function() {
+    document.querySelector('.purchase-demand-chevron').classList.replace('bi-chevron-right', 'bi-chevron-down');
+});
+document.getElementById('purchaseDemandCollapse').addEventListener('hide.bs.collapse', function() {
+    document.querySelector('.purchase-demand-chevron').classList.replace('bi-chevron-down', 'bi-chevron-right');
+});
+
 var addReceiptUrls = [];
 var editReceiptUrls = [];
 var rawMaterialOptions = [];
