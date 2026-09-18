@@ -703,13 +703,26 @@ func scanStockMovement(scanner interface {
 }
 
 func ListStockMovementsByReferenceTx(tx *sql.Tx, referenceType string, referenceID int64, movementType string) ([]StockMovement, error) {
+	// 返回尚未冲回的净数量。更新采购单时会先冲回旧入库、再重新入库，
+	// 原始入库流水仍会保留；若删除时再次读取原始流水，会导致重复冲回。
 	rows, err := tx.Query(`
-		SELECT id, item_type, item_id, movement_type, quantity, unit_cost, total_cost,
-		       reference_type, reference_id, reference_no, order_item_id, reversal_of,
-		       occurred_at, created_by_user_id, remark, created_at
-		FROM stock_movements
-		WHERE reference_type = ? AND reference_id = ? AND movement_type = ?
-		ORDER BY id ASC
+		SELECT sm.id, sm.item_type, sm.item_id, sm.movement_type,
+		       sm.quantity + COALESCE((
+		           SELECT SUM(reversal.quantity)
+		           FROM stock_movements reversal
+		           WHERE reversal.reversal_of = sm.id
+		       ), 0) AS outstanding_quantity,
+		       sm.unit_cost, sm.total_cost,
+		       sm.reference_type, sm.reference_id, sm.reference_no, sm.order_item_id, sm.reversal_of,
+		       sm.occurred_at, sm.created_by_user_id, sm.remark, sm.created_at
+		FROM stock_movements sm
+		WHERE sm.reference_type = ? AND sm.reference_id = ? AND sm.movement_type = ?
+		  AND sm.quantity + COALESCE((
+		      SELECT SUM(reversal.quantity)
+		      FROM stock_movements reversal
+		      WHERE reversal.reversal_of = sm.id
+		  ), 0) > 0.0005
+		ORDER BY sm.id ASC
 		FOR UPDATE
 	`, referenceType, referenceID, movementType)
 	if err != nil {
@@ -718,11 +731,17 @@ func ListStockMovementsByReferenceTx(tx *sql.Tx, referenceType string, reference
 	defer rows.Close()
 	var list []StockMovement
 	for rows.Next() {
-		movement, err := scanStockMovement(rows)
-		if err != nil {
+		var movement StockMovement
+		if err := rows.Scan(
+			&movement.ID, &movement.ItemType, &movement.ItemID, &movement.MovementType, &movement.Quantity,
+			&movement.UnitCost, &movement.TotalCost,
+			&movement.ReferenceType, &movement.ReferenceID, &movement.ReferenceNo,
+			&movement.OrderItemID, &movement.ReversalOf, &movement.OccurredAt,
+			&movement.CreatedByUserID, &movement.Remark, &movement.CreatedAt,
+		); err != nil {
 			return nil, err
 		}
-		list = append(list, *movement)
+		list = append(list, movement)
 	}
 	return list, rows.Err()
 }
