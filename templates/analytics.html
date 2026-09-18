@@ -78,6 +78,13 @@
         vertical-align: middle;
         white-space: nowrap;
     }
+    .analytics-chart-wrap {
+        position: relative;
+        height: 380px;
+    }
+    .analytics-view-toggle .btn {
+        min-width: 76px;
+    }
     .rank-badge {
         display: inline-flex;
         align-items: center;
@@ -96,6 +103,7 @@
     }
     @media (max-width: 767.98px) {
         .analytics-kpi .kpi-value { font-size: 1.35rem; }
+        .analytics-chart-wrap { height: 300px; }
     }
 </style>
 
@@ -236,30 +244,63 @@
 
 <div class="card mb-4">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
-        <strong><i class="bi bi-calendar3"></i> 每期收入、成本、毛利与纯利润</strong>
-        <span class="text-muted small">显示所有有发货或费用数据的月份</span>
+        <div>
+            <strong><i class="bi bi-calendar3"></i> 每期收入、成本、毛利与纯利润</strong>
+            <div class="text-muted small mt-1">显示所有有发货或费用数据的月份，可切换数据表、柱状图或曲线图</div>
+        </div>
+        <div class="btn-group btn-group-sm analytics-view-toggle" role="group" aria-label="每期数据展示方式">
+            <button type="button" class="btn btn-outline-primary active" data-analytics-view="table" onclick="setAnalyticsMonthlyView('table')">
+                <i class="bi bi-table"></i> 数据表
+            </button>
+            <button type="button" class="btn btn-outline-primary" data-analytics-view="bar" onclick="setAnalyticsMonthlyView('bar')">
+                <i class="bi bi-bar-chart"></i> 柱状图
+            </button>
+            <button type="button" class="btn btn-outline-primary" data-analytics-view="line" onclick="setAnalyticsMonthlyView('line')">
+                <i class="bi bi-graph-up"></i> 曲线图
+            </button>
+        </div>
     </div>
-    <div class="table-responsive">
-        <table class="table table-striped table-hover analytics-table mb-0">
-            <thead>
-                <tr>
-                    <th>月份</th>
-                    <th>收入</th>
-                    <th>材料成本</th>
-                    <th>毛利</th>
-                    <th>费用</th>
-                    <th>纯利润</th>
-                    <th>成本占比</th>
-                    <th>毛利率</th>
-                    <th>净利率</th>
-                    <th>订单数</th>
-                    <th>销量</th>
-                </tr>
-            </thead>
-            <tbody id="analyticsMonthlyBody">
-                <tr><td colspan="11" class="text-center text-muted py-4">正在加载...</td></tr>
-            </tbody>
-        </table>
+    <div id="analyticsTableView">
+        <div class="table-responsive">
+            <table class="table table-striped table-hover analytics-table mb-0">
+                <thead>
+                    <tr>
+                        <th>月份</th>
+                        <th>收入</th>
+                        <th>材料成本</th>
+                        <th>毛利</th>
+                        <th>费用</th>
+                        <th>纯利润</th>
+                        <th>成本占比</th>
+                        <th>毛利率</th>
+                        <th>净利率</th>
+                        <th>订单数</th>
+                        <th>销量</th>
+                    </tr>
+                </thead>
+                <tbody id="analyticsMonthlyBody">
+                    <tr><td colspan="11" class="text-center text-muted py-4">正在加载...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+    <div id="analyticsBarView" class="d-none">
+        <div class="card-body">
+            <div class="text-muted small mb-2">按月份并列对比收入、材料成本、毛利与纯利润</div>
+            <div class="analytics-chart-wrap">
+                <canvas id="analyticsBarChart" aria-label="每期收入、成本、毛利与纯利润柱状图" role="img"></canvas>
+            </div>
+            <div id="analyticsBarEmpty" class="text-center text-muted py-5 d-none">暂无趋势数据</div>
+        </div>
+    </div>
+    <div id="analyticsLineView" class="d-none">
+        <div class="card-body">
+            <div class="text-muted small mb-2">观察收入、材料成本、毛利与纯利润随月份变化的趋势</div>
+            <div class="analytics-chart-wrap">
+                <canvas id="analyticsLineChart" aria-label="每期收入、成本、毛利与纯利润曲线图" role="img"></canvas>
+            </div>
+            <div id="analyticsLineEmpty" class="text-center text-muted py-5 d-none">暂无趋势数据</div>
+        </div>
     </div>
 </div>
 
@@ -299,7 +340,11 @@
 {{end}}
 
 {{define "scripts"}}
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 <script>
+    var analyticsMonthlyRows = [];
+    var analyticsCharts = {bar: null, line: null};
+
     function currentAnalyticsMonth() {
         var now = new Date();
         return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
@@ -327,6 +372,139 @@
     function formatAnalyticsQuantity(value, unit) {
         var number = Number(value || 0);
         return number.toLocaleString('zh-CN', {maximumFractionDigits: 3}) + (unit || '');
+    }
+
+    function formatAnalyticsCompactMoney(value) {
+        var number = Number(value || 0);
+        var absolute = Math.abs(number);
+        if (absolute >= 100000000) {
+            return (number / 100000000).toFixed(1) + '亿';
+        }
+        if (absolute >= 10000) {
+            return (number / 10000).toFixed(1) + '万';
+        }
+        return number.toLocaleString('zh-CN', {maximumFractionDigits: 0});
+    }
+
+    function currentAnalyticsMonthlyView() {
+        return $('.analytics-view-toggle [data-analytics-view].active').data('analytics-view') || 'table';
+    }
+
+    function setAnalyticsMonthlyView(view) {
+        if (['table', 'bar', 'line'].indexOf(view) === -1) {
+            return;
+        }
+        $('.analytics-view-toggle [data-analytics-view]').removeClass('active');
+        $('.analytics-view-toggle [data-analytics-view="' + view + '"]').addClass('active');
+        $('#analyticsTableView').toggleClass('d-none', view !== 'table');
+        $('#analyticsBarView').toggleClass('d-none', view !== 'bar');
+        $('#analyticsLineView').toggleClass('d-none', view !== 'line');
+        if (view !== 'table') {
+            renderAnalyticsMonthlyChart(view);
+        }
+    }
+
+    function destroyAnalyticsChart(type) {
+        if (analyticsCharts[type]) {
+            analyticsCharts[type].destroy();
+            analyticsCharts[type] = null;
+        }
+    }
+
+    function destroyAnalyticsCharts() {
+        destroyAnalyticsChart('bar');
+        destroyAnalyticsChart('line');
+    }
+
+    function makeAnalyticsChartDataset(label, key, color, barColor, line) {
+        return {
+            label: label,
+            data: analyticsMonthlyRows.map(function (row) { return Number(row[key] || 0); }),
+            backgroundColor: line ? color : barColor,
+            borderColor: color,
+            borderWidth: line ? 2.5 : 0,
+            borderRadius: line ? 0 : 5,
+            pointBackgroundColor: color,
+            pointBorderColor: '#ffffff',
+            pointBorderWidth: 1.5,
+            pointRadius: line ? 3 : 0,
+            pointHoverRadius: line ? 5 : 3,
+            tension: 0.35,
+            cubicInterpolationMode: 'monotone',
+            fill: false,
+            maxBarThickness: 34
+        };
+    }
+
+    function renderAnalyticsMonthlyChart(type) {
+        var isLine = type === 'line';
+        var canvasID = isLine ? 'analyticsLineChart' : 'analyticsBarChart';
+        var emptySelector = isLine ? '#analyticsLineEmpty' : '#analyticsBarEmpty';
+        var viewSelector = isLine ? '#analyticsLineView' : '#analyticsBarView';
+
+        $('#analyticsBarEmpty, #analyticsLineEmpty').addClass('d-none').text('暂无趋势数据');
+        $('#analyticsBarView .analytics-chart-wrap, #analyticsLineView .analytics-chart-wrap').removeClass('d-none');
+
+        if (!analyticsMonthlyRows.length) {
+            $(viewSelector + ' .analytics-chart-wrap').addClass('d-none');
+            $(emptySelector).removeClass('d-none');
+            return;
+        }
+        if (typeof Chart === 'undefined') {
+            $(viewSelector + ' .analytics-chart-wrap').addClass('d-none');
+            $(emptySelector).removeClass('d-none').text('图表组件加载失败，请检查网络后刷新页面重试');
+            return;
+        }
+
+        destroyAnalyticsChart(type);
+        var canvas = document.getElementById(canvasID);
+        analyticsCharts[type] = new Chart(canvas.getContext('2d'), {
+            type: type,
+            data: {
+                labels: analyticsMonthlyRows.map(function (row) { return row.period; }),
+                datasets: [
+                    makeAnalyticsChartDataset('收入', 'revenue', '#0d6efd', 'rgba(13,110,253,0.78)', isLine),
+                    makeAnalyticsChartDataset('材料成本', 'cost', '#f59e0b', 'rgba(245,158,11,0.78)', isLine),
+                    makeAnalyticsChartDataset('毛利', 'profit', '#198754', 'rgba(25,135,84,0.78)', isLine),
+                    makeAnalyticsChartDataset('纯利润', 'net_profit', '#6f42c1', 'rgba(111,66,193,0.78)', isLine)
+                ]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: {duration: 350},
+                interaction: {mode: 'index', intersect: false},
+                plugins: {
+                    legend: {
+                        position: 'top',
+                        labels: {usePointStyle: true, boxWidth: 8, boxHeight: 8, padding: 18}
+                    },
+                    tooltip: {
+                        callbacks: {
+                            label: function (context) {
+                                return context.dataset.label + '：' + formatAnalyticsMoney(context.parsed.y);
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: {display: false},
+                        ticks: {maxRotation: 0, autoSkip: true, maxTicksLimit: 14}
+                    },
+                    y: {
+                        beginAtZero: true,
+                        grid: {color: 'rgba(108,117,125,0.14)'},
+                        title: {display: true, text: '金额（元）', color: '#6c757d'},
+                        ticks: {
+                            callback: function (value) {
+                                return formatAnalyticsCompactMoney(value);
+                            }
+                        }
+                    }
+                }
+            }
+        });
     }
 
     function loadAnalytics() {
@@ -412,6 +590,7 @@
     }
 
     function renderAnalyticsMonthly(rows) {
+        analyticsMonthlyRows = rows.slice().reverse();
         var html = '';
         rows.forEach(function (row) {
             var profitClass = Number(row.profit) < 0 ? 'text-danger' : 'text-success';
@@ -434,6 +613,12 @@
             html = '<tr><td colspan="11" class="text-center text-muted py-4">暂无已发货订单或费用数据</td></tr>';
         }
         $('#analyticsMonthlyBody').html(html);
+
+        destroyAnalyticsCharts();
+        var activeView = currentAnalyticsMonthlyView();
+        if (activeView !== 'table') {
+            renderAnalyticsMonthlyChart(activeView);
+        }
     }
 
     function renderAnalyticsProducts(products) {
