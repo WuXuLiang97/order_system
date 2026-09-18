@@ -11,6 +11,31 @@
                 {{end}}
             </div>
             <div class="card-body">
+                <div class="card border-warning mb-3">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <strong><i class="bi bi-calculator"></i> 原材料净需求与采购建议</strong>
+                        <button type="button" class="btn btn-outline-warning btn-sm" onclick="loadPurchaseDemand()">刷新</button>
+                    </div>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover mb-0">
+                            <thead>
+                                <tr>
+                                    <th>原材料</th>
+                                    <th>实际库存</th>
+                                    <th>订单占用</th>
+                                    <th>可用库存</th>
+                                    <th>生产/历史需求</th>
+                                    <th>在途采购</th>
+                                    <th>安全库存</th>
+                                    <th>净需求</th>
+                                    <th>建议采购</th>
+                                    <th>平均成本</th>
+                                </tr>
+                            </thead>
+                            <tbody id="purchaseDemandTableBody"></tbody>
+                        </table>
+                    </div>
+                </div>
                 <div class="mb-3">
                     <input type="text" id="searchPurchase" class="form-control" placeholder="搜索采购单号、物料名称或供应商...">
                 </div>
@@ -692,9 +717,45 @@ function resetAddPurchaseForm() {
     $('#addReceiptFile').val('');
 }
 
+function loadPurchaseDemand() {
+    $.ajax({
+        url: '/api/purchase-materials/demand',
+        method: 'GET',
+        success: function(data) {
+            var tbody = $('#purchaseDemandTableBody').empty();
+            if (!Array.isArray(data) || !data.length) {
+                tbody.append('<tr><td colspan="10" class="text-muted text-center">暂无采购需求</td></tr>');
+                return;
+            }
+            data.forEach(function(item) {
+                var netClass = Number(item.net_demand) < 0 ? 'text-danger fw-bold' : 'text-success';
+                var suggested = Number(item.suggested_purchase || 0);
+                tbody.append(`
+                    <tr>
+                        <td><strong>${item.name}</strong>${item.spec ? '<div class="small text-muted">' + item.spec + '</div>' : ''}</td>
+                        <td>${Number(item.actual_stock || 0).toFixed(3)}</td>
+                        <td>${Number(item.reserved_stock || 0).toFixed(3)}</td>
+                        <td>${Number(item.available_stock || 0).toFixed(3)}</td>
+                        <td>${Number(item.production_demand || 0).toFixed(3)}</td>
+                        <td>${Number(item.in_transit_purchase || 0).toFixed(3)}</td>
+                        <td>${Number(item.safety_stock || 0).toFixed(3)}</td>
+                        <td class="${netClass}">${Number(item.net_demand || 0).toFixed(3)}</td>
+                        <td>${suggested > 0 ? '<span class="badge bg-danger">' + suggested.toFixed(3) + '</span>' : '<span class="badge bg-success">0</span>'}</td>
+                        <td>¥${Number(item.avg_cost || 0).toFixed(2)}</td>
+                    </tr>
+                `);
+            });
+        },
+        error: function(xhr) {
+            $('#purchaseDemandTableBody').html('<tr><td colspan="10" class="text-danger text-center">加载采购建议失败：' + xhr.responseText + '</td></tr>');
+        }
+    });
+}
+
 $(document).ready(function() {
     resetAddPurchaseForm();
     loadPurchaseMaterials();
+    loadPurchaseDemand();
     loadRawMaterialOptions();
     $('#searchPurchase').on('keyup', applyPurchaseSearch);
     $('#summaryMonth').val(currentMonth());
@@ -718,6 +779,7 @@ function addPurchase() {
             resetAddPurchaseForm();
             loadSummary($('#summaryMonth').val());
             loadPurchaseMaterials();
+            loadPurchaseDemand();
         },
         error: function(xhr) {
             alert('添加失败: ' + xhr.responseText);
@@ -768,6 +830,7 @@ function updatePurchase() {
             $('#editPurchaseModal').modal('hide');
             loadSummary($('#summaryMonth').val());
             loadPurchaseMaterials();
+            loadPurchaseDemand();
         },
         error: function(xhr) {
             alert('更新失败: ' + xhr.responseText);
@@ -784,6 +847,7 @@ function deletePurchase(id) {
             alert('采购单删除成功');
             loadSummary($('#summaryMonth').val());
             loadPurchaseMaterials();
+            loadPurchaseDemand();
         },
         error: function(xhr) {
             alert('删除失败: ' + xhr.responseText);

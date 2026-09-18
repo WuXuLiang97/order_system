@@ -58,6 +58,9 @@ func InitDB(dataSourceName string) {
 	if err = EnsureOrderBOMSnapshotTable(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureInventoryAccounting(); err != nil {
+		log.Fatal(err)
+	}
 	log.Println("Database connected")
 }
 

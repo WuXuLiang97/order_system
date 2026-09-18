@@ -69,8 +69,8 @@ func ReplaceBOM(productID int, bomItems []BOMItem) error {
 }
 
 // OrderBOMSnapshot 订单BOM快照：下单时锁定各产品的 BOM 用量，
-// 取消/恢复/删除订单时按快照归还或扣减原材料库存，
-// 避免之后修改产品 BOM 影响历史订单的库存账目。
+// 供历史订单追溯，当前生产采购需求按实际BOM计算，
+// 避免之后修改产品 BOM 影响历史订单。
 type OrderBOMSnapshot struct {
 	ID            int       `json:"id"`
 	OrderID       int       `json:"order_id"`

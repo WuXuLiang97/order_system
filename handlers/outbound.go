@@ -197,6 +197,7 @@ func CreateProductOutbound(w http.ResponseWriter, r *http.Request) {
 
 	snaps := make([]outboundItemSnapshot, 0, len(req.Items))
 	productInfoCache := make(map[int]productStockInfo)
+	allowanceByProduct := make(map[int]float64)
 	requestedByProduct := make(map[int]float64)
 	seenOrderItems := make(map[int]bool)
 
@@ -269,9 +270,19 @@ func CreateProductOutbound(w http.ResponseWriter, r *http.Request) {
 			}
 			productInfoCache[it.ProductID] = info
 		}
+		allowance, ok := allowanceByProduct[it.ProductID]
+		if !ok {
+			availability, err := models.GetProductOutboundAllowanceTx(tx, it.ProductID, req.OrderID)
+			if err != nil {
+				writeJSONError(w, http.StatusInternalServerError, err.Error())
+				return
+			}
+			allowance = availability.Available
+			allowanceByProduct[it.ProductID] = allowance
+		}
 		requestedByProduct[it.ProductID] += it.Quantity
-		if requestedByProduct[it.ProductID] > info.Stock+0.0005 {
-			writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("“%s”库存不足：当前 %.3f，需出库 %.3f", info.Name, info.Stock, requestedByProduct[it.ProductID]))
+		if requestedByProduct[it.ProductID] > allowance+0.0005 {
+			writeJSONError(w, http.StatusBadRequest, fmt.Sprintf("“%s”可用库存不足：可用 %.3f，需出库 %.3f", info.Name, allowance, requestedByProduct[it.ProductID]))
 			return
 		}
 
@@ -307,7 +318,23 @@ func CreateProductOutbound(w http.ResponseWriter, r *http.Request) {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
-		if _, err := tx.Exec("UPDATE products SET stock = stock - ? WHERE id = ?", item.Quantity, item.ProductID); err != nil {
+		if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+			ItemType:        models.InventoryItemProduct,
+			ItemID:          item.ProductID,
+			Quantity:        -item.Quantity,
+			MovementType:    models.MovementSalesOut,
+			ReferenceType:   "product_outbound",
+			ReferenceID:     outboundID,
+			ReferenceNo:     outboundNo,
+			OrderItemID:     item.OrderItemID,
+			CreatedByUserID: userID,
+			OccurredAt:      outDate,
+			Remark:          "销售出库，按出库时移动平均成本冻结",
+		}); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+		if err := models.ConsumeProductReservationTx(tx, item.OrderItemID, item.ProductID, item.Quantity); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -407,19 +434,20 @@ func DeleteProductOutbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	rows, err := tx.Query("SELECT product_id, quantity FROM product_outbound_items WHERE outbound_id = ?", id)
+	rows, err := tx.Query("SELECT order_item_id, product_id, quantity FROM product_outbound_items WHERE outbound_id = ?", id)
 	if err != nil {
 		writeJSONError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
 	type itemStock struct {
-		productID int
-		quantity  float64
+		orderItemID int
+		productID   int
+		quantity    float64
 	}
 	var items []itemStock
 	for rows.Next() {
 		var it itemStock
-		if err := rows.Scan(&it.productID, &it.quantity); err != nil {
+		if err := rows.Scan(&it.orderItemID, &it.productID, &it.quantity); err != nil {
 			rows.Close()
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
@@ -431,8 +459,37 @@ func DeleteProductOutbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	movements, err := models.ListStockMovementsByReferenceTx(tx, "product_outbound", int64(id), models.MovementSalesOut)
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	for _, movement := range movements {
+		if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+			ItemType:        movement.ItemType,
+			ItemID:          movement.ItemID,
+			Quantity:        -movement.Quantity,
+			UnitCost:        movement.UnitCost,
+			MovementType:    models.MovementSalesOutReversal,
+			ReferenceType:   "product_outbound",
+			ReferenceID:     int64(id),
+			ReferenceNo:     movement.ReferenceNo,
+			OrderItemID:     movement.OrderItemID,
+			ReversalOf:      movement.ID,
+			CreatedByUserID: userID,
+			OccurredAt:      time.Now(),
+			Remark:          "删除送货单，冲回原销售出库成本",
+		}); err != nil {
+			writeJSONError(w, http.StatusBadRequest, err.Error())
+			return
+		}
+	}
 	for _, item := range items {
-		if _, err := tx.Exec("UPDATE products SET stock = stock + ? WHERE id = ?", item.quantity, item.productID); err != nil {
+		if err := models.RestoreProductReservationTx(tx, item.orderItemID, item.productID, item.quantity); err != nil {
 			writeJSONError(w, http.StatusInternalServerError, err.Error())
 			return
 		}
@@ -456,7 +513,7 @@ func DeleteProductOutbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"message": "出库记录已删除，库存已回补"})
+	json.NewEncoder(w).Encode(map[string]string{"message": "出库记录已删除，库存和订单占用已按原成本冲回"})
 }
 
 // ProductOutboundPrintPage 送货单打印页（不含价格/金额，保护客户信息）

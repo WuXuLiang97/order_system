@@ -31,10 +31,13 @@
                                 <th>序号</th>
                                 <th>名称</th>
                                 <th>规格型号</th>
-                                <th>库存</th>
+                                <th>实际库存</th>
+                                <th>订单占用</th>
+                                <th>可用库存</th>
+                                <th>平均成本</th>
                                 <th>单位</th>
                                 <th>最低库存</th>
-                                <th>单价</th>
+                                <th>参考单价</th>
                                 <th>图鉴</th>
                                 <th>状态</th>
                                 <th>操作</th>
@@ -301,10 +304,11 @@ function loadMaterials() {
             data.forEach(function(m, index) {
                 var status = '';
                 var statusClass = '';
-                if (m.stock <= m.min_stock) {
+                var available = Number(m.available_stock || 0);
+                if (available <= m.min_stock) {
                     status = '<span class="badge bg-danger">库存不足</span>';
                     statusClass = 'table-danger';
-                } else if (m.stock <= m.min_stock * 2) {
+                } else if (available <= m.min_stock * 2) {
                     status = '<span class="badge bg-warning">库存偏低</span>';
                     statusClass = 'table-warning';
                 } else {
@@ -333,10 +337,13 @@ function loadMaterials() {
                         <td>${index + 1}</td>
                         <td><strong>${m.name}</strong></td>
                         <td>${m.spec || '-'}</td>
-                        <td>${m.stock}</td>
+                        <td>${Number(m.stock || 0).toFixed(3)}</td>
+                        <td>${Number(m.reserved_stock || 0).toFixed(3)}</td>
+                        <td><span class="badge bg-${statusClass === 'table-danger' ? 'danger' : statusClass === 'table-warning' ? 'warning text-dark' : 'success'}">${available.toFixed(3)}</span></td>
+                        <td>¥${Number(m.avg_cost || 0).toFixed(2)}</td>
                         <td>${m.unit || '-'}</td>
-                        <td>${m.min_stock}</td>
-                        <td>¥${m.price.toFixed(2)}</td>
+                        <td>${Number(m.min_stock || 0).toFixed(3)}</td>
+                        <td>¥${Number(m.price || 0).toFixed(2)}</td>
                         <td>${imageGallery}</td>
                         <td>${status}</td>
                         <td>${actions}</td>

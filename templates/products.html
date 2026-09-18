@@ -31,8 +31,11 @@
                                 <th>规格型号</th>
                                 <th>包装</th>
                                 <th>单位</th>
-                                <th>库存</th>
-                                <th>单价</th>
+                                <th>实际库存</th>
+                                <th>订单占用</th>
+                                <th>可用库存</th>
+                                <th>平均成本</th>
+                                <th>销售单价</th>
                                 <th>BOM</th>
                                 <th>状态</th>
                                 <th>操作</th>
@@ -477,8 +480,9 @@ function loadProducts() {
             tbody.empty();
 
             data.forEach(function(p, index) {
-                var status = p.stock > 50 ? '充足' : p.stock > 10 ? '偏低' : '库存不足';
-                var statusClass = p.stock > 50 ? 'success' : p.stock > 10 ? 'warning' : 'danger';
+                var available = Number(p.available_stock || 0);
+                var status = available > 50 ? '充足' : available > 10 ? '偏低' : '库存不足';
+                var statusClass = available > 50 ? 'success' : available > 10 ? 'warning' : 'danger';
                 var bomLabel = p.has_bom ? '<span class="badge bg-info">有</span>' : '<span class="badge bg-secondary">无</span>';
 
                 var actions = '';
@@ -493,8 +497,11 @@ function loadProducts() {
                         <td>${p.spec || '-'}</td>
                         <td>${p.packaging ? p.packaging : '-'}</td>
                         <td>${p.unit || '-'}</td>
-                        <td><span class="badge bg-${statusClass}">${p.stock}</span></td>
-                        <td>¥${p.price.toFixed(2)}</td>
+                        <td>${Number(p.stock || 0).toFixed(0)}</td>
+                        <td>${Number(p.reserved_stock || 0).toFixed(0)}</td>
+                        <td><span class="badge bg-${statusClass}">${available.toFixed(0)}</span></td>
+                        <td>¥${Number(p.avg_cost || 0).toFixed(2)}</td>
+                        <td>¥${Number(p.price || 0).toFixed(2)}</td>
                         <td>${bomLabel}</td>
                         <td><span class="badge bg-${statusClass}">${status}</span></td>
                         <td>${actions}</td>

@@ -103,6 +103,7 @@ func main() {
 
 	// API 路由 - 采购物料
 	http.HandleFunc("/api/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, handlers.ListPurchaseMaterials))
+	http.HandleFunc("/api/purchase-materials/demand", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseDemand))
 	http.HandleFunc("/api/purchase-materials/raw-material-options", handlers.RequirePermission(handlers.PermPurchaseView, handlers.ListPurchaseRawMaterialOptions))
 	http.HandleFunc("/api/purchase-materials/summary", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseMaterialsSummary))
 	http.HandleFunc("/api/purchase-materials/get", handlers.RequirePermission(handlers.PermPurchaseView, handlers.GetPurchaseMaterial))
@@ -129,6 +130,7 @@ func main() {
 	http.HandleFunc("/api/raw-materials/inbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialInbound))
 	http.HandleFunc("/api/raw-materials/outbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialOutbound))
 	http.HandleFunc("/api/raw-materials/low-stock", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.GetLowStockRawMaterials))
+	http.HandleFunc("/api/stock-movements", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView, handlers.PermPurchaseView)(handlers.ListStockMovements))
 
 	// API 路由 - 用户管理（仅管理员）
 	http.HandleFunc("/api/users", handlers.RequirePermission(handlers.PermUserManage, handlers.ListUsers))

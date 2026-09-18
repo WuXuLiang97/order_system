@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"order-system/models"
 	"strconv"
+	"time"
 )
 
 // 获取所有产品列表（含BOM标记）
@@ -253,7 +254,7 @@ func DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ProduceProduct 生产入库（增加成品库存，根据BOM扣减原材料）
+// ProduceProduct 生产入库：按实际领料成本扣原材料，并把冻结的材料成本转入成品。
 func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -269,7 +270,6 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
 	if req.ProductID <= 0 {
 		http.Error(w, "Invalid product ID", http.StatusBadRequest)
 		return
@@ -279,7 +279,6 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 开启事务
 	tx, err := models.DB.Begin()
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -287,65 +286,92 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	defer tx.Rollback()
 
-	// 检查产品是否存在
-	var exists bool
-	err = tx.QueryRow("SELECT EXISTS(SELECT 1 FROM products WHERE id = ?)", req.ProductID).Scan(&exists)
-	if err != nil || !exists {
+	var productExists int
+	if err := tx.QueryRow("SELECT 1 FROM products WHERE id = ? FOR UPDATE", req.ProductID).Scan(&productExists); err != nil {
 		http.Error(w, "Product not found", http.StatusNotFound)
 		return
 	}
 
-	// 1. 增加成品库存
-	_, err = tx.Exec("UPDATE products SET stock = stock + ? WHERE id = ?", req.Quantity, req.ProductID)
+	type bomLine struct {
+		RawMaterialID int
+		Quantity      float64
+	}
+	rows, err := tx.Query("SELECT raw_material_id, quantity FROM product_bom WHERE product_id = ? ORDER BY raw_material_id ASC", req.ProductID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
-	// 2. 获取产品BOM
-	boms, err := models.GetBOMByProduct(req.ProductID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	// 如果产品没有BOM，可以继续（不扣原材料），但建议给出提示
-	if len(boms) == 0 {
-		// 无BOM，提交事务后返回警告（但不会报错）
-		if err := tx.Commit(); err != nil {
+	var boms []bomLine
+	for rows.Next() {
+		var line bomLine
+		if err := rows.Scan(&line.RawMaterialID, &line.Quantity); err != nil {
+			rows.Close()
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]interface{}{
-			"message":    "成品库存已增加，但该产品无BOM，未扣减原材料",
-			"product_id": req.ProductID,
-			"quantity":   req.Quantity,
-		})
+		boms = append(boms, line)
+	}
+	if err := rows.Close(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 3. 扣减原材料
+	productionNo := "SC" + time.Now().Format("20060102150405")
+	materialCost := 0.0
 	for _, bom := range boms {
-		deduct := bom.Quantity * float64(req.Quantity)
-		_, err = tx.Exec("UPDATE raw_materials SET stock = stock - ? WHERE id = ?", deduct, bom.RawMaterialID)
+		consumeQty := bom.Quantity * float64(req.Quantity)
+		result, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+			ItemType:      models.InventoryItemRawMaterial,
+			ItemID:        bom.RawMaterialID,
+			Quantity:      -consumeQty,
+			MovementType:  models.MovementProductionConsume,
+			ReferenceType: "production",
+			ReferenceNo:   productionNo,
+			OccurredAt:    time.Now(),
+			Remark:        "生产领料",
+		})
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Failed to deduct raw material %d: %v", bom.RawMaterialID, err), http.StatusInternalServerError)
+			http.Error(w, fmt.Sprintf("生产领料失败：%v", err), http.StatusBadRequest)
 			return
 		}
+		materialCost += -result.TotalCost
 	}
 
-	// 提交事务
+	unitCost := 0.0
+	if req.Quantity > 0 {
+		unitCost = materialCost / float64(req.Quantity)
+	}
+	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+		ItemType:      models.InventoryItemProduct,
+		ItemID:        req.ProductID,
+		Quantity:      float64(req.Quantity),
+		UnitCost:      unitCost,
+		MovementType:  models.MovementProductionIn,
+		ReferenceType: "production",
+		ReferenceNo:   productionNo,
+		OccurredAt:    time.Now(),
+		Remark:        "生产完工入库",
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
 	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	// 返回成功
+	message := "生产入库成功，材料成本已冻结"
+	if len(boms) == 0 {
+		message = "成品库存已增加，但该产品无BOM，本次生产成本记为0"
+	}
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":    "生产入库成功",
-		"product_id": req.ProductID,
-		"quantity":   req.Quantity,
+		"message":       message,
+		"product_id":    req.ProductID,
+		"quantity":      req.Quantity,
+		"production_no": productionNo,
+		"material_cost": materialCost,
+		"unit_cost":     unitCost,
 	})
 }

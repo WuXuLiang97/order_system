@@ -16,6 +16,8 @@ CREATE DATABASE IF NOT EXISTS order_system
 USE order_system;
 
 -- 2. 删除已存在的表（按依赖顺序倒序删除）
+DROP TABLE IF EXISTS stock_movements;
+DROP TABLE IF EXISTS inventory_reservations;
 DROP TABLE IF EXISTS order_bom_snapshot;
 DROP TABLE IF EXISTS product_bom;
 DROP TABLE IF EXISTS order_items;
@@ -35,7 +37,8 @@ CREATE TABLE products (
     name        VARCHAR(100) NOT NULL COMMENT '产品名称',
     spec        VARCHAR(100) NOT NULL DEFAULT '' COMMENT '规格型号',
     unit        VARCHAR(20)  NOT NULL DEFAULT '个' COMMENT '单位',
-    stock       INT NOT NULL DEFAULT 0 COMMENT '库存数量（整数，允许负数）',
+    stock       INT NOT NULL DEFAULT 0 COMMENT '实际库存数量（整数，不允许负数）',
+    avg_cost    DECIMAL(14,4) NOT NULL DEFAULT 0 COMMENT '移动加权平均成本',
     price       DECIMAL(10,2) NOT NULL COMMENT '销售单价',
     created_at  DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='成品库存表';
@@ -48,7 +51,8 @@ CREATE TABLE raw_materials (
     id          INT AUTO_INCREMENT PRIMARY KEY COMMENT '原材料ID',
     name        VARCHAR(100) NOT NULL COMMENT '原材料名称',
     spec        VARCHAR(100) NOT NULL DEFAULT '' COMMENT '规格型号',
-    stock       DECIMAL(10,3) NOT NULL DEFAULT 0 COMMENT '库存数量（支持小数，允许负数）',
+    stock       DECIMAL(10,3) NOT NULL DEFAULT 0 COMMENT '实际库存数量（支持小数，不允许负数）',
+    avg_cost    DECIMAL(14,4) NOT NULL DEFAULT 0 COMMENT '移动加权平均成本',
     unit        VARCHAR(20) DEFAULT '个' COMMENT '单位（如：升、千克、米）',
     min_stock   DECIMAL(10,3) DEFAULT 0 COMMENT '最低库存预警值（支持小数）',
     price       DECIMAL(10,2) DEFAULT 0 COMMENT '原材料单价',
@@ -183,8 +187,8 @@ CREATE TABLE product_bom (
 
 -- =============================================
 -- 7.2 创建订单BOM快照表
---    下单时按当前BOM写入快照；取消/恢复/删除订单时按快照归还或扣减原材料库存，
---    避免之后修改产品BOM影响历史订单的库存账目。
+--    下单时按当前BOM写入快照，供历史订单追溯；当前生产采购需求按实际BOM计算，
+--    避免之后修改产品BOM影响历史订单。
 -- =============================================
 CREATE TABLE order_bom_snapshot (
     id              INT AUTO_INCREMENT PRIMARY KEY COMMENT '快照ID',
@@ -199,6 +203,50 @@ CREATE TABLE order_bom_snapshot (
     FOREIGN KEY (raw_material_id) REFERENCES raw_materials(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单BOM快照表';
 
+-- =============================================
+-- 7.3 库存与成本流水（不可变账）
+-- =============================================
+CREATE TABLE stock_movements (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    item_type           VARCHAR(20) NOT NULL COMMENT 'product/raw_material',
+    item_id             INT NOT NULL,
+    movement_type       VARCHAR(40) NOT NULL,
+    quantity            DECIMAL(14,3) NOT NULL COMMENT '带方向，入库为正出库为负',
+    unit_cost           DECIMAL(14,4) NOT NULL DEFAULT 0,
+    total_cost          DECIMAL(14,2) NOT NULL DEFAULT 0 COMMENT '带方向',
+    reference_type      VARCHAR(40) NOT NULL DEFAULT '',
+    reference_id        BIGINT NOT NULL DEFAULT 0,
+    reference_no        VARCHAR(64) NOT NULL DEFAULT '',
+    order_item_id       INT NOT NULL DEFAULT 0,
+    reversal_of         BIGINT NOT NULL DEFAULT 0,
+    occurred_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    created_by_user_id  INT NOT NULL DEFAULT 0,
+    remark              VARCHAR(500) NOT NULL DEFAULT '',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_stock_movement_item (item_type, item_id, occurred_at),
+    KEY idx_stock_movement_reference (reference_type, reference_id),
+    KEY idx_stock_movement_order_item (order_item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='不可变库存与成本流水';
+
+-- =============================================
+-- 7.4 订单占用账
+-- =============================================
+CREATE TABLE inventory_reservations (
+    id                 BIGINT AUTO_INCREMENT PRIMARY KEY,
+    order_id           INT NOT NULL,
+    order_item_id      INT NOT NULL,
+    item_type          VARCHAR(20) NOT NULL,
+    item_id            INT NOT NULL,
+    quantity           DECIMAL(14,3) NOT NULL DEFAULT 0 COMMENT '原占用数量',
+    consumed_quantity  DECIMAL(14,3) NOT NULL DEFAULT 0,
+    released_quantity  DECIMAL(14,3) NOT NULL DEFAULT 0,
+    status             VARCHAR(20) NOT NULL DEFAULT 'active',
+    created_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at         DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_inventory_reservation_item (order_item_id, item_type, item_id),
+    KEY idx_inventory_reservation_order (order_id),
+    KEY idx_inventory_reservation_item_lookup (item_type, item_id, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单占用账';
 -- 7.5 创建系统用户表（登录鉴权）
 --     角色：admin-管理员（全部权限），user-普通用户（仅查看）
 -- =============================================

@@ -62,7 +62,7 @@ func GetRawMaterial(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(material)
 }
 
-// 添加原材料（支持小数库存，允许负库存）
+// 添加原材料（支持小数实际库存，不允许负库存）
 func AddRawMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -88,7 +88,10 @@ func AddRawMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Name is required", http.StatusBadRequest)
 		return
 	}
-	// 移除 req.Stock < 0 的校验，允许负库存
+	if req.Stock < 0 {
+		http.Error(w, "实际库存不能为负数", http.StatusBadRequest)
+		return
+	}
 	if req.MinStock < 0 {
 		req.MinStock = 0
 	}
@@ -110,7 +113,7 @@ func AddRawMaterial(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 更新原材料（支持小数库存，允许负库存）
+// 更新原材料（支持小数实际库存，不允许负库存）
 func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -141,7 +144,10 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Name is required", http.StatusBadRequest)
 		return
 	}
-	// 移除 req.Stock < 0 的校验，允许负库存
+	if req.Stock < 0 {
+		http.Error(w, "实际库存不能为负数", http.StatusBadRequest)
+		return
+	}
 	if req.MinStock < 0 {
 		req.MinStock = 0
 	}
@@ -207,7 +213,7 @@ func RawMaterialInbound(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 原材料出库操作（允许库存为负数，不检查库存是否充足）
+// 原材料出库操作（实际库存不足时拒绝）
 func RawMaterialOutbound(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -233,10 +239,9 @@ func RawMaterialOutbound(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 直接扣减，不检查库存是否充足（允许负数）
 	err := models.UpdateRawMaterialStock(req.ID, -req.Quantity)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 

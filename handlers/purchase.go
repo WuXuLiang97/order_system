@@ -124,24 +124,149 @@ func normalizePurchaseOrderRequest(req *purchaseOrderRequest) {
 	}
 }
 
-func addRawMaterialStockTx(tx *sql.Tx, name, spec, unit string, quantity, price float64) error {
-	var id int
-	err := tx.QueryRow("SELECT id FROM raw_materials WHERE name = ? AND COALESCE(spec, '') = ? ORDER BY id ASC LIMIT 1", name, spec).Scan(&id)
-	if err == sql.ErrNoRows {
-		_, err = tx.Exec("INSERT INTO raw_materials (name, spec, stock, unit, min_stock, price) VALUES (?, ?, ?, ?, 0, ?)", name, spec, quantity, unit, price)
+func purchaseFreightAllocations(items []purchaseItemRequest, totalFreight float64) []float64 {
+	allocations := make([]float64, len(items))
+	if totalFreight <= 0 {
+		return allocations
+	}
+	totalAmount := 0.0
+	totalQuantity := 0.0
+	for _, item := range items {
+		if item.MaterialType != PurchaseMaterialTypeRawMaterial {
+			continue
+		}
+		totalAmount += item.Quantity * item.Price
+		totalQuantity += item.Quantity
+	}
+	if totalAmount <= 0 && totalQuantity <= 0 {
+		return allocations
+	}
+	for i, item := range items {
+		if item.MaterialType != PurchaseMaterialTypeRawMaterial {
+			continue
+		}
+		if totalAmount > 0 {
+			allocations[i] = totalFreight * (item.Quantity * item.Price) / totalAmount
+		} else {
+			allocations[i] = totalFreight * item.Quantity / totalQuantity
+		}
+	}
+	return allocations
+}
+
+func addPurchaseItemStockTx(tx *sql.Tx, itemID int64, item purchaseItemRequest, landedUnitCost float64, userID int) error {
+	rawMaterialID, err := models.AddRawMaterialByKeyTx(tx, item.MaterialName, item.Spec, item.Unit, item.Price)
+	if err != nil {
 		return err
+	}
+	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+		ItemType:        models.InventoryItemRawMaterial,
+		ItemID:          rawMaterialID,
+		Quantity:        item.Quantity,
+		UnitCost:        landedUnitCost,
+		MovementType:    models.MovementPurchaseIn,
+		ReferenceType:   "purchase_material",
+		ReferenceID:     itemID,
+		CreatedByUserID: userID,
+		OccurredAt:      time.Now(),
+		Remark:          "采购到货入库，含按金额分摊的运费",
+	}); err != nil {
+		return err
+	}
+	_, err = tx.Exec("UPDATE purchase_materials SET stock_added = 1 WHERE id = ?", itemID)
+	return err
+}
+
+func reversePurchaseItemStockTx(tx *sql.Tx, itemID int64, userID int) error {
+	movements, err := models.ListStockMovementsByReferenceTx(tx, "purchase_material", itemID, models.MovementPurchaseIn)
+	if err != nil {
+		return err
+	}
+	if len(movements) == 0 {
+		return reverseLegacyPurchaseItemStockTx(tx, itemID, userID)
+	}
+	for _, movement := range movements {
+		if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+			ItemType:         movement.ItemType,
+			ItemID:           movement.ItemID,
+			Quantity:         -movement.Quantity,
+			UnitCost:         movement.UnitCost,
+			MovementType:     models.MovementAdjustment,
+			ReferenceType:    "purchase_material_reversal",
+			ReferenceID:      itemID,
+			ReferenceNo:      movement.ReferenceNo,
+			ReversalOf:       movement.ID,
+			OverrideUnitCost: true,
+			CreatedByUserID:  userID,
+			OccurredAt:       time.Now(),
+			Remark:           "采购入库冲回，撤销已冻结的入库成本",
+		}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// reverseLegacyPurchaseItemStockTx 兼容库存流水启用前已到货的历史采购。
+// 这些采购只有 stock_added 标记，没有可关联的 purchase_in 流水，因此按原材料
+// 当前移动平均成本生成一笔反向调整；库存不足时仍然拒绝删除，避免出现负库存。
+func reverseLegacyPurchaseItemStockTx(tx *sql.Tx, itemID int64, userID int) error {
+	var materialName, spec, purchaseNo string
+	var quantity float64
+	err := tx.QueryRow(`
+		SELECT pm.material_name, COALESCE(pm.spec, ''), pm.quantity, COALESCE(po.purchase_no, '')
+		FROM purchase_materials pm
+		LEFT JOIN purchase_orders po ON po.id = pm.purchase_order_id
+		WHERE pm.id = ?
+		FOR UPDATE
+	`, itemID).Scan(&materialName, &spec, &quantity, &purchaseNo)
+	if err != nil {
+		return err
+	}
+	if quantity <= 0 {
+		return fmt.Errorf("采购数量异常，无法冲回库存")
+	}
+
+	var rawMaterialID int
+	var unitCost float64
+	err = tx.QueryRow(`
+		SELECT id, COALESCE(NULLIF(avg_cost, 0), price, 0)
+		FROM raw_materials
+		WHERE name = ? AND COALESCE(spec, '') = ?
+		ORDER BY id ASC
+		LIMIT 1
+		FOR UPDATE
+	`, materialName, spec).Scan(&rawMaterialID, &unitCost)
+	if err == sql.ErrNoRows {
+		return fmt.Errorf("找不到采购物料对应的原材料，无法冲回库存")
 	}
 	if err != nil {
 		return err
 	}
-	_, err = tx.Exec("UPDATE raw_materials SET stock = stock + ? WHERE id = ?", quantity, id)
-	return err
+
+	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+		ItemType:         models.InventoryItemRawMaterial,
+		ItemID:           rawMaterialID,
+		Quantity:         -quantity,
+		UnitCost:         unitCost,
+		MovementType:     models.MovementAdjustment,
+		ReferenceType:    "purchase_material_reversal",
+		ReferenceID:      itemID,
+		ReferenceNo:      purchaseNo,
+		OverrideUnitCost: true,
+		CreatedByUserID:  userID,
+		OccurredAt:       time.Now(),
+		Remark:           "历史采购入库冲回（原采购无库存流水，按当前原材料余额调整）",
+	}); err != nil {
+		return fmt.Errorf("历史采购库存冲回失败：%w", err)
+	}
+	return nil
 }
 
 func insertPurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req purchaseOrderRequest,
-	purchaseDate, expectedDate, actualDate *time.Time, receiptJSON string, stockAdded int) error {
+	purchaseDate, expectedDate, actualDate *time.Time, receiptJSON string, stockAdded int) (int64, error) {
 	amount := item.Quantity * item.Price
-	_, err := tx.Exec(`
+	result, err := tx.Exec(`
         INSERT INTO purchase_materials
             (purchase_order_id, material_name, material_type, spec, unit, quantity, price, amount,
              supplier, freight, purchase_date, expected_arrival_date, actual_arrival_date,
@@ -150,7 +275,10 @@ func insertPurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req
     `, orderID, item.MaterialName, item.MaterialType, item.Spec, item.Unit, item.Quantity, item.Price, amount,
 		req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate, req.PaymentStatus, req.Status,
 		req.Remark, receiptJSON, stockAdded)
-	return err
+	if err != nil {
+		return 0, err
+	}
+	return result.LastInsertId()
 }
 
 func updatePurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req purchaseOrderRequest,
@@ -316,18 +444,23 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, item := range req.Items {
-		stockAdded := 0
-		needAddStock := req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial
-		if needAddStock {
-			stockAdded = 1
-		}
-		if err := insertPurchaseItemTx(tx, orderID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	allocations := purchaseFreightAllocations(req.Items, req.Freight)
+	for i, item := range req.Items {
+		itemID, err := insertPurchaseItemTx(tx, orderID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, 0)
+		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		if needAddStock {
-			if err := addRawMaterialStockTx(tx, item.MaterialName, item.Spec, item.Unit, item.Quantity, item.Price); err != nil {
+		if req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial {
+			unitCost := item.Price
+			if item.Quantity > 0 {
+				unitCost += allocations[i] / item.Quantity
+			}
+			if err := addPurchaseItemStockTx(tx, itemID, item, unitCost, userID); err != nil {
 				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -442,6 +575,20 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 			incomingIDs[item.ID] = true
 		}
 	}
+
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	// 已到货明细先按原冻结成本冲回，再按更新后的数量、价格和运费重新入库。
+	for itemID, stockAdded := range existingStockAdded {
+		if stockAdded == 1 {
+			if err := reversePurchaseItemStockTx(tx, int64(itemID), userID); err != nil {
+				http.Error(w, fmt.Sprintf("冲回原采购入库失败: %v", err), http.StatusBadRequest)
+				return
+			}
+		}
+	}
 	for itemID := range existingStockAdded {
 		if !incomingIDs[itemID] {
 			if _, err := tx.Exec("DELETE FROM purchase_materials WHERE id = ? AND purchase_order_id = ?", itemID, req.ID); err != nil {
@@ -462,36 +609,33 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	for _, item := range req.Items {
-		oldStockAdded := 0
+	allocations := purchaseFreightAllocations(req.Items, req.Freight)
+	for i, item := range req.Items {
+		itemID := int64(item.ID)
 		if item.ID > 0 {
-			oldStockAdded = existingStockAdded[item.ID]
-		}
-		stockAdded := oldStockAdded
-		needAddStock := req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial && oldStockAdded == 0
-		if needAddStock {
-			stockAdded = 1
-		}
-
-		if item.ID > 0 {
-			if err := updatePurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
+			if err := updatePurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, 0); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		} else {
-			if err := insertPurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
+			var err error
+			itemID, err = insertPurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, 0)
+			if err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
 		}
-		if needAddStock {
-			if err := addRawMaterialStockTx(tx, item.MaterialName, item.Spec, item.Unit, item.Quantity, item.Price); err != nil {
-				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
+		if req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial {
+			unitCost := item.Price
+			if item.Quantity > 0 {
+				unitCost += allocations[i] / item.Quantity
+			}
+			if err := addPurchaseItemStockTx(tx, itemID, item, unitCost, userID); err != nil {
+				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusBadRequest)
 				return
 			}
 		}
 	}
-
 	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -532,11 +676,66 @@ func DeletePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Purchase order not found", http.StatusNotFound)
 		return
 	}
-	if err := models.DeletePurchaseOrder(id); err != nil {
+	tx, err := models.DB.Begin()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer tx.Rollback()
+
+	var existingID int
+	if err := tx.QueryRow("SELECT id FROM purchase_orders WHERE id = ? FOR UPDATE", id).Scan(&existingID); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Purchase order not found", http.StatusNotFound)
 			return
 		}
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	type postedItem struct {
+		id         int
+		stockAdded int
+	}
+	rows, err := tx.Query("SELECT id, stock_added FROM purchase_materials WHERE purchase_order_id = ? FOR UPDATE", id)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	var posted []postedItem
+	for rows.Next() {
+		var item postedItem
+		if err := rows.Scan(&item.id, &item.stockAdded); err != nil {
+			rows.Close()
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		posted = append(posted, item)
+	}
+	if err := rows.Close(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	for _, item := range posted {
+		if item.stockAdded == 1 {
+			if err := reversePurchaseItemStockTx(tx, int64(item.id), userID); err != nil {
+				http.Error(w, fmt.Sprintf("冲回采购入库失败: %v", err), http.StatusBadRequest)
+				return
+			}
+		}
+	}
+	if _, err := tx.Exec("DELETE FROM purchase_materials WHERE purchase_order_id = ?", id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if _, err := tx.Exec("DELETE FROM purchase_orders WHERE id = ?", id); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if err := tx.Commit(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}

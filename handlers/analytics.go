@@ -163,31 +163,26 @@ func GetAnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 		       COALESCE(p.spec, '') AS spec,
 		       COALESCE(p.unit, '') AS unit,
 		       oi.quantity,
-		       oi.revenue,
-		       COALESCE(obs.cost, bom.unit_cost * oi.quantity, 0) AS cost
+		       oi.quantity * oi.price AS revenue,
+		       CASE WHEN cost.movement_count > 0 THEN cost.actual_cost ELSE COALESCE(fallback.unit_cost * oi.quantity, 0) END AS cost
 		FROM orders o
-		JOIN (
-			SELECT order_id, product_id,
-			       SUM(quantity) AS quantity,
-			       SUM(quantity * price) AS revenue
-			FROM order_items
-			GROUP BY order_id, product_id
-		) oi ON oi.order_id = o.id
+		JOIN order_items oi ON oi.order_id = o.id
 		LEFT JOIN products p ON p.id = oi.product_id
 		LEFT JOIN (
-			SELECT obs.order_id, obs.product_id,
-			       SUM(obs.quantity * COALESCE(rm.price, 0)) AS cost
-			FROM order_bom_snapshot obs
-			LEFT JOIN raw_materials rm ON rm.id = obs.raw_material_id
-			GROUP BY obs.order_id, obs.product_id
-		) obs ON obs.order_id = o.id AND obs.product_id = oi.product_id
+			SELECT order_item_id, -SUM(total_cost) AS actual_cost, COUNT(*) AS movement_count
+			FROM stock_movements
+			WHERE item_type = 'product'
+			  AND order_item_id > 0
+			  AND movement_type IN ('sales_out', 'sales_out_reversal', 'legacy_sales_cost')
+			GROUP BY order_item_id
+		) cost ON cost.order_item_id = oi.id
 		LEFT JOIN (
 			SELECT pb.product_id,
-			       SUM(pb.quantity * COALESCE(rm.price, 0)) AS unit_cost
+			       SUM(pb.quantity * COALESCE(NULLIF(rm.avg_cost, 0), rm.price, 0)) AS unit_cost
 			FROM product_bom pb
 			LEFT JOIN raw_materials rm ON rm.id = pb.raw_material_id
 			GROUP BY pb.product_id
-		) bom ON bom.product_id = oi.product_id
+		) fallback ON fallback.product_id = oi.product_id
 		WHERE o.status = 3 AND o.shipped_date IS NOT NULL`
 	args := []interface{}{}
 	if !viewAll {
