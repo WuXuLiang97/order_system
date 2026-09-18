@@ -197,7 +197,7 @@ func CreateExpense(expense *Expense) (int64, error) {
 	}
 
 	if expense.ExpenseNo == "" {
-		expense.ExpenseNo = fmt.Sprintf("FY%s-%05d", expense.ExpenseDate.Format("20060102"), id)
+		expense.ExpenseNo = fmt.Sprintf("FY%s-%02d", expense.ExpenseDate.Format("20060102"), id)
 	}
 	if _, err := tx.Exec("UPDATE expenses SET expense_no = ? WHERE id = ?", expense.ExpenseNo, id); err != nil {
 		return 0, err

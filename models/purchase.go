@@ -229,7 +229,7 @@ func migrateLegacyPurchaseMaterials() error {
 		if item.PurchaseDate.Valid {
 			datePart = item.PurchaseDate.Time.Format("20060102")
 		}
-		purchaseNo := fmt.Sprintf("CG%s-%05d", datePart, item.ID)
+		purchaseNo := fmt.Sprintf("CG%s-%02d", datePart, item.ID)
 		result, err := tx.Exec(`
             INSERT INTO purchase_orders
                 (purchase_no, supplier, freight, purchase_date, expected_arrival_date,

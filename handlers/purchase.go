@@ -496,7 +496,7 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if purchaseDate != nil {
 		datePart = purchaseDate.Format("20060102")
 	}
-	purchaseNo := fmt.Sprintf("CG%s-%05d", datePart, orderID)
+	purchaseNo := fmt.Sprintf("CG%s-%02d", datePart, orderID)
 	if _, err := tx.Exec("UPDATE purchase_orders SET purchase_no = ? WHERE id = ?", purchaseNo, orderID); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
