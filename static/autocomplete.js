@@ -18,6 +18,7 @@
         this.onSelect = this.options.onSelect || function () {};
         this.onClear = this.options.onClear || function () {};
         this.sortItems = this.options.sortItems || null;
+        this.allowUnknown = !!this.options.allowUnknown;
         this.bindEvents();
     }
 
@@ -134,7 +135,8 @@
         var item = this.byDisplay.get(value) || this.findByAliases(value);
         if (!item) {
             hidden.val('');
-            input.addClass('is-invalid');
+            if (this.allowUnknown) input.removeClass('is-invalid');
+            else input.addClass('is-invalid');
             this.onClear(null, input);
             return null;
         }

@@ -1,0 +1,331 @@
+{{define "content"}}
+<div class="editor-page-header">
+    <div>
+        <a href="/products" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> 返回产品列表</a>
+        <h4 class="mb-1" id="productEditorTitle"><i class="bi bi-box-seam"></i> 添加产品</h4>
+        <div class="text-muted small">产品基础信息与 BOM 原材料组成在同一个编辑器中维护。</div>
+    </div>
+</div>
+
+<div id="editorNotice"></div>
+
+<div class="editor-layout">
+    <aside class="editor-nav">
+        <div class="small text-muted px-2 pt-1 pb-2">产品分区</div>
+        <nav class="nav flex-column">
+            <a class="nav-link active" href="#product-basic" data-editor-section="#product-basic"><i class="bi bi-info-circle"></i> 基础信息</a>
+            <a class="nav-link" href="#product-stock" data-editor-section="#product-stock"><i class="bi bi-bar-chart"></i> 库存与价格</a>
+            <a class="nav-link" href="#product-bom" data-editor-section="#product-bom"><i class="bi bi-diagram-3"></i> BOM 清单</a>
+        </nav>
+    </aside>
+
+    <main>
+        <form id="productEditorForm" novalidate>
+            <input type="hidden" id="productId" value="0">
+
+            <section class="editor-section" id="product-basic">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-info-circle"></i> 基础信息</h5>
+                    <span class="badge bg-light text-dark border">第 1 区</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">产品名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="productName" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">规格型号</label>
+                            <input type="text" class="form-control" id="productSpec">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">单位</label>
+                            <input type="text" class="form-control" id="productUnit" value="个">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">包装</label>
+                            <select class="form-select" id="productPackaging">
+                                <option value="">未设置</option>
+                                <option value="真空袋">真空袋</option>
+                                <option value="彩盒">彩盒</option>
+                                <option value="OPP袋">OPP袋</option>
+                                <option value="定制彩盒">定制彩盒</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="product-stock">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-bar-chart"></i> 库存与价格</h5>
+                    <span class="badge bg-light text-dark border">第 2 区</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">实际库存</label>
+                            <input type="number" class="form-control" id="productStock" value="0" step="any">
+                            <div class="form-text">历史编辑功能保留；日常库存变动仍建议通过生产、出库或盘点完成。</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">销售单价</label>
+                            <input type="number" class="form-control" id="productPrice" value="0" min="0" step="0.01">
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="product-bom">
+                <div class="editor-section-header">
+                    <div>
+                        <h5><i class="bi bi-diagram-3"></i> BOM 清单</h5>
+                        <div class="small text-muted mt-1">选择原材料并填写单件用量；无 BOM 的产品保持空行即可。</div>
+                    </div>
+                    <span class="badge rounded-pill text-bg-light border" id="productBOMVisibleCount">共 0 项</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="light-data-grid">
+                        <div class="light-data-grid-scroll">
+                            <table class="table light-data-grid-table align-middle" style="min-width:760px;">
+                                <thead>
+                                    <tr>
+                                        <th>原材料 <span class="text-danger">*</span></th>
+                                        <th class="light-grid-number" style="width:180px;">单件用量</th>
+                                        <th style="width:72px;"><span class="visually-hidden">操作</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="productBOMRows"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="light-data-grid-add" onclick="addProductBOMRow()">
+                            <i class="bi bi-plus-circle"></i> 添加原材料
+                        </button>
+                    </div>
+                    <div class="text-muted small mt-2" id="productBOMStatus"></div>
+                </div>
+            </section>
+        </form>
+    </main>
+</div>
+
+<div class="editor-summary">
+    <div class="editor-summary-inner">
+        <div class="editor-summary-metrics">
+            <div class="editor-summary-metric"><span>当前模式</span><strong id="productSummaryMode">添加产品</strong></div>
+            <div class="editor-summary-metric"><span>BOM 行数</span><strong id="productSummaryBOMCount">0</strong></div>
+        </div>
+        <div class="editor-summary-actions">
+            <a href="/products" class="btn btn-outline-secondary">取消</a>
+            <button type="submit" form="productEditorForm" class="btn btn-primary px-4" id="saveProductButton">
+                <i class="bi bi-check2-circle"></i> 确认添加
+            </button>
+        </div>
+    </div>
+</div>
+
+<datalist id="productMaterialAutocompleteOptions"></datalist>
+{{end}}
+
+{{define "scripts"}}
+<script>
+var productEditorMaterials = [];
+var productMaterialAutocomplete = null;
+var productEditorIsEdit = false;
+
+function productEscape(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function productMaterialDisplay(material) {
+    var parts = [];
+    if (material.spec) parts.push('规格：' + material.spec);
+    if (material.unit) parts.push('单位：' + material.unit);
+    parts.push('库存：' + Number(material.stock || 0));
+    return (material.name || '') + '（' + parts.join('，') + '）';
+}
+
+function applyProductMaterial(material, input) {
+    var row = $(input).closest('tr');
+    if (!material || !row.length) return;
+    row.find('.bom-material-id').val(material.id);
+    recalcProductBOMSummary();
+}
+
+function initProductMaterialAutocomplete() {
+    if (productMaterialAutocomplete) return;
+    productMaterialAutocomplete = AutoComplete.create({
+        name: 'product_editor_material',
+        inputSelector: '.bom-material-name',
+        hiddenSelector: '.bom-material-id',
+        datalistSelector: '#productMaterialAutocompleteOptions',
+        getId: function (material) { return material.id; },
+        getDisplay: productMaterialDisplay,
+        getAliases: function (material) {
+            return [material.name, material.spec, material.unit, productMaterialDisplay(material)];
+        },
+        sortItems: function (a, b) {
+            return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN');
+        },
+        onSelect: applyProductMaterial,
+        onClear: function (_, input) {
+            $(input).closest('tr').find('.bom-material-id').val(0);
+            recalcProductBOMSummary();
+        }
+    });
+}
+
+function loadProductEditorMaterials() {
+    return $.ajax({
+        url: '/api/raw-materials',
+        method: 'GET',
+        success: function (data) {
+            productEditorMaterials = Array.isArray(data) ? data : [];
+            initProductMaterialAutocomplete();
+            productMaterialAutocomplete.setItems(productEditorMaterials);
+            hydrateProductBOMMaterialNames();
+        },
+        error: function (xhr) {
+            EntityEditor.notify('加载原材料失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+function productBOMRowHtml(item) {
+    item = item || {};
+    var materialID = parseInt(item.raw_material_id || item.id || 0, 10) || 0;
+    var quantity = item.quantity == null ? '' : item.quantity;
+    return '<tr class="product-bom-row">' +
+        '<td class="light-grid-name-wrap"><input type="hidden" class="bom-material-id" value="' + materialID + '">' +
+        '<input type="text" class="form-control form-control-sm bom-material-name" value="' + productEscape(item.raw_material_name || item.material_name || '') + '" placeholder="输入原材料名称、规格或单位" autocomplete="off" spellcheck="false" list="productMaterialAutocompleteOptions" aria-autocomplete="list" aria-controls="productMaterialAutocompleteOptions"></td>' +
+        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm bom-quantity" min="0.001" step="0.001" value="' + quantity + '" placeholder="单件用量" oninput="recalcProductBOMSummary()"></td>' +
+        '<td class="text-end"><button type="button" class="light-grid-remove" onclick="removeProductBOMRow(this)" title="删除此行" aria-label="删除此行"><i class="bi bi-trash"></i></button></td></tr>';
+}
+
+function hydrateProductBOMMaterialNames() {
+    $('#productBOMRows .product-bom-row').each(function () {
+        var row = $(this);
+        var id = parseInt(row.find('.bom-material-id').val(), 10) || 0;
+        if (!id) return;
+        var material = productEditorMaterials.find(function (item) { return parseInt(item.id, 10) === id; });
+        if (material) row.find('.bom-material-name').val(productMaterialDisplay(material));
+    });
+}
+
+function addProductBOMRow(item) {
+    $('#productBOMRows').append(productBOMRowHtml(item || {}));
+    recalcProductBOMSummary();
+}
+
+function removeProductBOMRow(button) {
+    if ($('#productBOMRows .product-bom-row').length <= 1) {
+        $(button).closest('tr').find('input').val('');
+        recalcProductBOMSummary();
+        return;
+    }
+    $(button).closest('tr').remove();
+    recalcProductBOMSummary();
+}
+
+function recalcProductBOMSummary() {
+    var count = 0;
+    $('#productBOMRows .product-bom-row').each(function () {
+        if ((parseInt($(this).find('.bom-material-id').val(), 10) || 0) > 0) count += 1;
+    });
+    $('#productSummaryBOMCount').text(count);
+    $('#productBOMVisibleCount').text('共 ' + count + ' 项');
+}
+
+function collectProductBOM() {
+    var items = [];
+    var errors = [];
+    $('#productBOMRows .product-bom-row').each(function (index) {
+        var row = $(this);
+        var materialID = parseInt(row.find('.bom-material-id').val(), 10) || 0;
+        var quantity = parseFloat(row.find('.bom-quantity').val()) || 0;
+        if (!materialID && !quantity) return;
+        if (materialID <= 0 || quantity <= 0) {
+            errors.push('第 ' + (index + 1) + ' 行：请选择原材料并填写大于 0 的用量');
+            return;
+        }
+        items.push({ raw_material_id: materialID, quantity: quantity });
+    });
+    return { items: items, errors: errors };
+}
+
+function saveProductEditor() {
+    var name = ($('#productName').val() || '').trim();
+    if (!name) {
+        EntityEditor.notify('请输入产品名称。', 'error');
+        EntityEditor.focusField('#productName');
+        return false;
+    }
+    var bom = collectProductBOM();
+    if (bom.errors.length) {
+        EntityEditor.notify(bom.errors.join('；'), 'error');
+        EntityEditor.focusField('#productBOMRows .product-bom-row .bom-material-name');
+        return false;
+    }
+    var data = {
+        name: name,
+        spec: ($('#productSpec').val() || '').trim(),
+        unit: ($('#productUnit').val() || '').trim(),
+        packaging: $('#productPackaging').val() || '',
+        stock: parseFloat($('#productStock').val()) || 0,
+        price: parseFloat($('#productPrice').val()) || 0,
+        bom: bom.items
+    };
+    if (productEditorIsEdit) data.id = parseInt($('#productId').val(), 10) || 0;
+    return EntityEditor.save({
+        url: productEditorIsEdit ? '/api/products/update' : '/api/products/add',
+        data: data,
+        errorMessage: productEditorIsEdit ? '保存失败：' : '添加失败：',
+        success: function () { window.location.href = '/products'; }
+    });
+}
+
+function loadProductForEdit(id) {
+    loadProductEditorMaterials();
+    $.ajax({
+        url: '/api/products/get?id=' + id,
+        method: 'GET',
+        success: function (data) {
+            $('#productId').val(data.id || id);
+            $('#productName').val(data.name || '');
+            $('#productSpec').val(data.spec || '');
+            $('#productUnit').val(data.unit || '');
+            $('#productPackaging').val(data.packaging || '');
+            $('#productStock').val(data.stock || 0);
+            $('#productPrice').val(data.price || 0);
+            $('#productBOMRows').empty();
+            var bom = Array.isArray(data.bom) ? data.bom : [];
+            if (!bom.length) addProductBOMRow();
+            bom.forEach(function (item) { addProductBOMRow(item); });
+            $('#productEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑产品 ' + productEscape(data.name || ''));
+            $('#productSummaryMode').text('编辑产品');
+            $('#saveProductButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
+            hydrateProductBOMMaterialNames();
+            recalcProductBOMSummary();
+            EntityEditor.markClean();
+        },
+        error: function (xhr) {
+            EntityEditor.notify('加载产品失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+$(document).ready(function () {
+    productEditorIsEdit = EntityEditor.entityID('id') > 0;
+    EntityEditor.bindForm('#productEditorForm', saveProductEditor, { button: '#saveProductButton' });
+    if (productEditorIsEdit) {
+        loadProductForEdit(EntityEditor.entityID('id'));
+    } else {
+        loadProductEditorMaterials();
+        addProductBOMRow();
+        EntityEditor.markClean();
+    }
+});
+</script>
+{{end}}

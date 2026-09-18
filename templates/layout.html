@@ -127,7 +127,288 @@
         body { display: flex; flex-direction: column; }
         #pageContent { flex: 1 0 auto; }
         .site-footer { flex-shrink: 0; }
-    </style>
+            /* 统一编辑器外壳 */
+        .editor-page-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 1rem;
+            margin-bottom: 1rem;
+        }
+        .editor-layout {
+            display: grid;
+            grid-template-columns: 220px minmax(0, 1fr);
+            gap: 1rem;
+            align-items: start;
+            padding-bottom: calc(var(--editor-summary-height, 96px) + 1.25rem);
+        }
+        .editor-nav {
+            position: sticky;
+            top: 1rem;
+            z-index: 5;
+            background: #fff;
+            border: 1px solid #e9ecef;
+            border-radius: .75rem;
+            padding: .65rem;
+            box-shadow: 0 2px 8px rgba(20, 30, 55, .06);
+        }
+        .editor-nav .nav-link {
+            color: #495057;
+            border-radius: .5rem;
+            padding: .62rem .75rem;
+            display: flex;
+            align-items: center;
+            gap: .5rem;
+        }
+        .editor-nav .nav-link:hover,
+        .editor-nav .nav-link.active {
+            color: #0d6efd;
+            background: #f1f5ff;
+        }
+        .editor-section {
+            scroll-margin-top: 88px;
+            margin-bottom: 1rem;
+            border: 1px solid #e9ecef;
+            border-radius: .75rem;
+            background: #fff;
+            overflow: hidden;
+        }
+        .editor-section-header {
+            padding: .9rem 1rem;
+            border-bottom: 1px solid #edf0f3;
+            background: #fbfcfd;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: .75rem;
+        }
+        .editor-section-header h5 {
+            margin: 0;
+            font-size: 1rem;
+        }
+        .editor-section-body {
+            padding: 1rem;
+        }
+        .editor-summary {
+            position: fixed;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 1030;
+            border-top: 1px solid #dfe3e8;
+            background: rgba(255,255,255,.97);
+            box-shadow: 0 -8px 22px rgba(20, 30, 55, .08);
+            backdrop-filter: blur(10px);
+        }
+        .editor-summary-inner {
+            max-width: 1320px;
+            min-height: 72px;
+            margin: 0 auto;
+            padding: .75rem 1.25rem;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+        .editor-summary-metrics {
+            display: flex;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 1.25rem;
+        }
+        .editor-summary-metric span {
+            display: block;
+            color: #6c757d;
+            font-size: .75rem;
+        }
+        .editor-summary-metric strong {
+            font-size: 1rem;
+        }
+        .entity-tabs {
+            border-bottom: 1px solid #e9ecef;
+            margin-bottom: 1rem;
+        }
+        .selector-modal .modal-dialog {
+            max-width: 640px;
+        }
+        .selector-list {
+            max-height: 52vh;
+            overflow: auto;
+        }
+        .selector-option {
+            width: 100%;
+            border: 1px solid #e9ecef;
+            border-radius: .6rem;
+            background: #fff;
+            text-align: left;
+            padding: .7rem .8rem;
+            margin-bottom: .5rem;
+        }
+        .selector-option:hover {
+            border-color: #86b7fe;
+            background: #f8fbff;
+        }
+        .selector-option-title {
+            display: flex;
+            justify-content: space-between;
+            gap: .75rem;
+            font-weight: 600;
+        }
+        .selector-option-meta {
+            color: #6c757d;
+            font-size: .78rem;
+            margin-top: .18rem;
+        }
+        /* 轻量数据网格：用于编辑器中的明细行 */
+        .light-data-grid {
+            overflow: hidden;
+            border: 1px solid #e7ecf1;
+            border-radius: .75rem;
+            background: #fff;
+        }
+        .light-data-grid-scroll {
+            overflow-x: auto;
+            overscroll-behavior-x: contain;
+        }
+        .light-data-grid-table {
+            min-width: 820px;
+            margin: 0;
+            border-collapse: separate;
+            border-spacing: 0;
+        }
+        .light-data-grid-table thead th {
+            padding: .62rem .75rem;
+            border: 0;
+            border-bottom: 1px solid #e8edf2;
+            background: #fafbfd;
+            color: #78838f;
+            font-size: .74rem;
+            font-weight: 600;
+            letter-spacing: .01em;
+            white-space: nowrap;
+        }
+        .light-data-grid-table tbody td {
+            padding: .7rem .75rem;
+            border: 0;
+            border-bottom: 1px solid #f0f2f5;
+            background: transparent;
+            vertical-align: middle;
+        }
+        .light-data-grid-table tbody tr {
+            transition: background-color .14s ease;
+        }
+        .light-data-grid-table tbody tr:hover td,
+        .light-data-grid-table tbody tr:focus-within td {
+            background: #fafcff;
+        }
+        .light-data-grid-table tbody tr:last-child td {
+            border-bottom: 0;
+        }
+        .light-data-grid-table .form-control,
+        .light-data-grid-table .form-select {
+            border-color: #dfe5eb;
+            background-color: #fff;
+        }
+        .light-data-grid-table .form-control:focus,
+        .light-data-grid-table .form-select:focus {
+            border-color: #86b7fe;
+            box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .12);
+        }
+        .light-data-grid-table .light-grid-number {
+            text-align: right;
+        }
+        .light-data-grid-table .light-grid-number .form-control {
+            text-align: right;
+            font-variant-numeric: tabular-nums;
+        }
+        .light-data-grid-table .light-grid-amount {
+            border: 0;
+            background: transparent;
+            box-shadow: none;
+            color: #111827;
+            font-weight: 600;
+        }
+        .light-data-grid-table .light-grid-amount:focus {
+            box-shadow: none;
+        }
+        .light-grid-name-wrap {
+            min-width: 280px;
+        }
+        .light-data-grid-table .light-grid-remove {
+            width: 2rem;
+            height: 2rem;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            border: 0;
+            border-radius: .45rem;
+            color: #9aa4af;
+            opacity: .45;
+            transition: color .14s ease, background-color .14s ease, opacity .14s ease;
+        }
+        .light-data-grid-table tr:hover .light-grid-remove,
+        .light-data-grid-table tr:focus-within .light-grid-remove,
+        .light-data-grid-table .light-grid-remove:focus-visible {
+            color: #dc3545;
+            background: #fff1f3;
+            opacity: 1;
+        }
+        .light-data-grid-add {
+            width: 100%;
+            padding: .78rem 1rem;
+            border: 0;
+            border-top: 1px dashed #cfd8e3;
+            background: #fff;
+            color: #0d6efd;
+            font-size: .875rem;
+            font-weight: 600;
+            text-align: left;
+            transition: background-color .14s ease, color .14s ease;
+        }
+        .light-data-grid-add:hover {
+            background: #f7faff;
+            color: #0a58ca;
+        }
+        .light-data-grid-add i {
+            margin-right: .35rem;
+        }
+        @media (max-width: 767.98px) {
+            .light-data-grid-table thead th,
+            .light-data-grid-table tbody td {
+                padding-right: .6rem;
+                padding-left: .6rem;
+            }
+        }
+        .expense-drawer {
+            width: min(760px, 96vw);
+        }
+        .expense-drawer .offcanvas-body {
+            overflow: auto;
+        }
+        .expense-drawer-footer {
+            position: sticky;
+            bottom: 0;
+            background: #fff;
+            border-top: 1px solid #e9ecef;
+            padding: .75rem 1rem;
+        }
+        @media (max-width: 991.98px) {
+            .editor-layout { grid-template-columns: 1fr; }
+            .editor-nav {
+                position: static;
+                display: flex;
+                overflow-x: auto;
+                white-space: nowrap;
+                gap: .25rem;
+            }
+            .editor-nav > .small { display: none; }
+            .editor-nav > nav { flex-direction: row; flex-wrap: nowrap; width: max-content; min-width: 100%; }
+            .editor-nav .nav-link { display: inline-flex; flex: 0 0 auto; }
+            .editor-summary-inner { align-items: flex-start; flex-direction: column; }
+            .editor-summary-actions { width: 100%; display: flex; gap: .5rem; }
+            .editor-summary-actions .btn { flex: 1; }
+        }    </style>
 </head>
 <body>
     <nav class="navbar navbar-expand-lg navbar-dark bg-dark">
@@ -215,11 +496,11 @@
             </div>
         </div>
     </nav>
-    
+
     <div class="container-fluid px-3 px-xl-4 mt-4" id="pageContent">
         {{template "content" .}}
     </div>
-    
+
     <footer class="footer mt-5 py-3 bg-light site-footer">
         <div class="container-fluid text-center">
             <span class="text-muted">© 2026 深圳市印客领科技有限公司</span>
@@ -286,6 +567,7 @@
     <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script src="/static/autocomplete.js"></script>
+    <script src="/static/editor-shell.js"></script>
     <script src="/static/date-picker.js?v=20260918"></script>
     <script>
         // 让订单、采购单等大型表单弹窗可通过右下角拖拽调整宽高。

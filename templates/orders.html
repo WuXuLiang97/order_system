@@ -5,9 +5,9 @@
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
                 <h4 class="mb-0"><i class="bi bi-cart"></i> 订单管理</h4>
                 {{if .CanAny "order:edit_all" "order:edit_own"}}
-                <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#createOrderModal">
+                <a class="btn btn-primary btn-sm" href="/orders/form">
                     <i class="bi bi-plus-circle"></i> 创建订单
-                </button>
+                </a>
                 {{end}}
             </div>
             <div class="card-body">
@@ -86,317 +86,38 @@
     </div>
 </div>
 
-<!-- 创建订单模态框 -->
-<div class="modal fade" id="createOrderModal" tabindex="-1">
-    <div class="modal-dialog modal-xl">
+<!-- 状态与付款快捷弹窗 -->
+<div class="modal fade" id="orderStatusQuickModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">创建新订单</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header"><h5 class="modal-title">修改订单状态</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
-                <form id="createOrderForm">
-                    <div class="row">
-                        <div class="col-md-12 mb-3">
-                            <label class="form-label">选择客户</label>
-                            <input type="text" class="form-control customer-search-input" id="customerSearchInput" list="customerAutocompleteOptions" placeholder="输入客户名称、编号或电话，也可直接手动填写下方客户名称" autocomplete="off">
-                            <input type="hidden" id="customerId">
-                            <datalist id="customerAutocompleteOptions"></datalist>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">客户名称 <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="customerName" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">电话号码</label>
-                            <input type="text" class="form-control" id="customerPhone">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">收货地址</label>
-                            <input type="text" class="form-control" id="customerAddress">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">地区</label>
-                            <input type="text" class="form-control" id="region">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">下单日期</label>
-                            <input type="date" class="form-control" id="orderDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">预计发货日期</label>
-                            <input type="date" class="form-control" id="expectedShippingDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">客户需求到货日</label>
-                            <input type="date" class="form-control" id="customerRequiredDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">物流天数（天）</label>
-                            <input type="number" class="form-control" id="logisticsDays" min="0" step="1" value="0">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">回款状态</label>
-                            <select class="form-control" id="paymentStatus">
-                                <option value="0">否</option>
-                                <option value="1">是</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">制单</label>
-                            <input type="text" class="form-control" id="preparedBy" placeholder="制单人（默认为当前登录人）">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">负责人（业务员）</label>
-                            <select class="form-control" id="orderOwner"><option value="0">未分配</option></select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">货款结算</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="paymentSettlement">
-                                    <option value="现付">现付</option>
-                                    <option value="自定义">自定义</option>
-                                </select>
-                                <input type="text" class="form-control" id="paymentSettlementCustom" placeholder="请输入货款结算方式，如：月结30天" disabled>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运费支付</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="freightPayment">
-                                    <option value="现付">现付</option>
-                                    <option value="自定义">自定义</option>
-                                </select>
-                                <input type="text" class="form-control" id="freightPaymentCustom" placeholder="请输入运费支付方式" disabled>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运费回收</label>
-                                <select class="form-control" id="freightRecovery">
-                                    <option value="可回收">可回收</option>
-                                    <option value="不可回收">不可回收</option>
-                                </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运输方式</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="transportMethod">
-                                    <option value="物流">物流</option>
-                                    <option value="快递">快递</option>
-                                    <option value="自定义">自定义</option>
-                                </select>
-                                <input type="text" class="form-control" id="transportMethodCustom" placeholder="请输入运输方式" disabled>
-                            </div>
-                        </div>
-<div class="col-md-12 mb-3">
-                            <label class="form-label">备注</label>
-                            <textarea class="form-control" id="createRemark" rows="2"></textarea>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">币种</label>
-                            <select class="form-control" id="currency"><option value="CNY">CNY</option></select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">贸易术语</label>
-                            <select class="form-control" id="tradeTerms"><option value="">无</option></select>
-                        </div>
-                        <div class="col-md-12 mb-3">
-                            <label class="form-label">唛头</label>
-                            <textarea class="form-control" id="shippingMark" rows="2" placeholder="客户固定出货唛头"></textarea>
-                        </div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label">产品明细</label>
-                        <div class="row item-header mb-1" aria-hidden="true">
-                            <div class="col-md-3"><span class="text-muted small">产品名称</span></div>
-                            <div class="col-md-2"><span class="text-muted small">规格型号</span></div>
-                            <div class="col-md-1"><span class="text-muted small">单位</span></div>
-                            <div class="col-md-1"><span class="text-muted small">销售数量</span></div>
-                            <div class="col-md-2"><span class="text-muted small">单价</span></div>
-                            <div class="col-md-2"><span class="text-muted small">金额</span></div>
-                            <div class="col-md-1"><span class="text-muted small">操作</span></div>
-                        </div>
-                        <div id="orderItems">
-                            <div class="row mb-2 item-row">
-                                <div class="col-md-3">
-                                    <input type="text" class="form-control product-input" list="orderProductOptions" placeholder="输入产品名称、规格或单位" autocomplete="off" required>
-                                    <input type="hidden" class="product-id-input">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="text" class="form-control spec-display" placeholder="规格型号" readonly>
-                                </div>
-                                <div class="col-md-1">
-                                    <input type="text" class="form-control unit-display" placeholder="单位" readonly>
-                                </div>
-                                <div class="col-md-1">
-                                    <input type="number" class="form-control quantity-input" placeholder="销售数量" min="1" required>
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="number" class="form-control price-display" placeholder="单价" min="0" step="0.01">
-                                </div>
-                                <div class="col-md-2">
-                                    <input type="number" class="form-control amount-display text-end" placeholder="金额" step="0.01" readonly>
-                                </div>
-                                <div class="col-md-1">
-                                    <button type="button" class="btn btn-danger btn-sm remove-item">删除</button>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addOrderItem()">
-                            <i class="bi bi-plus"></i> 添加产品
-                        </button>
-                        <datalist id="orderProductOptions"></datalist>
-                        <div id="productLoadStatus" class="text-muted small mt-1"></div>
-                    </div>
-                </form>
+                <label class="form-label">订单状态</label>
+                <select class="form-select" id="orderStatusQuickValue">
+                    <option value="0">待生产</option><option value="1">生产中</option><option value="2">待发货</option>
+                    <option value="3">已发货</option><option value="4">已取消</option>
+                </select>
+                <div class="form-text">取消订单会释放尚未出库的成品占用。</div>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="createOrder()">提交订单</button>
-            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" onclick="saveOrderStatusModal()">保存状态</button></div>
         </div>
     </div>
 </div>
-
-<!-- 编辑订单模态框 -->
-<div class="modal fade" id="editOrderModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
+<div class="modal fade" id="orderPaymentQuickModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">编辑订单</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
+            <div class="modal-header"><h5 class="modal-title">修改回款状态</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
             <div class="modal-body">
-                <form id="editOrderForm">
-                    <input type="hidden" id="editOrderId">
-                    <input type="hidden" id="editCustomerId">
-                    <div class="row">
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">客户名称 <span class="text-danger">*</span></label>
-                            <input type="text" class="form-control" id="editCustomerName" required>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">地区</label>
-                            <input type="text" class="form-control" id="editRegion">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">下单日期</label>
-                            <input type="date" class="form-control" id="editOrderDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">预计发货日期</label>
-                            <input type="date" class="form-control" id="editExpectedShippingDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">客户需求到货日</label>
-                            <input type="date" class="form-control" id="editCustomerRequiredDate">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">物流天数（天）</label>
-                            <input type="number" class="form-control" id="editLogisticsDays" min="0" step="1" value="0">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">回款状态</label>
-                            <select class="form-control" id="editPaymentStatus">
-                                <option value="0">否</option>
-                                <option value="1">是</option>
-                            </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">制单</label>
-                            <input type="text" class="form-control" id="editPreparedBy" placeholder="制单人（默认为当前登录人）">
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">负责人（业务员）</label>
-                            <select class="form-control" id="editOrderOwner"><option value="0">未分配</option></select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">货款结算</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="editPaymentSettlement">
-                                    <option value="现付">现付</option>
-                                    <option value="自定义">自定义</option>
-                                </select>
-                                <input type="text" class="form-control" id="editPaymentSettlementCustom" placeholder="请输入货款结算方式，如：月结30天" disabled>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运费支付</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="editFreightPayment">
-                                    <option value="现付">现付</option>
-                                    <option value="自定义">自定义</option>
-                                </select>
-                                <input type="text" class="form-control" id="editFreightPaymentCustom" placeholder="请输入运费支付方式" disabled>
-                            </div>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运费回收</label>
-                                <select class="form-control" id="editFreightRecovery">
-                                    <option value="可回收">可回收</option>
-                                    <option value="不可回收">不可回收</option>
-                                </select>
-                        </div>
-                        <div class="col-md-6 mb-3">
-                            <label class="form-label">运输方式</label>
-                            <div class="d-flex gap-2">
-                                <select class="form-control flex-shrink-0" style="width:130px;" id="editTransportMethod">
-                                    <option value="物流">物流</option>
-                                    <option value="快递">快递</option>
-                                    <option value="自定义">自定义</option>
-                                </select>
-                                <input type="text" class="form-control" id="editTransportMethodCustom" placeholder="请输入运输方式" disabled>
-                            </div>
-                        </div>
-<div class="col-md-12 mb-3">
-                            <label class="form-label">备注</label>
-                            <textarea class="form-control" id="editRemark" rows="2"></textarea>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">币种</label>
-                            <select class="form-control" id="editCurrency"><option value="CNY">CNY</option></select>
-                        </div>
-                        <div class="col-md-4 mb-3">
-                            <label class="form-label">贸易术语</label>
-                            <select class="form-control" id="editTradeTerms"><option value="">无</option></select>
-                        </div>
-                        <div class="col-md-12 mb-3">
-                            <label class="form-label">唛头</label>
-                            <textarea class="form-control" id="editShippingMark" rows="2" placeholder="客户固定出货唛头"></textarea>
-                        </div>
-                    </div>
-                </form>
+                <label class="form-label">回款状态</label>
+                <select class="form-select" id="orderPaymentQuickValue"><option value="0">未回款</option><option value="1">已回款</option></select>
             </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="saveEditOrder()">保存修改</button>
-            </div>
+            <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" onclick="saveOrderPaymentModal()">保存回款状态</button></div>
         </div>
     </div>
-</div>
-{{end}}
+</div>{{end}}
 
 {{define "scripts"}}
 <script>
-var productCache = [];
-var customerCache = [];
-var orderProductAutocomplete = null;
-var customerAutocomplete = null;
-
-var CURRENCY_OPTIONS = ['CNY','USD','EUR','GBP','JPY','HKD','AUD'];
-var TRADE_TERM_OPTIONS = ['EXW','FOB','CIF','DDP'];
-function fillOrderOptionSelects() {
-    var curHtml = '';
-    CURRENCY_OPTIONS.forEach(function(c) { curHtml += '<option value="' + c + '">' + c + '</option>'; });
-    $('#currency').html(curHtml);
-    $('#editCurrency').html(curHtml);
-    var tradeHtml = '<option value="">无</option>';
-    TRADE_TERM_OPTIONS.forEach(function(t) { tradeHtml += '<option value="' + t + '">' + t + '</option>'; });
-    $('#tradeTerms').html(tradeHtml);
-    $('#editTradeTerms').html(tradeHtml);
-}
-
 function formatDate(value) {
     if (!value) return '-';
     return value.slice(0, 10);
@@ -431,210 +152,22 @@ function toggleOrderDetails(orderID) {
     toggle.find('i').toggleClass('bi-chevron-right', !willShow).toggleClass('bi-chevron-down', willShow);
 }
 
-function fillOwnerOptions() {
-    if (window.__OWNER_OPTIONS__) return;
-    $.ajax({
-        url: '/api/users/options',
-        method: 'GET',
-        success: function(data) {
-            window.__OWNER_OPTIONS__ = data || [];
-            var html = '<option value="0">未分配</option>';
-            window.__OWNER_OPTIONS__.forEach(function(u) {
-                html += '<option value="' + u.id + '">' + u.name + '</option>';
-            });
-            $('#orderOwner, #editOrderOwner').html(html);
-            if (window.CURRENT_USER && $('#orderOwner').val() !== String(window.CURRENT_USER.id)) {
-                $('#orderOwner').val(window.CURRENT_USER.id);
-            }
-        },
-        error: function() { /* 忽略：加载失败时负责人仅未分配 */ }
-    });
-}
-
-function currentUserName() {
-    var cu = window.CURRENT_USER || {};
-    return cu.display_name || cu.username || '';
-}
-
-function refreshCustomField(selectId, inputId) {
-    var custom = $('#' + selectId).val() === '自定义';
-    $('#' + inputId).prop('disabled', !custom).toggle(custom);
-}
-
-function bindCustomField(selectId, inputId) {
-    $('#' + selectId).on('change', function () {
-        refreshCustomField(selectId, inputId);
-    });
-}
-
-function customFieldValue(selectId, inputId) {
-    var v = $('#' + selectId).val();
-    if (v !== '自定义') return v;
-    var t = ($('#' + inputId).val() || '').trim();
-    return t === '' ? '自定义' : t;
-}
-
-function setCustomField(selectId, inputId, stored, presets) {
-    if (presets.indexOf(stored) >= 0) {
-        $('#' + selectId).val(stored);
-        $('#' + inputId).prop('disabled', true).hide().val('');
-    } else {
-        $('#' + selectId).val('自定义');
-        $('#' + inputId).prop('disabled', false).show().val(stored || '');
-    }
-}
-
-function productDisplayValue(product) {
-    var details = [];
-    if (product.spec) details.push('规格：' + product.spec);
-    if (product.unit) details.push('单位：' + product.unit);
-    details.push('库存：' + Number(product.stock || 0));
-    return (product.name || '') + (details.length ? '（' + details.join('，') + '）' : '');
-}
-
-function clearOrderRowProduct(input) {
-    var row = $(input).closest('.item-row');
-    row.find('.product-id-input').val('');
-    row.find('.spec-display').val('');
-    row.find('.unit-display').val('');
-    row.find('.price-display').val('');
-    recalcRow(row);
-}
-
-function applyOrderProductSelection(product, input) {
-    var row = $(input).closest('.item-row');
-    row.find('.product-id-input').val(product.id);
-    row.find('.spec-display').val(product.spec || '');
-    row.find('.unit-display').val(product.unit || '');
-    row.find('.price-display').val(product.price || 0);
-    recalcRow(row);
-}
-
-function initOrderProductAutocomplete() {
-    if (orderProductAutocomplete) return;
-    orderProductAutocomplete = AutoComplete.create({
-        name: 'order_product',
-        inputSelector: '.product-input',
-        hiddenSelector: '.product-id-input',
-        datalistSelector: '#orderProductOptions',
-        getId: function(product) { return product.id; },
-        getDisplay: productDisplayValue,
-        getAliases: function(product) { return [product.name]; },
-        sortItems: function(a, b) {
-            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
-        },
-        onSelect: applyOrderProductSelection,
-        onClear: function(_, input) { clearOrderRowProduct(input); }
-    });
-}
-
-function loadProducts(callback) {
-    $.ajax({
-        url: '/api/products',
-        method: 'GET',
-        success: function(data) {
-            productCache = data || [];
-            $('#productLoadStatus').text('');
-            if (productCache.length === 0) {
-                $('#productLoadStatus').html('<span class="text-danger">⚠️ 暂无产品，请先添加产品！</span>');
-            }
-            initOrderProductAutocomplete();
-            orderProductAutocomplete.setItems(productCache);
-            if (callback) callback();
-        },
-        error: function() {
-            $('#productLoadStatus').html('<span class="text-danger">⚠️ 加载产品列表失败</span>');
-            if (callback) callback();
-        }
-    });
-}
-
-function customerDisplayValue(customer) {
-    var parts = [];
-    if (customer.code) parts.push(customer.code);
-    parts.push(customer.name || '');
-    var label = parts.join(' ');
-    var extras = [];
-    if (customer.phone) extras.push('电话：' + customer.phone);
-    if (customer.full_name && customer.full_name !== customer.name) extras.push('全称：' + customer.full_name);
-    return label + (extras.length ? '（' + extras.join('，') + '）' : '');
-}
-
-function applyCustomerSelection(customer) {
-    $('#customerId').val(customer.id);
-    $('#customerName').val(customer.name || '');
-    $('#customerPhone').val(customer.phone || '');
-    $('#customerAddress').val(customer.address || '');
-    $('#currency').val(customer.currency || 'CNY');
-    $('#tradeTerms').val(customer.trade_terms || '');
-    $('#shippingMark').val(customer.shipping_mark || '');
-    setCustomField('paymentSettlement', 'paymentSettlementCustom', customer.payment_terms || '', ['现付']);
-    if (customer.country_region && !$('#region').val()) {
-        $('#region').val(customer.country_region);
-    }
-}
-
-function initCustomerAutocomplete() {
-    if (customerAutocomplete) return;
-    customerAutocomplete = AutoComplete.create({
-        name: 'order_customer',
-        inputSelector: '#customerSearchInput',
-        hiddenSelector: '#customerId',
-        datalistSelector: '#customerAutocompleteOptions',
-        getId: function(customer) { return customer.id; },
-        getDisplay: customerDisplayValue,
-        getAliases: function(customer) {
-            return [customer.name, customer.code, customer.phone, customer.full_name];
-        },
-        sortItems: function(a, b) {
-            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
-        },
-        onSelect: applyCustomerSelection,
-        onClear: function() {
-            $('#customerId').val('');
-        }
-    });
-}
-
-function loadCustomersToSelect() {
-    $.ajax({
-        url: '/api/customers',
-        method: 'GET',
-        success: function(data) {
-            customerCache = data || [];
-            initCustomerAutocomplete();
-            customerAutocomplete.setItems(customerCache);
-        },
-        error: function() {
-            alert('加载客户列表失败');
-        }
-    });
-}
-function addOrderItem() {
-    var items = $('#orderItems');
-    var newRow = items.find('.item-row:first').clone();
-    newRow.find('input').val('').removeClass('is-invalid');
-    items.append(newRow);
-}
-
-$(document).on('click', '.remove-item', function() {
-    if ($('.item-row').length > 1) {
-        $(this).closest('.item-row').remove();
-    } else {
-        alert('至少保留一个产品');
-    }
-});
 
 
-$(document).on('input', '.quantity-input, .price-display', function() {
-    recalcRow($(this).closest('.item-row'));
-});
 
-function recalcRow(row) {
-    var qty = parseFloat(row.find('.quantity-input').val()) || 0;
-    var price = parseFloat(row.find('.price-display').val()) || 0;
-    row.find('.amount-display').val((qty * price).toFixed(2));
-}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 function loadOrders(status, keyword) {
     var params = {};
@@ -689,28 +222,30 @@ function loadOrders(status, keyword) {
                 var progressClass = remainingQuantity <= 0 ? 'bg-success' : (shippedQuantity > 0 ? 'bg-info text-dark' : 'bg-secondary');
                 var progressCell = `<span class="badge ${progressClass}">已发 ${shippedQuantity} / ${totalQuantity}</span><div class="small text-muted mt-1">剩余 ${remainingQuantity}</div>`;
 
-                var payment = order.payment_status === 1
-                    ? '<span class="badge bg-success">是</span>'
-                    : '<span class="badge bg-secondary">否</span>';
                 var canEditThis = canEditAll || (canEditOwn && isMine(order));
+                var payment = order.payment_status === 1
+                    ? '<span class="badge bg-success">已回款</span>'
+                    : '<span class="badge bg-secondary">未回款</span>';
+                if (canEditThis) {
+                    payment = `<button type="button" class="btn btn-sm ${order.payment_status === 1 ? 'btn-outline-success' : 'btn-outline-secondary'}" onclick="openOrderPaymentModal(${order.id})">${order.payment_status === 1 ? '已回款' : '未回款'}</button>`;
+                }
                 var actions = '';
                 actions += `<button class="btn btn-info btn-sm me-1" onclick="viewOrder(${order.id})">查看</button>`;
                 if ((order.status === 1 || order.status === 2) && P['product:manage']) {
                     actions += `<button class="btn btn-success btn-sm me-1" onclick="openShipment(${order.id})"><i class="bi bi-truck"></i> 生成送货单</button>`;
                 }
                 if (canEditThis) {
-                    actions += `<button class="btn btn-warning btn-sm me-1" onclick="editOrder(${order.id})">编辑</button>`;
+                    actions += `<a class="btn btn-warning btn-sm me-1" href="/orders/form?id=${order.id}">编辑</a>`;
                 }
                 if (canEditAll) {
                     actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
                 }
 
                 var statusCell;
+                var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[order.status] || '未知';
                 if (canEditThis) {
-                    statusCell = `<select class="form-select form-select-sm" onchange="updateStatus(${order.id}, this.value)">${statusOptions}</select>`;
-                    statusCell = statusCell.replace(`value="${order.status}"`, `value="${order.status}" selected`);
+                    statusCell = `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openOrderStatusModal(${order.id})">${st}</button>`;
                 } else {
-                    var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[order.status] || '未知';
                     statusCell = `<span class="badge ${statusBadge(order.status)}">${st}</span>`;
                 }
 
@@ -810,26 +345,6 @@ function statusBadge(s) {
     return {0:'bg-warning text-dark',1:'bg-info text-dark',2:'bg-primary',3:'bg-success',4:'bg-secondary'}[s] || 'bg-secondary';
 }
 
-function updateStatus(id, status) {
-    var statusText = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[status];
-    if (!confirm(`确定要将订单状态改为“${statusText}”吗？`)) {
-        loadOrders($('#filterStatus').val(), $('#searchKeyword').val());
-        return;
-    }
-    $.ajax({
-        url: '/api/orders/status',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify({id: id, status: parseInt(status)}),
-        success: function() {
-            alert('状态更新成功');
-            applyFilter();
-        },
-        error: function(xhr) {
-            alert('更新状态失败: ' + xhr.responseText);
-        }
-    });
-}
 
 function deleteOrder(id) {
     if (!confirm('确定要删除该订单吗？删除后成品库存与原材料库存将自动退回（明细一并删除）。')) return;
@@ -846,193 +361,103 @@ function deleteOrder(id) {
     });
 }
 
-function createOrder() {
-    var customerName = $('#customerName').val().trim();
-    if (!customerName) {
-        alert('请输入客户名称');
-        return;
-    }
 
-    var items = [];
-    var valid = true;
-    var errors = [];
-    $('.item-row').each(function(index) {
-        var row = $(this);
-        var productId = parseInt(row.find('.product-id-input').val());
-        if (!productId) {
-            orderProductAutocomplete.resolveRow(row);
-            productId = parseInt(row.find('.product-id-input').val());
-        }
-        var quantity = parseInt(row.find('.quantity-input').val());
-        var priceValue = String(row.find('.price-display').val() || '').trim();
-        var price = parseFloat(priceValue);
-        if (!productId) {
-            errors.push(`第 ${index + 1} 行：请选择产品`);
-            valid = false;
-        } else if (!quantity || quantity <= 0) {
-            errors.push(`第 ${index + 1} 行：销售数量必须大于0`);
-            valid = false;
-        } else if (priceValue === '' || isNaN(price) || price < 0) {
-            errors.push(`第 ${index + 1} 行：请输入有效的产品单价`);
-            valid = false;
-        } else {
-            items.push({product_id: productId, quantity: quantity, price: price});
-        }
-    });
-    if (!valid) {
-        alert(errors.join('\n'));
-        return;
-    }
-    if (items.length === 0) {
-        alert('请至少添加一个产品');
-        return;
-    }
 
-    var data = {
-        customer_name: customerName,
-        customer_phone: $('#customerPhone').val().trim(),
-        customer_address: $('#customerAddress').val().trim(),
-        region: $('#region').val().trim(),
-        order_date: $('#orderDate').val(),
-        expected_shipping_date: $('#expectedShippingDate').val(),
-        customer_required_date: $('#customerRequiredDate').val(),
-        logistics_days: parseInt($('#logisticsDays').val()) || 0,
-        payment_status: parseInt($('#paymentStatus').val()),
-        prepared_by: $('#preparedBy').val().trim(),
-        owner_user_id: parseInt($('#orderOwner').val()) || 0,
-        payment_settlement: customFieldValue('paymentSettlement', 'paymentSettlementCustom'),
-        freight_payment: customFieldValue('freightPayment', 'freightPaymentCustom'),
-        freight_recovery: $('#freightRecovery').val(),
-        transport_method: customFieldValue('transportMethod', 'transportMethodCustom'),
-        remark: $('#createRemark').val().trim(),
-        customer_id: parseInt($('#customerId').val()) || 0,
-        currency: $('#currency').val() || 'CNY',
-        trade_terms: $('#tradeTerms').val() || '',
-        shipping_mark: $('#shippingMark').val().trim(),
-        items: items
-    };
-
-    $.ajax({
-        url: '/api/orders',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        success: function(response) {
-            alert('订单创建成功，订单号：' + response.order_no);
-            $('#createOrderModal').modal('hide');
-            $('#createOrderForm')[0].reset();
-            $('#orderItems .item-row:not(:first)').remove();
-            $('#orderItems .item-row:first input').val('').removeClass('is-invalid');
-            applyFilter();
-        },
-        error: function(xhr) {
-            alert('创建订单失败: ' + xhr.responseText);
-        }
-    });
-}
-
-function editOrder(id) {
-    $.ajax({
-        url: `/api/orders/detail?id=${id}`,
-        method: 'GET',
-        success: function(data) {
-            var order = data.order;
-            $('#editOrderId').val(order.id);
-            $('#editCustomerName').val(order.customer_name);
-            $('#editRegion').val(order.region || '');
-            $('#editOrderDate').val(formatDate(order.order_date) === '-' ? '' : formatDate(order.order_date));
-            $('#editExpectedShippingDate').val(formatDate(order.expected_shipping_date) === '-' ? '' : formatDate(order.expected_shipping_date));
-            $('#editCustomerRequiredDate').val(formatDate(order.customer_required_date) === '-' ? '' : formatDate(order.customer_required_date));
-            $('#editLogisticsDays').val(order.logistics_days || 0);
-            $('#editPaymentStatus').val(order.payment_status);
-            $('#editPreparedBy').val(order.prepared_by || currentUserName());
-            $('#editOrderOwner').val(order.owner_user_id || 0);
-            setCustomField('editPaymentSettlement', 'editPaymentSettlementCustom', order.payment_settlement || '现付', ['现付']);
-            setCustomField('editFreightPayment', 'editFreightPaymentCustom', order.freight_payment || '现付', ['现付']);
-            $('#editFreightRecovery').val(order.freight_recovery === '不可回收' ? '不可回收' : '可回收');
-            setCustomField('editTransportMethod', 'editTransportMethodCustom', order.transport_method || '物流', ['物流', '快递']);
-            $('#editCustomerId').val(order.customer_id || 0);
-            $('#editCurrency').val(order.currency || 'CNY');
-            $('#editTradeTerms').val(order.trade_terms || '');
-            $('#editShippingMark').val(order.shipping_mark || '');
-            $('#editRemark').val(order.remark || '');
-            $('#editOrderModal').modal('show');
-        },
-        error: function() {
-            alert('加载订单数据失败');
-        }
-    });
-}
-
-function saveEditOrder() {
-    var id = parseInt($('#editOrderId').val());
-    var customerName = $('#editCustomerName').val().trim();
-    if (!customerName) {
-        alert('请输入客户名称');
-        return;
-    }
-    var data = {
-        id: id,
-        customer_name: customerName,
-        region: $('#editRegion').val().trim(),
-        order_date: $('#editOrderDate').val(),
-        expected_shipping_date: $('#editExpectedShippingDate').val(),
-        customer_required_date: $('#editCustomerRequiredDate').val(),
-        logistics_days: parseInt($('#editLogisticsDays').val()) || 0,
-        payment_status: parseInt($('#editPaymentStatus').val()),
-        prepared_by: $('#editPreparedBy').val().trim(),
-        owner_user_id: parseInt($('#editOrderOwner').val()) || 0,
-        payment_settlement: customFieldValue('editPaymentSettlement', 'editPaymentSettlementCustom'),
-        freight_payment: customFieldValue('editFreightPayment', 'editFreightPaymentCustom'),
-        freight_recovery: $('#editFreightRecovery').val(),
-        transport_method: customFieldValue('editTransportMethod', 'editTransportMethodCustom'),
-        customer_id: parseInt($('#editCustomerId').val()) || 0,
-        currency: $('#editCurrency').val() || 'CNY',
-        trade_terms: $('#editTradeTerms').val() || '',
-        shipping_mark: $('#editShippingMark').val().trim(),
-        remark: $('#editRemark').val().trim()
-    };
-    $.ajax({
-        url: '/api/orders/update',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        success: function() {
-            alert('修改成功');
-            $('#editOrderModal').modal('hide');
-            applyFilter();
-        },
-        error: function(xhr) {
-            alert('修改失败: ' + xhr.responseText);
-        }
-    });
-}
 
 function viewOrder(id) {
     window.open('/order/detail?id=' + id, '_blank');
 }
 
-$('#createOrderModal').on('show.bs.modal', function() {
-    var today = new Date();
-    var y = today.getFullYear();
-    var m = ('0' + (today.getMonth() + 1)).slice(-2);
-    var d = ('0' + today.getDate()).slice(-2);
-    if (!$('#orderDate').val()) $('#orderDate').val(y + '-' + m + '-' + d);
-    $('#preparedBy').val(currentUserName());
-    $('#paymentSettlement').val('现付');
-    $('#freightPayment').val('现付');
-    $('#freightRecovery').val('可回收');
-    $('#transportMethod').val('物流');
-    $('#currency').val('CNY');
-    $('#tradeTerms').val('');
-    $('#shippingMark').val('');
-    refreshCustomField('paymentSettlement', 'paymentSettlementCustom');
-    refreshCustomField('freightPayment', 'freightPaymentCustom');
-    refreshCustomField('transportMethod', 'transportMethodCustom');
-    loadProducts();
-    loadCustomersToSelect();
-});
+var quickOrderData = null;
 
+function quickOrderDate(value) {
+    var text = formatDate(value);
+    return text === '-' ? '' : text;
+}
+
+function quickOrderMetadataPayload(order, paymentStatus) {
+    return {
+        id: order.id,
+        customer_name: order.customer_name || '',
+        customer_phone: order.customer_phone || '',
+        customer_address: order.customer_address || '',
+        region: order.region || '',
+        order_date: quickOrderDate(order.order_date),
+        expected_shipping_date: quickOrderDate(order.expected_shipping_date),
+        customer_required_date: quickOrderDate(order.customer_required_date),
+        logistics_days: parseInt(order.logistics_days || 0, 10) || 0,
+        payment_status: paymentStatus,
+        prepared_by: order.prepared_by || '',
+        owner_user_id: parseInt(order.owner_user_id || 0, 10) || 0,
+        payment_settlement: order.payment_settlement || '现付',
+        freight_payment: order.freight_payment || '现付',
+        freight_recovery: order.freight_recovery || '可回收',
+        transport_method: order.transport_method || '物流',
+        customer_id: parseInt(order.customer_id || 0, 10) || 0,
+        currency: order.currency || 'CNY',
+        trade_terms: order.trade_terms || '',
+        shipping_mark: order.shipping_mark || '',
+        remark: order.remark || ''
+    };
+}
+
+function loadQuickOrder(id, callback) {
+    $.ajax({
+        url: '/api/orders/detail?id=' + id,
+        method: 'GET',
+        success: function (data) {
+            quickOrderData = data.order || null;
+            if (quickOrderData && callback) callback(quickOrderData);
+        },
+        error: function (xhr) { alert('加载订单失败: ' + xhr.responseText); }
+    });
+}
+
+function openOrderStatusModal(id) {
+    loadQuickOrder(id, function (order) {
+        $('#orderStatusQuickValue').val(String(order.status || 0));
+        $('#orderStatusQuickModal').modal('show');
+    });
+}
+
+function openOrderPaymentModal(id) {
+    loadQuickOrder(id, function (order) {
+        $('#orderPaymentQuickValue').val(String(order.payment_status || 0));
+        $('#orderPaymentQuickModal').modal('show');
+    });
+}
+
+function saveOrderStatusModal() {
+    if (!quickOrderData) return;
+    $.ajax({
+        url: '/api/orders/status',
+        method: 'PUT',
+        contentType: 'application/json',
+        data: JSON.stringify({ id: quickOrderData.id, status: parseInt($('#orderStatusQuickValue').val(), 10) || 0 }),
+        success: function () {
+            $('#orderStatusQuickModal').modal('hide');
+            loadOrders($('#filterStatus').val(), $('#searchKeyword').val());
+            loadOrderSummary();
+        },
+        error: function (xhr) { alert('保存状态失败: ' + xhr.responseText); }
+    });
+}
+
+function saveOrderPaymentModal() {
+    if (!quickOrderData) return;
+    var paymentStatus = parseInt($('#orderPaymentQuickValue').val(), 10) || 0;
+    $.ajax({
+        url: '/api/orders/update',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify(quickOrderMetadataPayload(quickOrderData, paymentStatus)),
+        success: function () {
+            $('#orderPaymentQuickModal').modal('hide');
+            loadOrders($('#filterStatus').val(), $('#searchKeyword').val());
+        },
+        error: function (xhr) { alert('保存回款状态失败: ' + xhr.responseText); }
+    });
+}
 function currentMonthStr() {
     var now = new Date();
     var m = ('0' + (now.getMonth() + 1)).slice(-2);
@@ -1058,15 +483,7 @@ $(document).ready(function() {
     loadOrderSummary();
     $('#summaryMonth').on('change', loadOrderSummary);
     loadOrders();
-    loadProducts();
-    bindCustomField('paymentSettlement', 'paymentSettlementCustom');
-    bindCustomField('freightPayment', 'freightPaymentCustom');
-    bindCustomField('transportMethod', 'transportMethodCustom');
-    bindCustomField('editPaymentSettlement', 'editPaymentSettlementCustom');
-    bindCustomField('editFreightPayment', 'editFreightPaymentCustom');
-    bindCustomField('editTransportMethod', 'editTransportMethodCustom');
-    fillOrderOptionSelects();
-    fillOwnerOptions();
+
     $('#searchKeyword').on('keypress', function(e) {
         if (e.which === 13) applyFilter();
     });

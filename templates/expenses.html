@@ -13,7 +13,7 @@
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
         <h4 class="mb-0"><i class="bi bi-receipt"></i> 费用管理</h4>
         {{if .Can "expense:manage"}}
-        <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addExpenseModal"><i class="bi bi-plus-circle"></i> 新增费用</button>
+        <button class="btn btn-primary btn-sm" onclick="openExpenseEditor()"><i class="bi bi-plus-circle"></i> 新增费用</button>
         {{end}}
     </div>
     <div class="card-body">
@@ -36,45 +36,36 @@
         </table></div>
     </div>
 </div></div></div><!-- 新增费用 -->
-<div class="modal fade" id="addExpenseModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">新增费用</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body"><form id="addExpenseForm"><div class="row">
-        <div class="col-md-4 mb-3"><label class="form-label">费用编号</label><input type="text" class="form-control" id="addExpenseNo" maxlength="32" placeholder="留空自动生成"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">费用日期 <span class="text-danger">*</span></label><input type="date" class="form-control" id="addExpenseDate" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">所属月份 <span class="text-danger">*</span></label><input type="month" class="form-control" id="addExpenseMonth" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">费用类别 <span class="text-danger">*</span></label><select class="form-select" id="addExpenseCategory" required><option value="">请选择</option><option>厂房租金</option><option>员工工资</option><option>社保公积金</option><option>水电费</option><option>物流运费</option><option>办公费</option><option>差旅费</option><option>加工费</option><option>服务费</option><option>其他支出</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">金额（含税） <span class="text-danger">*</span></label><input type="number" class="form-control" id="addExpenseAmount" min="0.01" step="0.01" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">税额</label><input type="number" class="form-control" id="addExpenseTaxAmount" min="0" step="0.01" placeholder="可选"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">不含税金额</label><input type="number" class="form-control" id="addExpenseAmountExcludingTax" min="0" step="0.01" placeholder="可选"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">往来对象类型 <span class="text-danger">*</span></label><select class="form-select" id="addExpenseCounterpartyType" required><option value="">请选择</option><option>房东</option><option>员工</option><option>服务商</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">往来对象名称</label><input type="text" class="form-control" id="addExpenseCounterpartyName" maxlength="100" placeholder="如：某某公司、某某房东"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">付款状态</label><select class="form-select" id="addExpensePaymentStatus"><option>未付款</option><option>部分付款</option><option>已付款</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">支付方式</label><select class="form-select" id="addExpensePaymentMethod"><option>银行转账</option><option>微信</option><option>支付宝</option><option>现金</option><option>支票</option><option>其他</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">发票或支付凭证</label><input type="file" class="form-control" id="addExpenseVoucherFile" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" multiple onchange="uploadExpenseVoucherFile(this, 'add')"><div id="addExpenseVoucherPreviews" class="mt-2"></div></div>
-        <div class="col-md-12 mb-3"><label class="form-label">备注</label><textarea class="form-control" id="addExpenseRemark" rows="2"></textarea></div>
-    </div></form></div>
-    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" onclick="addExpense()">保存</button></div>
-</div></div></div><!-- 编辑费用 -->
-<div class="modal fade" id="editExpenseModal" tabindex="-1"><div class="modal-dialog modal-xl"><div class="modal-content">
-    <div class="modal-header"><h5 class="modal-title">编辑费用</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
-    <div class="modal-body"><form id="editExpenseForm"><input type="hidden" id="editExpenseId"><div class="row">
-        <div class="col-md-4 mb-3"><label class="form-label">费用编号</label><input type="text" class="form-control" id="editExpenseNo" maxlength="32" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">费用日期 <span class="text-danger">*</span></label><input type="date" class="form-control" id="editExpenseDate" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">所属月份 <span class="text-danger">*</span></label><input type="month" class="form-control" id="editExpenseMonth" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">费用类别 <span class="text-danger">*</span></label><select class="form-select" id="editExpenseCategory" required><option value="">请选择</option><option>厂房租金</option><option>员工工资</option><option>社保公积金</option><option>水电费</option><option>物流运费</option><option>办公费</option><option>差旅费</option><option>加工费</option><option>服务费</option><option>其他支出</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">金额（含税） <span class="text-danger">*</span></label><input type="number" class="form-control" id="editExpenseAmount" min="0.01" step="0.01" required></div>
-        <div class="col-md-4 mb-3"><label class="form-label">税额</label><input type="number" class="form-control" id="editExpenseTaxAmount" min="0" step="0.01" placeholder="可选"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">不含税金额</label><input type="number" class="form-control" id="editExpenseAmountExcludingTax" min="0" step="0.01" placeholder="可选"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">往来对象类型 <span class="text-danger">*</span></label><select class="form-select" id="editExpenseCounterpartyType" required><option value="">请选择</option><option>房东</option><option>员工</option><option>服务商</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">往来对象名称</label><input type="text" class="form-control" id="editExpenseCounterpartyName" maxlength="100"></div>
-        <div class="col-md-4 mb-3"><label class="form-label">付款状态</label><select class="form-select" id="editExpensePaymentStatus"><option>未付款</option><option>部分付款</option><option>已付款</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">支付方式</label><select class="form-select" id="editExpensePaymentMethod"><option>银行转账</option><option>微信</option><option>支付宝</option><option>现金</option><option>支票</option><option>其他</option></select></div>
-        <div class="col-md-4 mb-3"><label class="form-label">发票或支付凭证</label><input type="file" class="form-control" id="editExpenseVoucherFile" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" multiple onchange="uploadExpenseVoucherFile(this, 'edit')"><div id="editExpenseVoucherPreviews" class="mt-2"></div></div>
-        <div class="col-md-12 mb-3"><label class="form-label">备注</label><textarea class="form-control" id="editExpenseRemark" rows="2"></textarea></div>
-    </div></form></div>
-    <div class="modal-footer"><button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" onclick="updateExpense()">保存</button></div>
-</div></div></div>
-<!-- 查看图片凭证 -->
+<div class="offcanvas offcanvas-end expense-drawer" tabindex="-1" id="expenseEditorDrawer" aria-labelledby="expenseEditorDrawerTitle">
+    <div class="offcanvas-header border-bottom">
+        <h5 class="offcanvas-title" id="expenseEditorDrawerTitle">新增费用</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="offcanvas"></button>
+    </div>
+    <div class="offcanvas-body">
+        <form id="expenseEditorForm">
+            <input type="hidden" id="expenseId" value="0">
+            <div class="row">
+                <div class="col-md-6 mb-3"><label class="form-label">费用编号</label><input type="text" class="form-control" id="expenseNo" maxlength="32" placeholder="留空自动生成"></div>
+                <div class="col-md-6 mb-3"><label class="form-label">费用日期 <span class="text-danger">*</span></label><input type="date" class="form-control" id="expenseDate" required></div>
+                <div class="col-md-6 mb-3"><label class="form-label">所属月份 <span class="text-danger">*</span></label><input type="month" class="form-control" id="expenseMonth" required></div>
+                <div class="col-md-6 mb-3"><label class="form-label">费用类别 <span class="text-danger">*</span></label><select class="form-select" id="expenseCategory" required><option value="">请选择</option><option>厂房租金</option><option>员工工资</option><option>社保公积金</option><option>水电费</option><option>物流运费</option><option>办公费</option><option>差旅费</option><option>加工费</option><option>服务费</option><option>其他支出</option></select></div>
+                <div class="col-md-4 mb-3"><label class="form-label">金额（含税） <span class="text-danger">*</span></label><input type="number" class="form-control" id="expenseAmount" min="0.01" step="0.01" required></div>
+                <div class="col-md-4 mb-3"><label class="form-label">税额</label><input type="number" class="form-control" id="expenseTaxAmount" min="0" step="0.01" placeholder="可选"></div>
+                <div class="col-md-4 mb-3"><label class="form-label">不含税金额</label><input type="number" class="form-control" id="expenseAmountExcludingTax" min="0" step="0.01" placeholder="可选"></div>
+                <div class="col-md-6 mb-3"><label class="form-label">往来对象类型 <span class="text-danger">*</span></label><select class="form-select" id="expenseCounterpartyType" required><option value="">请选择</option><option>房东</option><option>员工</option><option>服务商</option></select></div>
+                <div class="col-md-6 mb-3"><label class="form-label">往来对象名称</label><input type="text" class="form-control" id="expenseCounterpartyName" maxlength="100" placeholder="如：某某公司、某某房东"></div>
+                <div class="col-md-6 mb-3"><label class="form-label">付款状态</label><select class="form-select" id="expensePaymentStatus"><option>未付款</option><option>部分付款</option><option>已付款</option></select></div>
+                <div class="col-md-6 mb-3"><label class="form-label">支付方式</label><select class="form-select" id="expensePaymentMethod"><option>银行转账</option><option>微信</option><option>支付宝</option><option>现金</option><option>支票</option><option>其他</option></select></div>
+                <div class="col-12 mb-3"><label class="form-label">发票或支付凭证</label><input type="file" class="form-control" id="expenseVoucherFile" accept=".jpg,.jpeg,.png,.gif,.webp,.pdf" multiple onchange="uploadExpenseVoucherFile(this)"><div id="expenseVoucherPreviews" class="mt-2"></div></div>
+                <div class="col-12 mb-3"><label class="form-label">备注</label><textarea class="form-control" id="expenseRemark" rows="3"></textarea></div>
+            </div>
+        </form>
+    </div>
+    <div class="expense-drawer-footer d-flex justify-content-end gap-2">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="offcanvas">取消</button>
+        <button type="button" class="btn btn-primary" id="saveExpenseButton" onclick="saveExpenseEditor()">保存</button>
+    </div>
+</div><!-- 查看图片凭证 -->
 <div class="modal fade" id="viewExpenseVoucherModal" tabindex="-1"><div class="modal-dialog modal-dialog-centered"><div class="modal-content">
     <div class="modal-header"><h5 class="modal-title">发票 / 支付凭证</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
     <div class="modal-body"><img id="viewExpenseVoucherImage" src="" alt="发票或支付凭证"></div>
@@ -82,8 +73,8 @@
 {{end}}{{define "scripts"}}
 <script>
 var expenseRecords = [];
-var addExpenseVoucherUrls = [];
-var editExpenseVoucherUrls = [];
+var expenseEditorVoucherURLs = [];
+var expenseEditorIsEdit = false;
 function escapeExpenseHtml(value) {
     return String(value == null ? '' : value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
@@ -187,26 +178,26 @@ function clearExpenseFilters() {
     $('#filterExpenseCategory').val('');
     $('#filterExpenseStatus').val('');
     renderExpenseTable();
-}function collectExpense(prefix) {
-    var expenseDate = $('#' + prefix + 'ExpenseDate').val();
-    var expenseMonth = $('#' + prefix + 'ExpenseMonth').val();
-    var category = $('#' + prefix + 'ExpenseCategory').val();
-    var amount = parseFloat($('#' + prefix + 'ExpenseAmount').val());
-    var counterpartyType = $('#' + prefix + 'ExpenseCounterpartyType').val();
+}function collectExpenseEditorData() {
+    var expenseDate = $('#expenseDate').val();
+    var expenseMonth = $('#expenseMonth').val();
+    var category = $('#expenseCategory').val();
+    var amount = parseFloat($('#expenseAmount').val());
+    var counterpartyType = $('#expenseCounterpartyType').val();
     if (!expenseDate || !expenseMonth || !category || !counterpartyType) {
         alert('请完整填写费用日期、所属月份、费用类别和往来对象类型');
         return null;
     }
     if (!(amount > 0)) { alert('金额必须大于0'); return null; }
-    var taxRaw = ($('#' + prefix + 'ExpenseTaxAmount').val() || '').trim();
-    var excludingRaw = ($('#' + prefix + 'ExpenseAmountExcludingTax').val() || '').trim();
+    var taxRaw = ($('#expenseTaxAmount').val() || '').trim();
+    var excludingRaw = ($('#expenseAmountExcludingTax').val() || '').trim();
     var taxAmount = taxRaw === '' ? null : parseFloat(taxRaw);
     var excludingTax = excludingRaw === '' ? null : parseFloat(excludingRaw);
     if (taxAmount != null && (isNaN(taxAmount) || taxAmount < 0 || taxAmount > amount)) { alert('税额必须在0和金额之间'); return null; }
     if (excludingTax != null && (isNaN(excludingTax) || excludingTax < 0 || excludingTax > amount)) { alert('不含税金额必须在0和金额之间'); return null; }
     return {
-        id: prefix === 'edit' ? (parseInt($('#editExpenseId').val(), 10) || 0) : 0,
-        expense_no: ($('#' + prefix + 'ExpenseNo').val() || '').trim(),
+        id: expenseEditorIsEdit ? (parseInt($('#expenseId').val(), 10) || 0) : 0,
+        expense_no: ($('#expenseNo').val() || '').trim(),
         expense_date: expenseDate,
         expense_month: expenseMonth,
         category: category,
@@ -214,102 +205,116 @@ function clearExpenseFilters() {
         tax_amount: taxAmount,
         amount_excluding_tax: excludingTax,
         counterparty_type: counterpartyType,
-        counterparty_name: ($('#' + prefix + 'ExpenseCounterpartyName').val() || '').trim(),
-        payment_status: $('#' + prefix + 'ExpensePaymentStatus').val(),
-        payment_method: $('#' + prefix + 'ExpensePaymentMethod').val(),
-        vouchers: prefix === 'add' ? addExpenseVoucherUrls : editExpenseVoucherUrls,
-        remark: ($('#' + prefix + 'ExpenseRemark').val() || '').trim()
+        counterparty_name: ($('#expenseCounterpartyName').val() || '').trim(),
+        payment_status: $('#expensePaymentStatus').val(),
+        payment_method: $('#expensePaymentMethod').val(),
+        vouchers: expenseEditorVoucherURLs.slice(),
+        remark: ($('#expenseRemark').val() || '').trim()
     };
 }
-function resetAddExpenseForm() {
-    $('#addExpenseForm')[0].reset();
+
+function resetExpenseEditorForm() {
+    $('#expenseEditorForm')[0].reset();
+    $('#expenseId').val('0');
     var today = expenseCurrentDate();
-    $('#addExpenseDate').val(today);
-    $('#addExpenseMonth').val(today.slice(0, 7));
-    $('#addExpensePaymentStatus').val('未付款');
-    $('#addExpensePaymentMethod').val('银行转账');
-    addExpenseVoucherUrls = [];
-    renderExpenseVoucherPreviews('add');
-    $('#addExpenseVoucherFile').val('');
+    $('#expenseDate').val(today);
+    $('#expenseMonth').val(today.slice(0, 7));
+    $('#expensePaymentStatus').val('未付款');
+    $('#expensePaymentMethod').val('银行转账');
+    expenseEditorVoucherURLs = [];
+    renderExpenseVoucherPreviews();
+    $('#expenseVoucherFile').val('');
 }
-function addExpense() {
-    var data = collectExpense('add');
-    if (!data) return;
-    $.ajax({ url: '/api/expenses/add', method: 'POST', contentType: 'application/json', data: JSON.stringify(data),
-        success: function() { alert('费用记录添加成功'); $('#addExpenseModal').modal('hide'); resetAddExpenseForm(); loadExpenses(); },
-        error: function(xhr) { alert('添加失败: ' + xhr.responseText); }
-    });
+
+function openExpenseEditor() {
+    expenseEditorIsEdit = false;
+    resetExpenseEditorForm();
+    $('#expenseEditorDrawerTitle').text('新增费用');
+    $('#saveExpenseButton').text('保存');
+    bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('expenseEditorDrawer')).show();
 }
+
 function editExpense(id) {
     $.ajax({ url: '/api/expenses/get?id=' + id, method: 'GET', success: function(data) {
-        $('#editExpenseId').val(data.id);
-        $('#editExpenseNo').val(data.expense_no || '');
-        $('#editExpenseDate').val(expenseDateOnly(data.expense_date) === '-' ? '' : expenseDateOnly(data.expense_date));
-        $('#editExpenseMonth').val(data.expense_month || '');
-        $('#editExpenseCategory').val(data.category || '');
-        $('#editExpenseAmount').val(data.amount || '');
-        $('#editExpenseTaxAmount').val(data.tax_amount == null ? '' : data.tax_amount);
-        $('#editExpenseAmountExcludingTax').val(data.amount_excluding_tax == null ? '' : data.amount_excluding_tax);
-        $('#editExpenseCounterpartyType').val(data.counterparty_type || '');
-        $('#editExpenseCounterpartyName').val(data.counterparty_name || '');
-        $('#editExpensePaymentStatus').val(data.payment_status || '未付款');
-        $('#editExpensePaymentMethod').val(data.payment_method || '银行转账');
-        $('#editExpenseRemark').val(data.remark || '');
-        editExpenseVoucherUrls = Array.isArray(data.vouchers) ? data.vouchers.slice() : [];
-        renderExpenseVoucherPreviews('edit');
-        $('#editExpenseVoucherFile').val('');
-        $('#editExpenseModal').modal('show');
+        expenseEditorIsEdit = true;
+        $('#expenseId').val(data.id);
+        $('#expenseNo').val(data.expense_no || '');
+        $('#expenseDate').val(expenseDateOnly(data.expense_date) === '-' ? '' : expenseDateOnly(data.expense_date));
+        $('#expenseMonth').val(data.expense_month || '');
+        $('#expenseCategory').val(data.category || '');
+        $('#expenseAmount').val(data.amount || '');
+        $('#expenseTaxAmount').val(data.tax_amount == null ? '' : data.tax_amount);
+        $('#expenseAmountExcludingTax').val(data.amount_excluding_tax == null ? '' : data.amount_excluding_tax);
+        $('#expenseCounterpartyType').val(data.counterparty_type || '');
+        $('#expenseCounterpartyName').val(data.counterparty_name || '');
+        $('#expensePaymentStatus').val(data.payment_status || '未付款');
+        $('#expensePaymentMethod').val(data.payment_method || '银行转账');
+        $('#expenseRemark').val(data.remark || '');
+        expenseEditorVoucherURLs = Array.isArray(data.vouchers) ? data.vouchers.slice() : [];
+        renderExpenseVoucherPreviews();
+        $('#expenseVoucherFile').val('');
+        $('#expenseEditorDrawerTitle').text('编辑费用');
+        $('#saveExpenseButton').text('保存修改');
+        bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('expenseEditorDrawer')).show();
     }, error: function(xhr) { alert('加载费用记录失败: ' + xhr.responseText); } });
 }
-function updateExpense() {
-    var data = collectExpense('edit');
+
+function saveExpenseEditor() {
+    var data = collectExpenseEditorData();
     if (!data) return;
-    $.ajax({ url: '/api/expenses/update', method: 'POST', contentType: 'application/json', data: JSON.stringify(data),
-        success: function() { alert('费用记录更新成功'); $('#editExpenseModal').modal('hide'); loadExpenses(); },
-        error: function(xhr) { alert('更新失败: ' + xhr.responseText); }
+    $('#saveExpenseButton').prop('disabled', true);
+    $.ajax({ url: expenseEditorIsEdit ? '/api/expenses/update' : '/api/expenses/add', method: 'POST', contentType: 'application/json', data: JSON.stringify(data),
+        success: function() {
+            bootstrap.Offcanvas.getOrCreateInstance(document.getElementById('expenseEditorDrawer')).hide();
+            $('#saveExpenseButton').prop('disabled', false);
+            loadExpenses();
+        },
+        error: function(xhr) {
+            $('#saveExpenseButton').prop('disabled', false);
+            alert((expenseEditorIsEdit ? '更新失败: ' : '添加失败: ') + xhr.responseText);
+        }
     });
-}
-function deleteExpense(id) {
+}function deleteExpense(id) {
     if (!confirm('确定要删除这条费用记录及其凭证文件吗？')) return;
     $.ajax({ url: '/api/expenses/delete?id=' + id, method: 'POST',
         success: function() { alert('费用记录删除成功'); loadExpenses(); },
         error: function(xhr) { alert('删除失败: ' + xhr.responseText); }
     });
-}function renderExpenseVoucherPreviews(prefix) {
-    var urls = prefix === 'add' ? addExpenseVoucherUrls : editExpenseVoucherUrls;
-    var container = $('#' + prefix + 'ExpenseVoucherPreviews');
-    container.empty();
-    urls.forEach(function(url, index) {
+}function renderExpenseVoucherPreviews() {
+    var container = $('#expenseVoucherPreviews').empty();
+    expenseEditorVoucherURLs.forEach(function(url, index) {
         var safe = escapeExpenseHtml(url);
         if (isPdfVoucher(url)) {
             container.append('<div class="d-inline-flex align-items-center border rounded px-2 py-1 me-2 mb-2">' +
                 '<a href="' + safe + '" target="_blank" rel="noopener" class="text-danger me-2"><i class="bi bi-file-earmark-pdf"></i> PDF</a>' +
-                '<button type="button" class="btn-close" onclick="removeExpenseVoucher(\'' + prefix + '\', ' + index + ')"></button></div>');
+                '<button type="button" class="btn-close" onclick="removeExpenseVoucher(' + index + ')"></button></div>');
         } else {
             container.append('<div class="position-relative d-inline-block me-2 mb-2">' +
                 '<img class="expense-voucher-thumb" style="height:90px;width:90px;" src="' + safe + '" data-url="' + safe + '" data-pdf="false" onclick="viewExpenseVoucher(this.dataset.url, this.dataset.pdf)" alt="凭证">' +
-                '<button type="button" class="btn-close position-absolute top-0 end-0 bg-white" onclick="removeExpenseVoucher(\'' + prefix + '\', ' + index + ')"></button></div>');
+                '<button type="button" class="btn-close position-absolute top-0 end-0 bg-white" onclick="removeExpenseVoucher(' + index + ')"></button></div>');
         }
     });
 }
-function removeExpenseVoucher(prefix, index) {
-    if (prefix === 'add') addExpenseVoucherUrls.splice(index, 1); else editExpenseVoucherUrls.splice(index, 1);
-    renderExpenseVoucherPreviews(prefix);
+
+function removeExpenseVoucher(index) {
+    expenseEditorVoucherURLs.splice(index, 1);
+    renderExpenseVoucherPreviews();
 }
-function uploadExpenseVoucherFile(input, prefix) {
+
+function uploadExpenseVoucherFile(input) {
     if (!input.files || !input.files.length) return;
     var formData = new FormData();
     for (var i = 0; i < input.files.length; i++) formData.append('files', input.files[i]);
     $.ajax({ url: '/api/expenses/upload', method: 'POST', data: formData, processData: false, contentType: false,
         success: function(res) {
-            var urls = res.urls || [];
-            if (prefix === 'add') addExpenseVoucherUrls = addExpenseVoucherUrls.concat(urls); else editExpenseVoucherUrls = editExpenseVoucherUrls.concat(urls);
-            renderExpenseVoucherPreviews(prefix);
+            expenseEditorVoucherURLs = expenseEditorVoucherURLs.concat(res.urls || []);
+            renderExpenseVoucherPreviews();
             input.value = '';
         },
         error: function(xhr) { alert('发票或支付凭证上传失败: ' + xhr.responseText); input.value = ''; }
     });
 }
+
 function viewExpenseVoucher(url, isPdf) {
     if (isPdf === true || isPdf === 'true') { window.open(url, '_blank', 'noopener'); return; }
     var img = $('#viewExpenseVoucherImage');
@@ -319,15 +324,13 @@ function viewExpenseVoucher(url, isPdf) {
     if (img[0].complete) modal.modal('show');
     else img.on('load.expenseVoucher error.expenseVoucher', function() { modal.modal('show'); });
 }
+
 $(document).ready(function() {
     $('#filterExpenseMonth').val(expenseCurrentMonth());
-    resetAddExpenseForm();
     loadExpenses();
     $('#expenseSearch').on('input', renderExpenseTable);
     $('#filterExpenseMonth, #filterExpenseCategory, #filterExpenseStatus').on('change', renderExpenseTable);
-    $('#addExpenseDate').on('change', function() { if (this.value) $('#addExpenseMonth').val(this.value.slice(0, 7)); });
-    $('#editExpenseDate').on('change', function() { if (this.value) $('#editExpenseMonth').val(this.value.slice(0, 7)); });
-    $('#addExpenseModal').on('show.bs.modal', function() { if (!$('#addExpenseDate').val()) resetAddExpenseForm(); });
+    $('#expenseDate').on('change', function() { if (this.value) $('#expenseMonth').val(this.value.slice(0, 7)); });
 });
 </script>
 {{end}}

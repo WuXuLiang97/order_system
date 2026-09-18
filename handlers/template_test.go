@@ -76,6 +76,14 @@ func TestPageTemplates(t *testing.T) {
 		{"customers-viewer", []string{"../templates/layout.html", "../templates/customers.html"}, viewer},
 		{"customer-detail-admin", []string{"../templates/layout.html", "../templates/customer_detail.html"}, admin},
 		{"customer-detail-viewer", []string{"../templates/layout.html", "../templates/customer_detail.html"}, viewer},
+		{"order-form-admin", []string{"../templates/layout.html", "../templates/order_form.html"}, admin},
+		{"order-form-viewer", []string{"../templates/layout.html", "../templates/order_form.html"}, viewer},
+		{"product-form-admin", []string{"../templates/layout.html", "../templates/product_form.html"}, admin},
+		{"product-form-viewer", []string{"../templates/layout.html", "../templates/product_form.html"}, viewer},
+		{"purchase-form-admin", []string{"../templates/layout.html", "../templates/purchase_form.html"}, admin},
+		{"purchase-form-viewer", []string{"../templates/layout.html", "../templates/purchase_form.html"}, viewer},
+		{"customer-form-admin", []string{"../templates/layout.html", "../templates/customer_form.html"}, admin},
+		{"customer-form-viewer", []string{"../templates/layout.html", "../templates/customer_form.html"}, viewer},
 		{"users-admin", []string{"../templates/layout.html", "../templates/users.html"}, admin},
 	}
 

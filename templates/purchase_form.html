@@ -1,0 +1,488 @@
+{{define "content"}}
+<div class="editor-page-header">
+    <div>
+        <a href="/purchase-materials" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> 返回采购单列表</a>
+        <h4 class="mb-1" id="purchaseEditorTitle"><i class="bi bi-cart-plus"></i> 新建采购单</h4>
+        <div class="text-muted small">采购单、到货、付款和物料明细集中在同一编辑器内。</div>
+    </div>
+</div>
+
+<div id="editorNotice"></div>
+
+<div class="editor-layout">
+    <aside class="editor-nav">
+        <div class="small text-muted px-2 pt-1 pb-2">采购单分区</div>
+        <nav class="nav flex-column">
+            <a class="nav-link active" href="#purchase-basic" data-editor-section="#purchase-basic"><i class="bi bi-shop"></i> 供应商与日期</a>
+            <a class="nav-link" href="#purchase-payment" data-editor-section="#purchase-payment"><i class="bi bi-credit-card"></i> 付款与到货</a>
+            <a class="nav-link" href="#purchase-items" data-editor-section="#purchase-items"><i class="bi bi-boxes"></i> 采购物料</a>
+            <a class="nav-link" href="#purchase-notes" data-editor-section="#purchase-notes"><i class="bi bi-chat-left-text"></i> 备注与凭证</a>
+        </nav>
+    </aside>
+
+    <main>
+        <form id="purchaseEditorForm" novalidate>
+            <input type="hidden" id="purchaseId" value="0">
+
+            <section class="editor-section" id="purchase-basic">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-shop"></i> 供应商与日期</h5>
+                    <span class="badge bg-light text-dark border">第 1 区</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3" id="purchaseNoWrap" style="display:none;">
+                            <label class="form-label">采购单号</label>
+                            <input type="text" class="form-control" id="purchaseNo" readonly>
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">供应商</label>
+                            <input type="text" class="form-control" id="supplier" placeholder="输入供应商名称">
+                        </div>
+                        <div class="col-md-4 col-xl-3 mb-3">
+                            <label class="form-label">采购日期</label>
+                            <input type="date" class="form-control" id="purchaseDate">
+                        </div>
+                        <div class="col-md-4 col-xl-3 mb-3">
+                            <label class="form-label">预计到货日期</label>
+                            <input type="date" class="form-control" id="expectedArrivalDate">
+                        </div>
+                        <div class="col-md-4 col-xl-3 mb-3">
+                            <label class="form-label">实际到货日期</label>
+                            <input type="date" class="form-control" id="actualArrivalDate">
+                        </div>
+                        <div class="col-md-4 col-xl-3 mb-3">
+                            <label class="form-label">采购状态</label>
+                            <select class="form-select" id="purchaseStatus">
+                                <option value="0">采购中</option>
+                                <option value="1">已到货</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="purchase-payment">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-credit-card"></i> 付款与到货</h5>
+                    <span class="badge bg-light text-dark border">第 2 区</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">付款状态</label>
+                            <select class="form-select" id="paymentStatus">
+                                <option value="未付款">未付款</option>
+                                <option value="已付款">已付款</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">运费</label>
+                            <input type="number" class="form-control" id="freight" min="0" step="0.01" value="0" oninput="recalcPurchaseSummary()">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">状态说明</label>
+                            <div class="form-control bg-light" id="purchaseStatusHint">采购中：保存后计入在途采购。</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="purchase-items">
+                <div class="editor-section-header">
+                    <div>
+                        <h5><i class="bi bi-boxes"></i> 采购物料</h5>
+                        <div class="small text-muted mt-1">原材料可通过小型选择器带入规格和单位，其他物料可直接填写。</div>
+                    </div>
+                    <span class="badge rounded-pill text-bg-light border" id="purchaseVisibleItemCount">共 0 项</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="light-data-grid">
+                        <div class="light-data-grid-scroll">
+                            <table class="table light-data-grid-table align-middle" style="min-width:1160px;">
+                                <thead>
+                                    <tr>
+                                        <th style="width:120px;">物料类型 <span class="text-danger">*</span></th>
+                                        <th style="min-width:260px;">物料名称 <span class="text-danger">*</span></th>
+                                        <th style="min-width:150px;">规格型号</th>
+                                        <th style="width:80px;">单位</th>
+                                        <th class="light-grid-number" style="width:130px;">采购数量 <span class="text-danger">*</span></th>
+                                        <th class="light-grid-number" style="width:120px;">单价</th>
+                                        <th class="light-grid-number" style="width:130px;">金额</th>
+                                        <th style="width:64px;"><span class="visually-hidden">操作</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="purchaseItems"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="light-data-grid-add" onclick="addPurchaseItem()">
+                            <i class="bi bi-plus-circle"></i> 添加物料行
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="purchase-notes">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-chat-left-text"></i> 备注与支付水单</h5>
+                    <span class="badge bg-light text-dark border">最后一步</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label class="form-label">采购备注</label>
+                            <textarea class="form-control" id="purchaseRemark" rows="3" placeholder="交期、质量问题、对账说明等"></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">支付水单</label>
+                            <input type="file" class="form-control" id="purchaseReceiptFile" accept="image/*" multiple onchange="uploadPurchaseReceiptFiles(this)">
+                            <div class="form-text">支持多张图片，保存采购单时一并提交。</div>
+                            <div id="purchaseReceiptPreviews" class="d-flex flex-wrap gap-2 mt-3"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </form>
+    </main>
+</div>
+
+<div class="editor-summary">
+    <div class="editor-summary-inner">
+        <div class="editor-summary-metrics">
+            <div class="editor-summary-metric"><span>物料种类</span><strong id="purchaseSummaryItemCount">0</strong></div>
+            <div class="editor-summary-metric"><span>采购数量</span><strong id="purchaseSummaryQuantity">0</strong></div>
+            <div class="editor-summary-metric"><span>物料金额</span><strong class="text-primary" id="purchaseSummaryAmount">¥0.00</strong></div>
+            <div class="editor-summary-metric"><span>含运费合计</span><strong class="text-success" id="purchaseSummaryTotal">¥0.00</strong></div>
+        </div>
+        <div class="editor-summary-actions">
+            <a href="/purchase-materials" class="btn btn-outline-secondary">取消</a>
+            <button type="submit" form="purchaseEditorForm" class="btn btn-primary px-4" id="savePurchaseButton">
+                <i class="bi bi-check2-circle"></i> 提交采购单
+            </button>
+        </div>
+    </div>
+</div>
+
+<datalist id="purchaseMaterialAutocompleteOptions"></datalist>
+
+<div class="modal fade" id="purchaseReceiptViewModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title">支付水单</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body text-center">
+                <img id="purchaseReceiptViewImage" class="img-fluid" src="" alt="支付水单">
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+var purchaseRawMaterials = [];
+var purchaseReceiptURLs = [];
+var purchaseMaterialAutocomplete = null;
+var purchaseIsEdit = false;
+
+function purchaseEscape(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function purchaseDateOnly(value) {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+}
+
+function purchaseToday() {
+    var now = new Date();
+    return now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+}
+
+function materialDisplay(material) {
+    var parts = [];
+    if (material.spec) parts.push('规格：' + material.spec);
+    if (material.unit) parts.push('单位：' + material.unit);
+    parts.push('库存：' + Number(material.stock || 0));
+    return (material.name || '') + '（' + parts.join('，') + '）';
+}
+
+function applyPurchaseMaterial(material, input) {
+    var row = $(input).closest('tr');
+    if (!material || !row.length) return;
+    row.find('.item-material-type').val('原材料');
+    row.find('.item-raw-material-id').val(material.id);
+    row.find('.item-spec').val(material.spec || '');
+    row.find('.item-unit').val(material.unit || '个');
+    if (!parseFloat(row.find('.item-price').val())) {
+        row.find('.item-price').val(Number(material.avg_cost || 0).toFixed(2));
+    }
+    recalcPurchaseItem(row.find('.item-quantity')[0]);
+}
+
+function initPurchaseMaterialAutocomplete() {
+    if (purchaseMaterialAutocomplete) return;
+    purchaseMaterialAutocomplete = AutoComplete.create({
+        name: 'purchase_editor_material',
+        inputSelector: '.item-material-name',
+        hiddenSelector: '.item-raw-material-id',
+        datalistSelector: '#purchaseMaterialAutocompleteOptions',
+        getId: function (material) { return material.id; },
+        getDisplay: materialDisplay,
+        getAliases: function (material) {
+            return [material.name, material.spec, material.unit, materialDisplay(material)];
+        },
+        sortItems: function (a, b) {
+            return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN');
+        },
+        allowUnknown: true,
+        onSelect: applyPurchaseMaterial,
+        onClear: function (_, input) { clearPurchaseMaterial(input); }
+    });
+}
+
+function loadPurchaseRawMaterials() {
+    $.ajax({
+        url: '/api/purchase-materials/raw-material-options',
+        method: 'GET',
+        success: function (data) {
+            purchaseRawMaterials = Array.isArray(data) ? data : [];
+            initPurchaseMaterialAutocomplete();
+            purchaseMaterialAutocomplete.setItems(purchaseRawMaterials);
+        },
+        error: function (xhr) {
+            EntityEditor.notify('加载原材料失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+function purchaseItemRowHtml(item) {
+    item = item || {};
+    var itemID = parseInt(item.id || 0, 10) || 0;
+    var rawID = parseInt(item.raw_material_id || 0, 10) || 0;
+    var type = item.material_type || '原材料';
+    var types = ['原材料','固定资产','办公用品','设备'].map(function (value) {
+        return '<option value="' + value + '"' + (value === type ? ' selected' : '') + '>' + value + '</option>';
+    }).join('');
+    return '<tr class="purchase-item-row" data-item-id="' + itemID + '">' +
+        '<td><select class="form-select form-select-sm item-material-type" onchange="togglePurchaseMaterialType(this)">' + types + '</select></td>' +
+        '<td class="light-grid-name-wrap"><input type="hidden" class="item-raw-material-id" value="' + rawID + '">' +
+        '<input type="text" class="form-control form-control-sm item-material-name" value="' + purchaseEscape(item.material_name || '') + '" placeholder="输入原材料名称、规格或单位" autocomplete="off" spellcheck="false" list="purchaseMaterialAutocompleteOptions" aria-autocomplete="list" aria-controls="purchaseMaterialAutocompleteOptions"></td>' +
+        '<td><input type="text" class="form-control form-control-sm item-spec" value="' + purchaseEscape(item.spec || '') + '"></td>' +
+        '<td><input type="text" class="form-control form-control-sm item-unit" value="' + purchaseEscape(item.unit || '个') + '"></td>' +
+        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm item-quantity" min="0.001" step="0.001" value="' + (item.quantity == null ? '' : item.quantity) + '" oninput="recalcPurchaseItem(this)"></td>' +
+        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm item-price" min="0" step="0.01" value="' + (item.price == null ? '' : item.price) + '" oninput="recalcPurchaseItem(this)"></td>' +
+        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm item-amount light-grid-amount" value="' + Number(item.amount || 0).toFixed(2) + '" readonly tabindex="-1"></td>' +
+        '<td class="text-end"><button type="button" class="light-grid-remove" onclick="removePurchaseItem(this)" title="删除此行" aria-label="删除此行"><i class="bi bi-trash"></i></button></td></tr>';
+}
+
+function addPurchaseItem(item) {
+    $('#purchaseItems').append(purchaseItemRowHtml(item || {}));
+    recalcPurchaseSummary();
+}
+
+function removePurchaseItem(button) {
+    if ($('#purchaseItems .purchase-item-row').length <= 1) {
+        EntityEditor.notify('采购单至少保留一种物料。', 'error');
+        return;
+    }
+    $(button).closest('tr').remove();
+    recalcPurchaseSummary();
+}
+
+function togglePurchaseMaterialType(select) {
+    var row = $(select).closest('tr');
+    if ($(select).val() !== '原材料') row.find('.item-raw-material-id').val(0);
+}
+
+function clearPurchaseMaterial(input) {
+    $(input).closest('tr').find('.item-raw-material-id').val(0);
+}
+
+function recalcPurchaseItem(input) {
+    var row = $(input).closest('tr');
+    var quantity = parseFloat(row.find('.item-quantity').val()) || 0;
+    var price = parseFloat(row.find('.item-price').val()) || 0;
+    row.find('.item-amount').val((quantity * price).toFixed(2));
+    recalcPurchaseSummary();
+}
+
+function recalcPurchaseSummary() {
+    var count = 0;
+    var quantity = 0;
+    var amount = 0;
+    $('#purchaseItems .purchase-item-row').each(function () {
+        var row = $(this);
+        if (($(row.find('.item-material-name')[0]).val() || '').trim()) count += 1;
+        quantity += parseFloat(row.find('.item-quantity').val()) || 0;
+        amount += parseFloat(row.find('.item-amount').val()) || 0;
+    });
+    var freight = parseFloat($('#freight').val()) || 0;
+    $('#purchaseSummaryItemCount').text(count);
+    $('#purchaseVisibleItemCount').text('共 ' + count + ' 项');
+    $('#purchaseSummaryQuantity').text(Number(quantity.toFixed(3)));
+    $('#purchaseSummaryAmount').text('¥' + amount.toFixed(2));
+    $('#purchaseSummaryTotal').text('¥' + (amount + freight).toFixed(2));
+}
+
+function collectPurchaseItems() {
+    var items = [];
+    var errors = [];
+    $('#purchaseItems .purchase-item-row').each(function (index) {
+        var row = $(this);
+        var name = ($(row.find('.item-material-name')[0]).val() || '').trim();
+        var quantity = parseFloat(row.find('.item-quantity').val()) || 0;
+        if (!name || quantity <= 0) {
+            errors.push('第 ' + (index + 1) + ' 行：请填写物料名称和大于 0 的采购数量');
+            return;
+        }
+        items.push({
+            id: parseInt(row.attr('data-item-id'), 10) || 0,
+            raw_material_id: parseInt(row.find('.item-raw-material-id').val(), 10) || 0,
+            material_type: row.find('.item-material-type').val() || '原材料',
+            material_name: name,
+            spec: ($(row.find('.item-spec')[0]).val() || '').trim(),
+            unit: ($(row.find('.item-unit')[0]).val() || '').trim() || '个',
+            quantity: quantity,
+            price: parseFloat(row.find('.item-price').val()) || 0
+        });
+    });
+    return { items: items, errors: errors };
+}
+
+function collectPurchaseEditorData() {
+    return {
+        id: purchaseIsEdit ? (parseInt($('#purchaseId').val(), 10) || 0) : 0,
+        supplier: ($('#supplier').val() || '').trim(),
+        freight: parseFloat($('#freight').val()) || 0,
+        purchase_date: $('#purchaseDate').val(),
+        expected_arrival_date: $('#expectedArrivalDate').val(),
+        actual_arrival_date: $('#actualArrivalDate').val(),
+        payment_status: $('#paymentStatus').val() || '未付款',
+        status: parseInt($('#purchaseStatus').val(), 10) || 0,
+        remark: ($('#purchaseRemark').val() || '').trim(),
+        payment_receipts: purchaseReceiptURLs.slice(),
+        items: []
+    };
+}
+
+function renderPurchaseReceipts() {
+    var host = $('#purchaseReceiptPreviews').empty();
+    purchaseReceiptURLs.forEach(function (url, index) {
+        host.append('<div class="position-relative d-inline-block">' +
+            '<img src="' + purchaseEscape(url) + '" style="height:90px;width:90px;object-fit:cover;cursor:pointer;" onclick="viewPurchaseReceipt(\'' + purchaseEscape(url) + '\')" alt="支付水单">' +
+            '<button type="button" class="btn-close position-absolute top-0 end-0 bg-white" onclick="removePurchaseReceipt(' + index + ')"></button></div>');
+    });
+}
+
+function removePurchaseReceipt(index) {
+    purchaseReceiptURLs.splice(index, 1);
+    renderPurchaseReceipts();
+}
+
+function uploadPurchaseReceiptFiles(input) {
+    if (!input.files || !input.files.length) return;
+    var form = new FormData();
+    for (var i = 0; i < input.files.length; i += 1) form.append('files', input.files[i]);
+    $.ajax({
+        url: '/api/purchase-materials/upload',
+        method: 'POST',
+        data: form,
+        processData: false,
+        contentType: false,
+        success: function (response) {
+            purchaseReceiptURLs = purchaseReceiptURLs.concat(response.urls || []);
+            renderPurchaseReceipts();
+            input.value = '';
+        },
+        error: function (xhr) {
+            input.value = '';
+            EntityEditor.notify('上传失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+function viewPurchaseReceipt(url) {
+    $('#purchaseReceiptViewImage').attr('src', url || '');
+    $('#purchaseReceiptViewModal').modal('show');
+}
+
+function savePurchaseEditor() {
+    var itemResult = collectPurchaseItems();
+    if (itemResult.errors.length) {
+        EntityEditor.notify(itemResult.errors.join('；'), 'error');
+        EntityEditor.focusField('#purchaseItems .purchase-item-row .item-material-name');
+        return false;
+    }
+    if (!itemResult.items.length) {
+        EntityEditor.notify('请至少添加一种采购物料。', 'error');
+        return false;
+    }
+    var data = collectPurchaseEditorData();
+    data.items = itemResult.items;
+    if (!data.purchase_date) data.purchase_date = purchaseToday();
+    return EntityEditor.save({
+        url: purchaseIsEdit ? '/api/purchase-materials/update' : '/api/purchase-materials/add',
+        data: data,
+        errorMessage: purchaseIsEdit ? '保存失败：' : '创建失败：',
+        success: function () { window.location.href = '/purchase-materials'; }
+    });
+}
+
+function loadPurchaseForEdit(id) {
+    $.ajax({
+        url: '/api/purchase-materials/get?id=' + id,
+        method: 'GET',
+        success: function (data) {
+            $('#purchaseId').val(data.id || id);
+            $('#purchaseNo').val(data.purchase_no || '');
+            $('#purchaseNoWrap').show();
+            $('#supplier').val(data.supplier || '');
+            $('#purchaseDate').val(purchaseDateOnly(data.purchase_date));
+            $('#expectedArrivalDate').val(purchaseDateOnly(data.expected_arrival_date));
+            $('#actualArrivalDate').val(purchaseDateOnly(data.actual_arrival_date));
+            $('#paymentStatus').val(data.payment_status || '未付款');
+            $('#purchaseStatus').val(String(data.status == null ? 0 : data.status));
+            $('#freight').val(data.freight || 0);
+            $('#purchaseRemark').val(data.remark || '');
+            purchaseReceiptURLs = Array.isArray(data.payment_receipts) ? data.payment_receipts.slice() : [];
+            renderPurchaseReceipts();
+            var items = Array.isArray(data.items) ? data.items : [];
+            $('#purchaseItems').empty();
+            if (!items.length) addPurchaseItem();
+            items.forEach(function (item) { addPurchaseItem(item); });
+            $('#purchaseEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑采购单 ' + purchaseEscape(data.purchase_no || ''));
+            $('#savePurchaseButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
+            recalcPurchaseSummary();
+            EntityEditor.markClean();
+        },
+        error: function (xhr) {
+            EntityEditor.notify('加载采购单失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+$(document).ready(function () {
+    loadPurchaseRawMaterials();
+    $('#freight, #purchaseStatus').on('input change', recalcPurchaseSummary);
+    $('#purchaseStatus').on('change', function () {
+        $('#purchaseStatusHint').text($(this).val() === '1' ? '已到货：保存时会按实际到货处理。' : '采购中：保存后计入在途采购。');
+    });
+    EntityEditor.bindForm('#purchaseEditorForm', savePurchaseEditor, { button: '#savePurchaseButton' });
+
+    purchaseIsEdit = EntityEditor.entityID('id') > 0;
+    if (purchaseIsEdit) {
+        loadPurchaseForEdit(EntityEditor.entityID('id'));
+    } else {
+        $('#purchaseDate').val(purchaseToday());
+        addPurchaseItem();
+        recalcPurchaseSummary();
+        EntityEditor.markClean();
+    }
+});
+</script>
+{{end}}

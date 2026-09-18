@@ -1,5 +1,10 @@
 {{define "content"}}
-<div class="row">
+<ul class="nav nav-tabs entity-tabs">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#productsPane" data-tab-key="products" type="button"><i class="bi bi-box"></i> 产品库存</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#outboundPane" data-tab-key="outbound" type="button"><i class="bi bi-box-arrow-right"></i> 成品出库记录</button></li>
+</ul>
+<div class="tab-content">
+<div class="row tab-pane fade show active" id="productsPane">
     <div class="col-md-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
@@ -12,9 +17,9 @@
                     <button class="btn btn-warning btn-sm me-2" data-bs-toggle="modal" data-bs-target="#outboundModal">
                         <i class="bi bi-box-arrow-right"></i> 成品出库
                     </button>
-                    <button class="btn btn-primary btn-sm" data-bs-toggle="modal" data-bs-target="#addProductModal">
+                    <a class="btn btn-primary btn-sm" href="/products/form">
                         <i class="bi bi-plus-circle"></i> 添加产品
-                    </button>
+                    </a>
                 </div>
                 {{end}}
             </div>
@@ -52,7 +57,7 @@
 </div>
 
 <!-- 成品出库记录 -->
-<div class="row mt-3">
+<div class="row mt-3 tab-pane fade" id="outboundPane">
     <div class="col-md-12">
         <div class="card">
             <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
@@ -83,6 +88,7 @@
     </div>
 </div>
 
+</div>
 <!-- 成品出库模态框 -->
 <div class="modal fade" id="outboundModal" tabindex="-1" data-bs-backdrop="static">
     <div class="modal-dialog modal-xl">
@@ -132,150 +138,6 @@
         </div>
     </div>
 </div>
-<!-- 添加产品模态框（含 BOM） -->
-<div class="modal fade" id="addProductModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">添加产品</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="addProductForm">
-                    <div class="mb-3">
-                        <label class="form-label">名称 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="addProductName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">规格型号</label>
-                        <input type="text" class="form-control" id="addProductSpec">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">单位</label>
-                        <input type="text" class="form-control" id="addProductUnit" value="个">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">包装</label>
-                        <select class="form-control" id="addProductPackaging">
-                        <option value="">未设置</option>
-                        <option value="真空袋">真空袋</option>
-                        <option value="彩盒">彩盒</option>
-                        <option value="OPP袋">OPP袋</option>
-                        <option value="定制彩盒">定制彩盒</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">库存</label>
-                        <input type="number" class="form-control" id="addProductStock" value="0" step="any">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">单价</label>
-                        <input type="number" class="form-control" id="addProductPrice" value="0" min="0" step="0.01">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">BOM清单（原材料组成）</label>
-                        <div id="addBomItems">
-                            <div class="row mb-2 bom-row">
-                                <div class="col-md-6">
-                                    <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
-                                    <input type="hidden" class="raw-material-id">
-                                </div>
-                                <div class="col-md-4">
-                                    <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="button" class="btn btn-danger btn-sm remove-bom-item">删除</button>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addBomRow('addBomItems')">
-                            <i class="bi bi-plus"></i> 添加原材料
-                        </button>
-                        <div id="addBomStatus" class="text-muted small mt-1"></div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="addProduct()">确认添加</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<!-- 编辑产品模态框（含 BOM） -->
-<div class="modal fade" id="editProductModal" tabindex="-1">
-    <div class="modal-dialog modal-lg">
-        <div class="modal-content">
-            <div class="modal-header">
-                <h5 class="modal-title">编辑产品</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body">
-                <form id="editProductForm">
-                    <input type="hidden" id="editProductId">
-                    <div class="mb-3">
-                        <label class="form-label">名称 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control" id="editProductName" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">规格型号</label>
-                        <input type="text" class="form-control" id="editProductSpec">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">单位</label>
-                        <input type="text" class="form-control" id="editProductUnit">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">包装</label>
-                        <select class="form-control" id="editProductPackaging">
-                        <option value="">未设置</option>
-                        <option value="真空袋">真空袋</option>
-                        <option value="彩盒">彩盒</option>
-                        <option value="OPP袋">OPP袋</option>
-                        <option value="定制彩盒">定制彩盒</option>
-                        </select>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">库存</label>
-                        <input type="number" class="form-control" id="editProductStock" step="any">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">单价</label>
-                        <input type="number" class="form-control" id="editProductPrice" min="0" step="0.01">
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">BOM清单（原材料组成）</label>
-                        <div id="editBomItems">
-                            <div class="row mb-2 bom-row">
-                                <div class="col-md-6">
-                                    <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
-                                    <input type="hidden" class="raw-material-id">
-                                </div>
-                                <div class="col-md-4">
-                                    <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
-                                </div>
-                                <div class="col-md-2">
-                                    <button type="button" class="btn btn-danger btn-sm remove-bom-item">删除</button>
-                                </div>
-                            </div>
-                        </div>
-                        <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addBomRow('editBomItems')">
-                            <i class="bi bi-plus"></i> 添加原材料
-                        </button>
-                        <div id="editBomStatus" class="text-muted small mt-1"></div>
-                    </div>
-                </form>
-            </div>
-            <div class="modal-footer">
-                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
-                <button type="button" class="btn btn-primary" onclick="updateProduct()">保存修改</button>
-            </div>
-        </div>
-    </div>
-</div>
-
-<datalist id="bomRawMaterialOptions"></datalist>
 <datalist id="outboundProductOptions"></datalist>
 
 <!-- 生产入库模态框 -->
@@ -314,163 +176,6 @@
 <script>
 var productionProductAutocomplete = null;
 var outboundProductAutocomplete = null;
-// ============================
-// 原材料自动补全
-// ============================
-var bomRawMaterialOptions = [];
-var bomRawMaterialById = new Map();
-var bomRawMaterialByDisplay = new Map();
-
-function bomRawMaterialDisplay(material) {
-    var details = [];
-    if (material.spec) details.push('规格：' + material.spec);
-    if (material.unit) details.push('单位：' + material.unit);
-    details.push('库存：' + material.stock);
-    return (material.name || '') + (details.length ? '（' + details.join('，') + '）' : '');
-}
-
-function rebuildBOMRawMaterialIndex(materials) {
-    bomRawMaterialOptions = Array.isArray(materials) ? materials : [];
-    bomRawMaterialById = new Map();
-    bomRawMaterialByDisplay = new Map();
-
-    bomRawMaterialOptions.forEach(function(material) {
-        bomRawMaterialById.set(String(material.id), material);
-        bomRawMaterialByDisplay.set(bomRawMaterialDisplay(material), material);
-    });
-
-    var datalist = $('#bomRawMaterialOptions').empty();
-    bomRawMaterialOptions
-        .slice()
-        .sort(function(a, b) {
-            return (a.name || '').localeCompare(b.name || '', 'zh-CN');
-        })
-        .forEach(function(material) {
-            datalist.append($('<option>').val(bomRawMaterialDisplay(material)));
-        });
-}
-
-function setBOMRowMaterial(row, material) {
-    var input = row.find('.raw-material-input');
-    var hidden = row.find('.raw-material-id');
-    if (!material) {
-        input.val('').removeClass('is-invalid');
-        hidden.val('');
-        return;
-    }
-    input.val(bomRawMaterialDisplay(material)).removeClass('is-invalid');
-    hidden.val(material.id);
-}
-
-function loadRawMaterialsForBOM() {
-    return new Promise((resolve, reject) => {
-        $.ajax({
-            url: '/api/raw-materials',
-            method: 'GET',
-            success: function(data) {
-                rebuildBOMRawMaterialIndex(data);
-                $('.bom-row').each(function() {
-                    var row = $(this);
-                    var materialId = (row.find('.raw-material-id').val() || '').trim();
-                    if (!materialId) return;
-                    setBOMRowMaterial(row, bomRawMaterialById.get(materialId));
-                });
-                resolve(true);
-            },
-            error: function() {
-                alert('加载原材料列表失败');
-                reject(false);
-            }
-        });
-    });
-}
-
-function resolveBOMRawMaterialInput(row) {
-    var input = row.find('.raw-material-input');
-    var hidden = row.find('.raw-material-id');
-    var value = (input.val() || '').trim();
-
-    if (!value) {
-        hidden.val('');
-        input.removeClass('is-invalid');
-        return;
-    }
-
-    var material = bomRawMaterialByDisplay.get(value);
-    if (!material) {
-        var matches = bomRawMaterialOptions.filter(function(item) {
-            return (item.name || '').trim() === value;
-        });
-        if (matches.length === 1) material = matches[0];
-    }
-
-    if (material) {
-        setBOMRowMaterial(row, material);
-    } else {
-        hidden.val('');
-        input.addClass('is-invalid');
-    }
-}
-
-// ============================
-// BOM 行操作
-// ============================
-function addBomRow(containerId) {
-    var container = $('#' + containerId);
-    var newRow = container.find('.bom-row:first').clone();
-    newRow.find('.raw-material-input, .raw-material-id, .bom-quantity').val('').removeClass('is-invalid');
-    container.append(newRow);
-}
-
-$(document).on('input', '.raw-material-input', function() {
-    var row = $(this).closest('.bom-row');
-    row.find('.raw-material-id').val('');
-    $(this).removeClass('is-invalid');
-});
-
-$(document).on('change', '.raw-material-input', function() {
-    resolveBOMRawMaterialInput($(this).closest('.bom-row'));
-});
-
-$(document).on('click', '.remove-bom-item', function() {
-    var container = $(this).closest('.bom-row').parent();
-    if (container.find('.bom-row').length > 1) {
-        $(this).closest('.bom-row').remove();
-    } else {
-        alert('至少保留一行');
-    }
-});
-
-// ============================
-// 收集 BOM 数据
-// ============================
-function getBomData(containerId) {
-    var items = [];
-    var valid = true;
-    var container = $('#' + containerId);
-    container.find('.bom-row').each(function() {
-        var row = $(this);
-        resolveBOMRawMaterialInput(row);
-
-        var rawMaterialId = row.find('.raw-material-id').val();
-        var rawMaterialText = (row.find('.raw-material-input').val() || '').trim();
-        var quantity = parseFloat(row.find('.bom-quantity').val());
-
-        if (rawMaterialId && !isNaN(quantity) && quantity > 0) {
-            items.push({
-                raw_material_id: parseInt(rawMaterialId, 10),
-                quantity: quantity
-            });
-        } else if (rawMaterialId || rawMaterialText || !isNaN(quantity)) {
-            valid = false;
-        }
-    });
-    return { items: items, valid: valid };
-}
-
-// ============================
-// 加载产品列表（显示BOM标记）
-// ============================
 function loadProducts() {
     $.ajax({
         url: '/api/products',
@@ -487,16 +192,16 @@ function loadProducts() {
 
                 var actions = '';
                 if (window.PERMS && window.PERMS['product:manage']) {
-                    actions = `<button class="btn btn-warning btn-sm me-1" onclick="editProduct(${p.id})">编辑</button>
+                    actions = `<a class="btn btn-warning btn-sm me-1" href="/products/form?id=${p.id}">编辑</a>
                                <button class="btn btn-danger btn-sm" onclick="deleteProduct(${p.id})">删除</button>`;
                 }
                 var row = `
                     <tr>
                         <td>${index + 1}</td>
-                        <td><strong>${p.name}</strong></td>
-                        <td>${p.spec || '-'}</td>
-                        <td>${p.packaging ? p.packaging : '-'}</td>
-                        <td>${p.unit || '-'}</td>
+                        <td><strong>${escapeOut(p.name)}</strong></td>
+                        <td>${escapeOut(p.spec || '-')}</td>
+                        <td>${escapeOut(p.packaging || '-')}</td>
+                        <td>${escapeOut(p.unit || '-')}</td>
                         <td>${Number(p.stock || 0).toFixed(0)}</td>
                         <td>${Number(p.reserved_stock || 0).toFixed(0)}</td>
                         <td><span class="badge bg-${statusClass}">${available.toFixed(0)}</span></td>
@@ -530,15 +235,6 @@ function applySearch() {
 $(document).ready(function() {
     loadProducts();
     $('#searchProduct').on('keyup', applySearch);
-
-    // 当添加/编辑模态框打开时，加载原材料自动补全数据
-    $('#addProductModal').on('show.bs.modal', function() {
-        loadRawMaterialsForBOM();
-    });
-    $('#editProductModal').on('show.bs.modal', function() {
-        loadRawMaterialsForBOM();
-    });
-
     // 生产入库模态框打开时加载产品下拉框
     $('#productionModal').on('show.bs.modal', function() {
         loadProductionProducts();
@@ -554,164 +250,6 @@ $(document).ready(function() {
         }
     }
 });
-
-// ============================
-// 添加产品
-// ============================
-function addProduct() {
-    var name = $('#addProductName').val().trim();
-    if (!name) {
-        alert('请输入产品名称');
-        return;
-    }
-
-    var data = {
-        name: name,
-        spec: $('#addProductSpec').val().trim(),
-        unit: $('#addProductUnit').val().trim(),
-        packaging: $('#addProductPackaging').val(),
-        stock: parseFloat($('#addProductStock').val()) || 0,
-        price: parseFloat($('#addProductPrice').val()) || 0,
-        bom: []
-    };
-
-    var bomResult = getBomData('addBomItems');
-    if (!bomResult.valid) {
-        alert('BOM数据不完整，请检查原材料和用量');
-        return;
-    }
-    data.bom = bomResult.items;
-
-    $.ajax({
-        url: '/api/products/add',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        success: function(response) {
-            alert('添加成功');
-            $('#addProductModal').modal('hide');
-            $('#addProductForm')[0].reset();
-            var container = $('#addBomItems');
-            container.find('.bom-row:not(:first)').remove();
-            container.find('.bom-row:first .raw-material-input, .bom-row:first .raw-material-id, .bom-row:first .bom-quantity').val('').removeClass('is-invalid');
-            loadProducts();
-        },
-        error: function(xhr) {
-            alert('添加失败: ' + xhr.responseText);
-        }
-    });
-}
-
-// ============================
-// 编辑产品（加载数据并填充）
-// ============================
-function editProduct(id) {
-    $.ajax({
-        url: `/api/products/get?id=${id}`,
-        method: 'GET',
-        success: function(data) {
-            $('#editProductId').val(data.id);
-            $('#editProductName').val(data.name);
-            $('#editProductSpec').val(data.spec || '');
-            $('#editProductUnit').val(data.unit || '');
-            $('#editProductPackaging').val(data.packaging || '');
-            $('#editProductStock').val(data.stock);
-            $('#editProductPrice').val(data.price);
-
-            var container = $('#editBomItems');
-            container.empty();
-            var bom = data.bom || [];
-            if (bom.length === 0) {
-                container.append(`
-                    <div class="row mb-2 bom-row">
-                        <div class="col-md-6">
-                            <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
-                                    <input type="hidden" class="raw-material-id">
-                        </div>
-                        <div class="col-md-4">
-                            <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
-                        </div>
-                        <div class="col-md-2">
-                            <button type="button" class="btn btn-danger btn-sm remove-bom-item">删除</button>
-                        </div>
-                    </div>
-                `);
-            } else {
-                bom.forEach(function(item) {
-                    var row = `
-                        <div class="row mb-2 bom-row">
-                            <div class="col-md-6">
-                                <input type="text" class="form-control raw-material-input" list="bomRawMaterialOptions" placeholder="输入原材料名称或规格，从建议中选择" autocomplete="off" required>
-                                    <input type="hidden" class="raw-material-id">
-                            </div>
-                            <div class="col-md-4">
-                                <input type="number" class="form-control bom-quantity" placeholder="用量" step="0.001" min="0.001" required>
-                            </div>
-                            <div class="col-md-2">
-                                <button type="button" class="btn btn-danger btn-sm remove-bom-item">删除</button>
-                            </div>
-                        </div>
-                    `;
-                    container.append(row);
-                    var rowElement = container.children().last();
-                    rowElement.find('.raw-material-id').val(item.raw_material_id);
-                    rowElement.find('.bom-quantity').val(item.quantity);
-                });
-            }
-
-
-            $('#editProductModal').modal('show');
-        },
-        error: function(xhr) {
-            alert('加载产品数据失败: ' + xhr.responseText);
-        }
-    });
-}
-
-// ============================
-// 更新产品
-// ============================
-function updateProduct() {
-    var id = parseInt($('#editProductId').val());
-    var name = $('#editProductName').val().trim();
-    if (!name) {
-        alert('请输入产品名称');
-        return;
-    }
-
-    var data = {
-        id: id,
-        name: name,
-        spec: $('#editProductSpec').val().trim(),
-        unit: $('#editProductUnit').val().trim(),
-        packaging: $('#editProductPackaging').val(),
-        stock: parseFloat($('#editProductStock').val()) || 0,
-        price: parseFloat($('#editProductPrice').val()) || 0,
-        bom: []
-    };
-
-    var bomResult = getBomData('editBomItems');
-    if (!bomResult.valid) {
-        alert('BOM数据不完整，请检查原材料和用量');
-        return;
-    }
-    data.bom = bomResult.items;
-
-    $.ajax({
-        url: '/api/products/update',
-        method: 'POST',
-        contentType: 'application/json',
-        data: JSON.stringify(data),
-        success: function(response) {
-            alert('更新成功');
-            $('#editProductModal').modal('hide');
-            loadProducts();
-        },
-        error: function(xhr) {
-            alert('更新失败: ' + xhr.responseText);
-        }
-    });
-}
 
 // ============================
 // 删除产品

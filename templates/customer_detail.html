@@ -17,8 +17,14 @@
     <div class="text-center py-5 text-muted">加载中...</div>
 </div>
 
+<ul class="nav nav-tabs entity-tabs mt-3">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#ordersCard" data-tab-key="orders" type="button"><i class="bi bi-receipt"></i> 关联订单</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#contactsCard" data-tab-key="contacts" type="button"><i class="bi bi-people"></i> 联系人</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#attachmentsCard" data-tab-key="attachments" type="button"><i class="bi bi-paperclip"></i> 附件</button></li>
+</ul>
+<div class="tab-content">
 <!-- 关联订单 -->
-<div class="card mt-3" id="ordersCard" style="display:none;">
+<div class="card tab-pane fade show active" id="ordersCard">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
         <h5 class="mb-0"><i class="bi bi-receipt"></i> 关联订单</h5>
     </div>
@@ -42,7 +48,7 @@
     </div>
 </div>
 <!-- 联系人列表 -->
-<div class="card mt-3" id="contactsCard" style="display:none;">
+<div class="card tab-pane fade" id="contactsCard">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
         <h5 class="mb-0"><i class="bi bi-people"></i> 联系人</h5>
         {{if .Can "customer:manage"}}
@@ -75,7 +81,7 @@
 </div>
 
 <!-- 附件列表 -->
-<div class="card mt-3" id="attachmentsCard" style="display:none;">
+<div class="card tab-pane fade" id="attachmentsCard">
     <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
         <h5 class="mb-0"><i class="bi bi-paperclip"></i> 附件</h5>
         {{if .Can "customer:manage"}}
@@ -104,6 +110,7 @@
     </div>
 </div>
 
+</div>
 <!-- 上传附件 -->
 <div class="modal fade" id="attachmentModal" tabindex="-1">
     <div class="modal-dialog">
@@ -239,10 +246,10 @@ function loadCustomer() {
         method: 'GET',
         success: function(c) {
             renderDetail(c);
-            $('#btnEditCustomer').attr('href', '/customers?edit=' + c.id);
-            $('#contactsCard').show();
+            $('#btnEditCustomer').attr('href', '/customers/form?id=' + c.id);
+
             loadContacts();
-            $('#attachmentsCard').show();
+
             loadAttachments();
             tryLoadCustomerOrders();
         },
@@ -571,7 +578,7 @@ function orderMoneyLocal(o, v) {
 function tryLoadCustomerOrders() {
     var perms = window.PERMS || {};
     if (!perms['order:view_own'] && !perms['order:view_all']) return;
-    $('#ordersCard').show();
+
     loadCustomerOrders();
 }
 

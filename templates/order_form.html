@@ -1,0 +1,1054 @@
+{{define "content"}}
+<style>
+    .order-product-autocomplete {
+        position: fixed;
+        z-index: 1085;
+        width: min(460px, calc(100vw - 16px));
+        max-height: min(320px, calc(100vh - 24px));
+        overflow-y: auto;
+        padding: .25rem;
+        border: 1px solid #ced4da;
+        border-radius: .5rem;
+        background: #fff;
+        box-shadow: 0 12px 28px rgba(20, 30, 55, .18);
+    }
+    .order-product-option {
+        display: block;
+        width: 100%;
+        padding: .55rem .65rem;
+        border: 0;
+        border-radius: .35rem;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+    }
+    .order-product-option + .order-product-option {
+        margin-top: .15rem;
+    }
+    .order-product-option:hover,
+    .order-product-option.active {
+        background: #eef5ff;
+    }
+    .order-product-option-title {
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: .75rem;
+    }
+    .order-product-option-name {
+        font-weight: 600;
+    }
+    .order-product-option-price {
+        flex: 0 0 auto;
+        color: #0d6efd;
+        font-size: .85rem;
+        font-weight: 600;
+    }
+    .order-product-option-meta,
+    .order-product-autocomplete-empty {
+        margin-top: .12rem;
+        color: #6c757d;
+        font-size: .76rem;
+    }
+    .order-product-autocomplete-empty {
+        padding: .7rem .65rem;
+        text-align: center;
+    }
+    .order-items-panel {
+        overflow: hidden;
+        border: 1px solid #e7ecf1;
+        border-radius: .75rem;
+        background: #fff;
+    }
+    .order-items-grid-scroll {
+        overflow-x: auto;
+        overscroll-behavior-x: contain;
+    }
+    .order-items-grid {
+        min-width: 820px;
+        margin: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .order-items-grid thead th {
+        padding: .62rem .75rem;
+        border: 0;
+        border-bottom: 1px solid #e8edf2;
+        background: #fafbfd;
+        color: #78838f;
+        font-size: .74rem;
+        font-weight: 600;
+        letter-spacing: .01em;
+        white-space: nowrap;
+    }
+    .order-items-grid tbody td {
+        padding: .7rem .75rem;
+        border: 0;
+        border-bottom: 1px solid #f0f2f5;
+        background: transparent;
+        vertical-align: middle;
+    }
+    .order-items-grid tbody tr {
+        transition: background-color .14s ease;
+    }
+    .order-items-grid tbody tr:hover td,
+    .order-items-grid tbody tr:focus-within td {
+        background: #fafcff;
+    }
+    .order-items-grid tbody tr:last-child td {
+        border-bottom: 0;
+    }
+    .order-items-grid .order-grid-number {
+        text-align: right;
+    }
+    .order-items-grid .order-grid-number .form-control {
+        text-align: right;
+    }
+    .order-item-name-wrap {
+        min-width: 240px;
+    }
+    .order-items-grid .item-product-name {
+        border-color: #dfe5eb;
+        background: #fff;
+    }
+    .order-items-grid .item-product-name:focus {
+        border-color: #86b7fe;
+        box-shadow: 0 0 0 .2rem rgba(13, 110, 253, .12);
+    }
+    .order-items-grid .item-product-name.is-invalid {
+        border-color: #dc3545;
+    }
+    .order-items-grid .item-product-name:disabled,
+    .order-items-grid .item-quantity:disabled,
+    .order-items-grid .item-price:disabled {
+        border-color: #edf0f3;
+        background: #f8fafc;
+        color: #6b7280;
+    }
+    .order-item-hint {
+        min-height: 1rem;
+        margin-top: .28rem;
+        color: #87919d;
+        font-size: .73rem;
+        line-height: 1.25;
+    }
+    .order-grid-value {
+        display: block;
+        min-height: 1.5rem;
+        color: #4b5563;
+        line-height: 1.5;
+    }
+    .order-grid-value.is-empty {
+        color: #b3bac3;
+    }
+    .order-items-grid .item-quantity,
+    .order-items-grid .item-price {
+        width: 100%;
+        max-width: 112px;
+        margin-left: auto;
+        border-color: #dfe5eb;
+    }
+    .order-item-amount {
+        display: block;
+        min-height: 1.5rem;
+        color: #111827;
+        font-weight: 600;
+        line-height: 1.5;
+        font-variant-numeric: tabular-nums;
+    }
+    .order-item-remove {
+        width: 2rem;
+        height: 2rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0;
+        border: 0;
+        border-radius: .45rem;
+        color: #9aa4af;
+        opacity: .45;
+        transition: color .14s ease, background-color .14s ease, opacity .14s ease;
+    }
+    .order-item-row:hover .order-item-remove,
+    .order-item-row:focus-within .order-item-remove,
+    .order-item-remove:focus-visible {
+        color: #dc3545;
+        background: #fff1f3;
+        opacity: 1;
+    }
+    .order-item-remove:disabled {
+        color: #b9c0c8;
+        opacity: .3;
+    }
+    .order-add-item {
+        width: 100%;
+        padding: .78rem 1rem;
+        border: 0;
+        border-top: 1px dashed #cfd8e3;
+        background: #fff;
+        color: #0d6efd;
+        font-size: .875rem;
+        font-weight: 600;
+        text-align: left;
+        transition: background-color .14s ease, color .14s ease;
+    }
+    .order-add-item:hover {
+        background: #f7faff;
+        color: #0a58ca;
+    }
+    .order-add-item:disabled {
+        background: #fafbfc;
+        color: #aab2bc;
+        cursor: not-allowed;
+    }
+    .order-add-item i {
+        margin-right: .35rem;
+    }
+    @media (max-width: 767.98px) {
+        .order-items-grid thead th,
+        .order-items-grid tbody td {
+            padding-right: .6rem;
+            padding-left: .6rem;
+        }
+    }
+</style>
+<div class="editor-page-header">
+    <div>
+        <a href="/orders" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> 返回订单列表</a>
+        <h4 class="mb-1" id="orderEditorTitle"><i class="bi bi-cart-plus"></i> 创建订单</h4>
+        <div class="text-muted small">按客户、物流、产品明细和备注顺序填写，底部汇总栏会实时计算。</div>
+    </div>
+</div>
+
+<div id="editorNotice"></div>
+
+<div class="editor-layout">
+    <aside class="editor-nav">
+        <div class="small text-muted px-2 pt-1 pb-2">订单分区</div>
+        <nav class="nav flex-column">
+            <a class="nav-link active" href="#order-customer" data-editor-section="#order-customer"><i class="bi bi-person"></i> 客户与日期</a>
+            <a class="nav-link" href="#order-logistics" data-editor-section="#order-logistics"><i class="bi bi-truck"></i> 物流与结算</a>
+            <a class="nav-link" href="#order-products" data-editor-section="#order-products"><i class="bi bi-box-seam"></i> 产品明细</a>
+            <a class="nav-link" href="#order-notes" data-editor-section="#order-notes"><i class="bi bi-chat-left-text"></i> 备注与唛头</a>
+        </nav>
+    </aside>
+
+    <main>
+        <form id="orderEditorForm" novalidate>
+            <input type="hidden" id="orderId" value="0">
+
+            <section class="editor-section" id="order-customer">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-person"></i> 客户与日期</h5>
+                    <span class="badge bg-light text-dark border">第 1 区</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label class="form-label">选择已有客户</label>
+                            <input type="text" class="form-control customer-search-input" id="customerSearchInput" list="customerAutocompleteOptions" placeholder="输入客户名称、编号或电话，也可直接手工填写下方客户名称" autocomplete="off">
+                            <input type="hidden" id="customerId">
+                            <datalist id="customerAutocompleteOptions"></datalist>
+                            <div class="form-text">从客户档案选择后会自动带入电话、地址和地区。</div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">客户名称 <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="customerName" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">电话号码</label>
+                            <input type="text" class="form-control" id="customerPhone">
+                        </div>
+                        <div class="col-md-8 mb-3">
+                            <label class="form-label">收货地址</label>
+                            <input type="text" class="form-control" id="customerAddress">
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label">地区</label>
+                            <input type="text" class="form-control" id="region">
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">下单日期</label>
+                            <input type="date" class="form-control" id="orderDate">
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">预计发货日期</label>
+                            <input type="date" class="form-control" id="expectedShippingDate">
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">客户需求到货日</label>
+                            <input type="date" class="form-control" id="customerRequiredDate">
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">物流天数（天）</label>
+                            <input type="number" class="form-control" id="logisticsDays" min="0" step="1" value="0">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">制单</label>
+                            <input type="text" class="form-control" id="preparedBy" placeholder="默认当前登录人">
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">负责人（业务员）</label>
+                            <select class="form-select" id="orderOwner"><option value="0">未分配</option></select>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="order-logistics">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-truck"></i> 物流与结算</h5>
+                    <span class="badge bg-light text-dark border">第 2 区</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">回款状态</label>
+                            <select class="form-select" id="paymentStatus">
+                                <option value="0">未回款</option>
+                                <option value="1">已回款</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">币种</label>
+                            <select class="form-select" id="currency"><option value="CNY">CNY</option></select>
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">贸易术语</label>
+                            <select class="form-select" id="tradeTerms"><option value="">无</option></select>
+                        </div>
+                        <div class="col-md-6 col-xl-3 mb-3">
+                            <label class="form-label">运费回收</label>
+                            <select class="form-select" id="freightRecovery">
+                                <option value="可回收">可回收</option>
+                                <option value="不可回收">不可回收</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">货款结算</label>
+                            <div class="input-group">
+                                <select class="form-select flex-shrink-0" style="max-width:130px;" id="paymentSettlement">
+                                    <option value="现付">现付</option>
+                                    <option value="自定义">自定义</option>
+                                </select>
+                                <input type="text" class="form-control" id="paymentSettlementCustom" placeholder="如：月结30天" disabled>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">运费支付</label>
+                            <div class="input-group">
+                                <select class="form-select flex-shrink-0" style="max-width:130px;" id="freightPayment">
+                                    <option value="现付">现付</option>
+                                    <option value="自定义">自定义</option>
+                                </select>
+                                <input type="text" class="form-control" id="freightPaymentCustom" placeholder="请输入运费支付方式" disabled>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">运输方式</label>
+                            <div class="input-group">
+                                <select class="form-select flex-shrink-0" style="max-width:130px;" id="transportMethod">
+                                    <option value="物流">物流</option>
+                                    <option value="快递">快递</option>
+                                    <option value="自定义">自定义</option>
+                                </select>
+                                <input type="text" class="form-control" id="transportMethodCustom" placeholder="请输入运输方式" disabled>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="order-products">
+                <div class="editor-section-header">
+                    <div>
+                        <h5><i class="bi bi-box-seam"></i> 产品明细</h5>
+                        <div class="small text-muted mt-1" id="orderItemsModeHint">在“请选择产品”输入框中输入名称、规格或包装，选中后自动带出单价；数量可直接修改。</div>
+                    </div>
+                    <span class="badge rounded-pill text-bg-light border" id="orderItemsVisibleCount">共 0 项</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="order-items-panel">
+                        <div class="order-items-grid-scroll">
+                            <table class="table order-items-grid align-middle">
+                                <thead>
+                                    <tr>
+                                        <th>产品名称 <span class="text-danger">*</span></th>
+                                        <th>规格型号</th>
+                                        <th>单位</th>
+                                        <th class="order-grid-number">销售数量 <span class="text-danger">*</span></th>
+                                        <th class="order-grid-number">单价</th>
+                                        <th class="order-grid-number">金额</th>
+                                        <th><span class="visually-hidden">操作</span></th>
+                                    </tr>
+                                </thead>
+                                <tbody id="orderItems"></tbody>
+                            </table>
+                        </div>
+                        <button type="button" class="order-add-item" id="addBlankOrderItem" onclick="addOrderItemAndFocus()">
+                            <i class="bi bi-plus-circle"></i> 添加产品
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <section class="editor-section" id="order-notes">
+                <div class="editor-section-header">
+                    <h5><i class="bi bi-chat-left-text"></i> 备注与唛头</h5>
+                    <span class="badge bg-light text-dark border">最后一步</span>
+                </div>
+                <div class="editor-section-body">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <label class="form-label">订单备注</label>
+                            <textarea class="form-control" id="orderRemark" rows="3" placeholder="交付、包装或沟通注意事项"></textarea>
+                        </div>
+                        <div class="col-12 mb-3">
+                            <label class="form-label">唛头</label>
+                            <textarea class="form-control" id="shippingMark" rows="3" placeholder="客户固定出货唛头"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </form>
+    </main>
+</div>
+
+<div class="editor-summary">
+    <div class="editor-summary-inner">
+        <div class="editor-summary-metrics">
+            <div class="editor-summary-metric"><span>产品种类</span><strong id="summaryItemCount">0</strong></div>
+            <div class="editor-summary-metric"><span>销售数量</span><strong id="summaryQuantity">0</strong></div>
+            <div class="editor-summary-metric"><span>订单金额</span><strong class="text-primary" id="summaryAmount">¥0.00</strong></div>
+            <div class="editor-summary-metric d-none d-lg-block"><span>当前模式</span><strong id="summaryMode">新建订单</strong></div>
+        </div>
+        <div class="editor-summary-actions">
+            <a href="/orders" class="btn btn-outline-secondary">取消</a>
+            <button type="submit" form="orderEditorForm" class="btn btn-primary px-4" id="saveOrderButton">
+                <i class="bi bi-check2-circle"></i> 提交订单
+            </button>
+        </div>
+    </div>
+</div>
+
+<div class="order-product-autocomplete d-none" id="orderProductAutocomplete" role="listbox" aria-label="产品联想列表"></div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+var orderProducts = [];
+var orderCustomers = [];
+var orderCustomerAutocomplete = null;
+var orderProductAutocompleteInput = null;
+var orderProductAutocompleteItems = [];
+var orderProductAutocompleteIndex = -1;
+var orderIsEdit = false;
+
+var ORDER_CURRENCIES = ['CNY','USD','EUR','GBP','JPY','HKD','AUD'];
+var ORDER_TRADE_TERMS = ['EXW','FOB','CIF','DDP'];
+
+function orderEscape(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+function orderDateOnly(value) {
+    if (!value) return '';
+    return String(value).slice(0, 10);
+}
+
+function currentUserName() {
+    var user = window.CURRENT_USER || {};
+    return user.display_name || user.username || '';
+}
+
+function fillOrderOptions() {
+    var currency = ORDER_CURRENCIES.map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+    $('#currency').html(currency);
+    var trade = '<option value="">无</option>' + ORDER_TRADE_TERMS.map(function (v) { return '<option value="' + v + '">' + v + '</option>'; }).join('');
+    $('#tradeTerms').html(trade);
+}
+
+function fillOrderOwners() {
+    return $.ajax({
+        url: '/api/users/options',
+        method: 'GET',
+        success: function (data) {
+            var select = $('#orderOwner').empty();
+            select.append($('<option>').val('0').text('未分配'));
+            (Array.isArray(data) ? data : []).forEach(function (user) {
+                select.append($('<option>').val(String(user.id)).text(user.name || user.username || ''));
+            });
+            if (!orderIsEdit && window.CURRENT_USER && window.CURRENT_USER.id) {
+                setOrderOwner(window.CURRENT_USER.id, currentUserName());
+            }
+        }
+    });
+}
+
+function setOrderOwner(ownerID, ownerName) {
+    var select = $('#orderOwner');
+    var value = String(parseInt(ownerID, 10) || 0);
+    if (value !== '0' && select.find('option').filter(function () { return this.value === value; }).length === 0) {
+        select.append($('<option>').val(value).text(ownerName || ('#' + value)));
+    }
+    select.val(value);
+}
+
+function refreshOrderCustomField(selectID, inputID) {
+    var custom = $('#' + selectID).val() === '自定义';
+    $('#' + inputID).prop('disabled', !custom).toggle(custom);
+}
+
+function orderCustomFieldValue(selectID, inputID) {
+    var value = $('#' + selectID).val();
+    if (value !== '自定义') return value;
+    return ($('#' + inputID).val() || '').trim() || '自定义';
+}
+
+function setOrderCustomField(selectID, inputID, stored, presets) {
+    stored = stored || presets[0];
+    if (presets.indexOf(stored) >= 0) {
+        $('#' + selectID).val(stored);
+        $('#' + inputID).val('').prop('disabled', true).hide();
+    } else {
+        $('#' + selectID).val('自定义');
+        $('#' + inputID).val(stored || '').prop('disabled', false).show();
+    }
+}
+
+function customerDisplay(customer) {
+    var details = [];
+    if (customer.code) details.push(customer.code);
+    if (customer.phone) details.push(customer.phone);
+    return (customer.name || '') + (details.length ? '（' + details.join(' / ') + '）' : '');
+}
+
+function applyOrderCustomer(customer) {
+    if (!customer) return;
+    $('#customerId').val(customer.id || 0);
+    $('#customerName').val(customer.name || '');
+    $('#customerPhone').val(customer.phone || '');
+    $('#customerAddress').val(customer.address || '');
+    $('#region').val(customer.country_region || '');
+}
+
+function loadOrderCustomers() {
+    $.ajax({
+        url: '/api/customers',
+        method: 'GET',
+        success: function (data) {
+            orderCustomers = Array.isArray(data) ? data : [];
+            if (!orderCustomerAutocomplete) {
+                orderCustomerAutocomplete = AutoComplete.create({
+                    name: 'order_editor_customer',
+                    inputSelector: '#customerSearchInput',
+                    hiddenSelector: '#customerId',
+                    datalistSelector: '#customerAutocompleteOptions',
+                    getId: function (item) { return item.id; },
+                    getDisplay: customerDisplay,
+                    getAliases: function (item) { return [item.name, item.code, item.phone, item.full_name]; },
+                    sortItems: function (a, b) { return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN'); },
+                    onSelect: function (item) { applyOrderCustomer(item); },
+                    onClear: function () { $('#customerId').val(''); }
+                });
+            }
+            orderCustomerAutocomplete.setItems(orderCustomers);
+        }
+    });
+}
+
+function orderProductMeta(product) {
+    var parts = [];
+    if (product.spec) parts.push('规格：' + product.spec);
+    if (product.unit) parts.push('单位：' + product.unit);
+    if (product.packaging) parts.push('包装：' + product.packaging);
+    parts.push('可用库存：' + Number(product.available_stock || 0));
+    return parts.join('，');
+}
+
+function orderProductRowMeta(product) {
+    var parts = [];
+    if (product.packaging) parts.push('包装：' + product.packaging);
+    parts.push('可用库存：' + Number(product.available_stock || 0));
+    return parts.join('，');
+}
+
+function orderProductSearchText(product) {
+    return [product.name, product.spec, product.unit, product.packaging].join(' ').toLowerCase();
+}
+
+function filterOrderProducts(keyword) {
+    keyword = String(keyword || '').trim().toLowerCase();
+    var list = orderProducts.filter(function (product) {
+        return !keyword || orderProductSearchText(product).indexOf(keyword) >= 0;
+    });
+    list.sort(function (a, b) {
+        var aName = String(a.name || '').toLowerCase();
+        var bName = String(b.name || '').toLowerCase();
+        var aScore = !keyword || aName === keyword ? 0 : (aName.indexOf(keyword) === 0 ? 1 : 2);
+        var bScore = !keyword || bName === keyword ? 0 : (bName.indexOf(keyword) === 0 ? 1 : 2);
+        if (aScore !== bScore) return aScore - bScore;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN');
+    });
+    return list;
+}
+
+function hideOrderProductAutocomplete() {
+    var menu = $('#orderProductAutocomplete');
+    if (orderProductAutocompleteInput && orderProductAutocompleteInput.length) {
+        orderProductAutocompleteInput.attr('aria-expanded', 'false');
+    }
+    menu.addClass('d-none').empty();
+    orderProductAutocompleteInput = null;
+    orderProductAutocompleteItems = [];
+    orderProductAutocompleteIndex = -1;
+}
+
+function positionOrderProductAutocomplete() {
+    var input = orderProductAutocompleteInput;
+    var menu = $('#orderProductAutocomplete');
+    if (!input || !input.length || menu.hasClass('d-none')) return;
+
+    var rect = input[0].getBoundingClientRect();
+    var summaryHeight = $('.editor-summary').is(':visible') ? $('.editor-summary').outerHeight() : 0;
+    var viewportBottom = window.innerHeight - summaryHeight - 8;
+    var menuWidth = Math.min(460, Math.max(280, rect.width));
+    if (window.innerWidth < 576) menuWidth = window.innerWidth - 16;
+    var left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - menuWidth - 8));
+    var spaceBelow = Math.max(0, viewportBottom - rect.bottom - 4);
+    var spaceAbove = Math.max(0, rect.top - 8);
+    var openAbove = spaceBelow < 180 && spaceAbove > spaceBelow;
+    var maxHeight = Math.min(320, Math.max(120, openAbove ? spaceAbove : spaceBelow));
+
+    menu.css({
+        left: left + 'px',
+        width: menuWidth + 'px',
+        maxHeight: maxHeight + 'px',
+        top: openAbove ? 'auto' : (rect.bottom + 4) + 'px',
+        bottom: openAbove ? (window.innerHeight - rect.top + 4) + 'px' : 'auto'
+    });
+}
+
+function setOrderProductAutocompleteIndex(index) {
+    var count = orderProductAutocompleteItems.length;
+    if (!count) return;
+    if (index < 0) index = count - 1;
+    if (index >= count) index = 0;
+    orderProductAutocompleteIndex = index;
+    var options = $('#orderProductAutocomplete .order-product-option');
+    options.removeClass('active').attr('aria-selected', 'false');
+    var active = options.eq(index).addClass('active').attr('aria-selected', 'true');
+    if (active.length && active[0].scrollIntoView) active[0].scrollIntoView({ block: 'nearest' });
+}
+
+function renderOrderProductAutocomplete(keyword) {
+    var input = orderProductAutocompleteInput;
+    var menu = $('#orderProductAutocomplete');
+    if (!input || !input.length || orderIsEdit) {
+        hideOrderProductAutocomplete();
+        return;
+    }
+
+    keyword = String(keyword == null ? input.val() : keyword).trim().toLowerCase();
+    var matched = filterOrderProducts(keyword);
+    orderProductAutocompleteItems = matched.slice(0, 80);
+    orderProductAutocompleteIndex = orderProductAutocompleteItems.length ? 0 : -1;
+
+    var html = '';
+    if (!orderProductAutocompleteItems.length) {
+        html = '<div class="order-product-autocomplete-empty">没有匹配的产品</div>';
+    } else {
+        orderProductAutocompleteItems.forEach(function (product, index) {
+            html += '<button type="button" class="order-product-option' + (index === orderProductAutocompleteIndex ? ' active' : '') + '" role="option" aria-selected="' + (index === orderProductAutocompleteIndex ? 'true' : 'false') + '" data-index="' + index + '" data-product-id="' + (parseInt(product.id, 10) || 0) + '">' +
+                '<div class="order-product-option-title"><span class="order-product-option-name">' + orderEscape(product.name) + '</span><span class="order-product-option-price">¥' + Number(product.price || 0).toFixed(2) + '</span></div>' +
+                '<div class="order-product-option-meta">' + orderEscape(orderProductMeta(product)) + '</div></button>';
+        });
+        if (matched.length > orderProductAutocompleteItems.length) {
+            html += '<div class="order-product-autocomplete-empty">结果较多，仅显示前 80 条，请继续输入以缩小范围。</div>';
+        }
+    }
+
+    menu.html(html).removeClass('d-none');
+    input.attr('aria-expanded', 'true');
+    positionOrderProductAutocomplete();
+}
+
+function clearOrderItemProduct(input) {
+    var row = $(input).closest('tr');
+    if (!row.length) return;
+    row.find('.item-product-id').val('');
+    row.find('.item-spec, .item-unit').text('—').addClass('is-empty');
+    row.find('.item-price').val('');
+    row.find('.item-amount').text('0.00');
+    row.find('.item-product-hint').empty();
+    recalcOrderSummary();
+}
+
+function findOrderProductByText(value) {
+    value = String(value || '').trim().toLowerCase();
+    if (!value) return null;
+    var matches = orderProducts.filter(function (product) {
+        var specDisplay = [product.name, product.spec].filter(Boolean).join(' · ').toLowerCase();
+        return String(product.name || '').trim().toLowerCase() === value || specDisplay === value;
+    });
+    return matches.length === 1 ? matches[0] : null;
+}
+
+function selectOrderProduct(input, productID) {
+    input = $(input).first();
+    if (!input.length) return;
+    var product = orderProducts.find(function (item) { return parseInt(item.id, 10) === parseInt(productID, 10); });
+    if (!product) return;
+
+    var row = input.closest('tr');
+    row.find('.item-product-id').val(product.id);
+    input.val(product.name || '').removeClass('is-invalid');
+    row.find('.item-spec').text(product.spec || '—').toggleClass('is-empty', !product.spec);
+    row.find('.item-unit').text(product.unit || '—').toggleClass('is-empty', !product.unit);
+    row.find('.item-price').val(Number(product.price || 0).toFixed(2));
+    row.find('.item-quantity').val(row.find('.item-quantity').val() || 1);
+    row.find('.item-product-hint').text(orderProductRowMeta(product));
+    hideOrderProductAutocomplete();
+    recalcOrderItem(row.find('.item-quantity')[0]);
+    EntityEditor.markDirty();
+}
+
+function resolveOrderProductInput(input) {
+    input = $(input).first();
+    if (!input.length) return;
+    var productID = parseInt(input.closest('tr').find('.item-product-id').val(), 10) || 0;
+    if (productID) {
+        hideOrderProductAutocomplete();
+        return;
+    }
+
+    var product = findOrderProductByText(input.val());
+    if (product) {
+        selectOrderProduct(input, product.id);
+        return;
+    }
+    if (String(input.val() || '').trim()) input.addClass('is-invalid');
+    hideOrderProductAutocomplete();
+}
+
+function loadOrderProducts() {
+    $.ajax({
+        url: '/api/products',
+        method: 'GET',
+        success: function (data) {
+            orderProducts = Array.isArray(data) ? data : [];
+            if (orderProductAutocompleteInput && orderProductAutocompleteInput.length) {
+                renderOrderProductAutocomplete(orderProductAutocompleteInput.val());
+            }
+        },
+        error: function (xhr) {
+            hideOrderProductAutocomplete();
+            EntityEditor.notify('加载产品失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+function orderItemRowHtml(item) {
+    item = item || {};
+    var productID = parseInt(item.product_id || item.id || 0, 10) || 0;
+    var name = orderEscape(item.product_name || item.name || '');
+    var spec = orderEscape(item.spec || '');
+    var unit = orderEscape(item.unit || '');
+    var quantity = item.quantity == null ? '' : item.quantity;
+    var price = item.price == null ? '' : item.price;
+    var amount = item.amount == null ? ((parseFloat(quantity) || 0) * (parseFloat(price) || 0)).toFixed(2) : Number(item.amount || 0).toFixed(2);
+    var disabled = orderIsEdit ? 'disabled' : '';
+    var specText = spec || '—';
+    var unitText = unit || '—';
+    var specClass = spec ? '' : ' is-empty';
+    var unitClass = unit ? '' : ' is-empty';
+    return '<tr class="order-item-row">' +
+        '<td class="order-item-name-wrap"><input type="hidden" class="item-product-id" value="' + productID + '"><input type="text" class="form-control item-product-name" value="' + name + '" placeholder="输入产品名称、规格或包装" autocomplete="off" spellcheck="false" aria-autocomplete="list" aria-controls="orderProductAutocomplete" aria-expanded="false" ' + disabled + '>' +
+        '<div class="order-item-hint item-product-hint"></div></td>' +
+        '<td><span class="order-grid-value item-spec' + specClass + '">' + specText + '</span></td>' +
+        '<td><span class="order-grid-value item-unit' + unitClass + '">' + unitText + '</span></td>' +
+        '<td class="order-grid-number"><input type="number" class="form-control item-quantity" min="1" step="1" value="' + orderEscape(quantity) + '" ' + disabled + ' oninput="recalcOrderItem(this)"></td>' +
+        '<td class="order-grid-number"><input type="number" class="form-control item-price" min="0" step="0.01" value="' + orderEscape(price) + '" ' + disabled + ' oninput="recalcOrderItem(this)"></td>' +
+        '<td class="order-grid-number"><span class="order-item-amount item-amount">' + orderEscape(amount) + '</span></td>' +
+        '<td class="text-end"><button type="button" class="order-item-remove" onclick="removeOrderItem(this)" title="删除此行" aria-label="删除此行" ' + disabled + '><i class="bi bi-trash"></i></button></td></tr>';
+}
+function renderOrderItemRow(item) {
+    $('#orderItems').append(orderItemRowHtml(item || {}));
+    recalcOrderSummary();
+}
+
+function addOrderItem(item) {
+    if (orderIsEdit) return;
+    renderOrderItemRow(item);
+}
+
+function addOrderItemAndFocus() {
+    if (orderIsEdit) return;
+    addOrderItem();
+    EntityEditor.focusField('#orderItems .order-item-row:last .item-product-name');
+}
+
+function removeOrderItem(button) {
+    if (orderIsEdit) return;
+    if ($('#orderItems .order-item-row').length <= 1) {
+        EntityEditor.notify('订单至少保留一个产品。', 'error');
+        return;
+    }
+    $(button).closest('tr').remove();
+    recalcOrderSummary();
+}
+
+function recalcOrderItem(input) {
+    var row = $(input).closest('tr');
+    var quantity = parseFloat(row.find('.item-quantity').val()) || 0;
+    var price = parseFloat(row.find('.item-price').val()) || 0;
+    row.find('.item-amount').text((quantity * price).toFixed(2));
+    recalcOrderSummary();
+}
+
+function recalcOrderSummary() {
+    var itemCount = 0;
+    var totalQuantity = 0;
+    var totalAmount = 0;
+    $('#orderItems .order-item-row').each(function () {
+        var row = $(this);
+        var productID = parseInt(row.find('.item-product-id').val(), 10) || 0;
+        var quantity = parseFloat(row.find('.item-quantity').val()) || 0;
+        var price = parseFloat(row.find('.item-price').val()) || 0;
+        if (productID) itemCount += 1;
+        totalQuantity += quantity;
+        totalAmount += quantity * price;
+    });
+    var symbol = $('#currency').val() === 'CNY' ? '¥' : ($('#currency').val() + ' ');
+    $('#summaryItemCount').text(itemCount);
+    $('#orderItemsVisibleCount').text('共 ' + itemCount + ' 项');
+    $('#summaryQuantity').text(Number(totalQuantity.toFixed(3)));
+    $('#summaryAmount').text(symbol + totalAmount.toFixed(2));
+}
+
+function validateOrderItems() {
+    var items = [];
+    var errors = [];
+    $('#orderItems .order-item-row').each(function (index) {
+        var row = $(this);
+        var productID = parseInt(row.find('.item-product-id').val(), 10) || 0;
+        var quantity = parseInt(row.find('.item-quantity').val(), 10) || 0;
+        var priceText = String(row.find('.item-price').val() || '').trim();
+        var price = parseFloat(priceText);
+        if (!productID) errors.push('第 ' + (index + 1) + ' 行：请选择产品');
+        else if (quantity <= 0) errors.push('第 ' + (index + 1) + ' 行：销售数量必须大于 0');
+        else if (priceText === '' || isNaN(price) || price < 0) errors.push('第 ' + (index + 1) + ' 行：请输入有效单价');
+        else items.push({ product_id: productID, quantity: quantity, price: price });
+    });
+    return { items: items, errors: errors };
+}
+
+function collectOrderEditorData(includeItems) {
+    var data = {
+        customer_name: ($('#customerName').val() || '').trim(),
+        customer_phone: ($('#customerPhone').val() || '').trim(),
+        customer_address: ($('#customerAddress').val() || '').trim(),
+        region: ($('#region').val() || '').trim(),
+        order_date: $('#orderDate').val(),
+        expected_shipping_date: $('#expectedShippingDate').val(),
+        customer_required_date: $('#customerRequiredDate').val(),
+        logistics_days: parseInt($('#logisticsDays').val(), 10) || 0,
+        payment_status: parseInt($('#paymentStatus').val(), 10) || 0,
+        prepared_by: ($('#preparedBy').val() || '').trim(),
+        owner_user_id: parseInt($('#orderOwner').val(), 10) || 0,
+        payment_settlement: orderCustomFieldValue('paymentSettlement', 'paymentSettlementCustom'),
+        freight_payment: orderCustomFieldValue('freightPayment', 'freightPaymentCustom'),
+        freight_recovery: $('#freightRecovery').val(),
+        transport_method: orderCustomFieldValue('transportMethod', 'transportMethodCustom'),
+        customer_id: parseInt($('#customerId').val(), 10) || 0,
+        currency: $('#currency').val() || 'CNY',
+        trade_terms: $('#tradeTerms').val() || '',
+        shipping_mark: ($('#shippingMark').val() || '').trim(),
+        remark: ($('#orderRemark').val() || '').trim()
+    };
+    if (includeItems) data.items = validateOrderItems().items;
+    return data;
+}
+
+function saveOrderEditor() {
+    var customerName = ($('#customerName').val() || '').trim();
+    if (!customerName) {
+        EntityEditor.notify('请输入客户名称。', 'error');
+        EntityEditor.focusField('#customerName');
+        return false;
+    }
+    var data = collectOrderEditorData(!orderIsEdit);
+    if (!orderIsEdit) {
+        var itemResult = validateOrderItems();
+        if (itemResult.errors.length) {
+            EntityEditor.notify(itemResult.errors.join('；'), 'error');
+            EntityEditor.focusField('#orderItems .order-item-row:first .item-product-name');
+            return false;
+        }
+        if (!itemResult.items.length) {
+            EntityEditor.notify('请至少添加一个产品。', 'error');
+            return false;
+        }
+        data.items = itemResult.items;
+    } else {
+        data.id = parseInt($('#orderId').val(), 10) || 0;
+    }
+    return EntityEditor.save({
+        url: orderIsEdit ? '/api/orders/update' : '/api/orders',
+        data: data,
+        errorMessage: orderIsEdit ? '保存失败：' : '创建失败：',
+        success: function (response) {
+            if (!orderIsEdit) {
+                EntityEditor.notify('订单创建成功，订单号：' + (response.order_no || ''), 'success');
+            }
+            window.location.href = '/orders';
+        }
+    });
+}
+
+function loadOrderForEdit(id) {
+    $.ajax({
+        url: '/api/orders/detail?id=' + id,
+        method: 'GET',
+        success: function (data) {
+            var order = data.order || {};
+            $('#orderId').val(order.id || id);
+            $('#customerId').val(order.customer_id || '');
+            $('#customerSearchInput').val(order.customer_name || '');
+            $('#customerName').val(order.customer_name || '');
+            $('#customerPhone').val(order.customer_phone || '');
+            $('#customerAddress').val(order.customer_address || '');
+            $('#region').val(order.region || '');
+            $('#orderDate').val(orderDateOnly(order.order_date));
+            $('#expectedShippingDate').val(orderDateOnly(order.expected_shipping_date));
+            $('#customerRequiredDate').val(orderDateOnly(order.customer_required_date));
+            $('#logisticsDays').val(order.logistics_days || 0);
+            $('#preparedBy').val(order.prepared_by || currentUserName());
+            setOrderOwner(order.owner_user_id, order.owner_name);
+            $('#paymentStatus').val(String(order.payment_status || 0));
+            $('#currency').val(order.currency || 'CNY');
+            $('#tradeTerms').val(order.trade_terms || '');
+            $('#freightRecovery').val(order.freight_recovery || '可回收');
+            setOrderCustomField('paymentSettlement', 'paymentSettlementCustom', order.payment_settlement || '现付', ['现付']);
+            setOrderCustomField('freightPayment', 'freightPaymentCustom', order.freight_payment || '现付', ['现付']);
+            setOrderCustomField('transportMethod', 'transportMethodCustom', order.transport_method || '物流', ['物流','快递']);
+            $('#orderRemark').val(order.remark || '');
+            $('#shippingMark').val(order.shipping_mark || '');
+            var items = Array.isArray(data.items) ? data.items : [];
+            $('#orderItems').empty();
+            if (!items.length) renderOrderItemRow();
+            items.forEach(function (item) { renderOrderItemRow(item); });
+            $('#orderEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑订单 ' + orderEscape(order.order_no || ''));
+            $('#summaryMode').text('编辑订单');
+            $('#saveOrderButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
+            $('#orderItemsModeHint').text('编辑订单时产品明细只读；如需调整产品或数量，请在订单详情流程中处理。');
+            $('#addBlankOrderItem').prop('disabled', true);
+            recalcOrderSummary();
+            EntityEditor.markClean();
+        },
+        error: function (xhr) {
+            EntityEditor.notify('加载订单失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
+        }
+    });
+}
+
+$(document).ready(function () {
+    fillOrderOptions();
+    orderIsEdit = EntityEditor.entityID('id') > 0;
+    var ownersReady = fillOrderOwners();
+    loadOrderCustomers();
+    loadOrderProducts();
+    $(document)
+        .on('focus.orderProductAutocomplete', '.item-product-name', function () {
+            if (orderIsEdit) return;
+            orderProductAutocompleteInput = $(this);
+            if ((parseInt($(this).closest('tr').find('.item-product-id').val(), 10) || 0) && this.value) this.select();
+            renderOrderProductAutocomplete(this.value);
+        })
+        .on('input.orderProductAutocomplete', '.item-product-name', function () {
+            if (orderIsEdit) return;
+            var input = $(this);
+            if (parseInt(input.closest('tr').find('.item-product-id').val(), 10) || 0) {
+                clearOrderItemProduct(input);
+            }
+            orderProductAutocompleteInput = input;
+            renderOrderProductAutocomplete(input.val());
+        })
+        .on('keydown.orderProductAutocomplete', '.item-product-name', function (event) {
+            var visible = !$('#orderProductAutocomplete').hasClass('d-none');
+            if (event.key === 'ArrowDown') {
+                if (!visible) {
+                    orderProductAutocompleteInput = $(this);
+                    renderOrderProductAutocomplete(this.value);
+                } else {
+                    event.preventDefault();
+                    setOrderProductAutocompleteIndex(orderProductAutocompleteIndex + 1);
+                }
+                return;
+            }
+            if (event.key === 'ArrowUp' && visible) {
+                event.preventDefault();
+                setOrderProductAutocompleteIndex(orderProductAutocompleteIndex - 1);
+                return;
+            }
+            if (event.key === 'Enter' && visible) {
+                event.preventDefault();
+                if (orderProductAutocompleteIndex >= 0 && orderProductAutocompleteItems[orderProductAutocompleteIndex]) {
+                    selectOrderProduct(this, orderProductAutocompleteItems[orderProductAutocompleteIndex].id);
+                } else {
+                    resolveOrderProductInput(this);
+                }
+                return;
+            }
+            if (event.key === 'Escape') {
+                hideOrderProductAutocomplete();
+            }
+        })
+        .on('blur.orderProductAutocomplete', '.item-product-name', function () {
+            var input = $(this);
+            setTimeout(function () { resolveOrderProductInput(input); }, 120);
+        })
+        .on('mousedown.orderProductAutocomplete', '#orderProductAutocomplete .order-product-option', function (event) {
+            event.preventDefault();
+            setOrderProductAutocompleteIndex(parseInt($(this).attr('data-index'), 10) || 0);
+        })
+        .on('click.orderProductAutocomplete', '#orderProductAutocomplete .order-product-option', function () {
+            var input = orderProductAutocompleteInput;
+            if (!input || !input.length) input = $('.item-product-name:focus').first();
+            selectOrderProduct(input, $(this).attr('data-product-id'));
+        })
+        .on('mousedown.orderProductAutocomplete', function (event) {
+            if ($(event.target).closest('.item-product-name, #orderProductAutocomplete').length) return;
+            hideOrderProductAutocomplete();
+        });
+    $(window).on('scroll.orderProductAutocomplete resize.orderProductAutocomplete', positionOrderProductAutocomplete);
+    $('#order-products .order-items-grid-scroll').on('scroll.orderProductAutocomplete', positionOrderProductAutocomplete);
+    $('#paymentSettlement, #freightPayment, #transportMethod').on('change', function () {
+        var map = {
+            paymentSettlement: 'paymentSettlementCustom',
+            freightPayment: 'freightPaymentCustom',
+            transportMethod: 'transportMethodCustom'
+        };
+        refreshOrderCustomField(this.id, map[this.id]);
+    });
+    $('#currency').on('change', recalcOrderSummary);
+    EntityEditor.bindForm('#orderEditorForm', saveOrderEditor, { button: '#saveOrderButton' });
+
+    if (orderIsEdit) {
+        ownersReady.always(function () { loadOrderForEdit(EntityEditor.entityID('id')); });
+    } else {
+        addOrderItem();
+        var today = new Date();
+        $('#orderDate').val(today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'));
+        $('#preparedBy').val(currentUserName());
+        setOrderCustomField('paymentSettlement', 'paymentSettlementCustom', '现付', ['现付']);
+        setOrderCustomField('freightPayment', 'freightPaymentCustom', '现付', ['现付']);
+        setOrderCustomField('transportMethod', 'transportMethodCustom', '物流', ['物流','快递']);
+        recalcOrderSummary();
+        EntityEditor.markClean();
+    }
+});
+</script>
+{{end}}

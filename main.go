@@ -44,12 +44,16 @@ func main() {
 	// 页面路由（需登录）
 	http.HandleFunc("/", handlers.RequireAuth(page("templates/layout.html", "templates/index.html")))
 	http.HandleFunc("/orders", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(page("templates/layout.html", "templates/orders.html")))
+	http.HandleFunc("/orders/form", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(page("templates/layout.html", "templates/order_form.html")))
 	http.HandleFunc("/products", handlers.RequirePermission(handlers.PermProductView, page("templates/layout.html", "templates/products.html")))
+	http.HandleFunc("/products/form", handlers.RequirePermission(handlers.PermProductManage, page("templates/layout.html", "templates/product_form.html")))
 	http.HandleFunc("/raw-materials", handlers.RequirePermission(handlers.PermMaterialView, page("templates/layout.html", "templates/raw_materials.html")))
 	http.HandleFunc("/analytics", handlers.RequirePermission(handlers.PermAnalyticsView, page("templates/layout.html", "templates/analytics.html")))
 	http.HandleFunc("/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, page("templates/layout.html", "templates/purchase_materials.html")))
+	http.HandleFunc("/purchase-materials/form", handlers.RequirePermission(handlers.PermPurchaseManage, page("templates/layout.html", "templates/purchase_form.html")))
 	http.HandleFunc("/expenses", handlers.RequirePermission(handlers.PermExpenseView, page("templates/layout.html", "templates/expenses.html")))
 	http.HandleFunc("/customers", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customers.html")))
+	http.HandleFunc("/customers/form", handlers.RequirePermission(handlers.PermCustomerManage, page("templates/layout.html", "templates/customer_form.html")))
 	http.HandleFunc("/customers/detail", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customer_detail.html")))
 	http.HandleFunc("/order/detail", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(handlers.OrderDetailPage))
 
