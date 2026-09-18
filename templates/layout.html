@@ -56,6 +56,57 @@
             margin: 0 auto;
         }
 
+        /* 大型表单弹窗：支持拖拽右下角调整窗口大小 */
+        .modal-dialog.modal-resizable {
+            position: relative;
+        }
+        .modal-dialog.modal-resizable .modal-content {
+            display: flex;
+            flex-direction: column;
+            max-height: calc(100vh - 3.5rem);
+            min-height: 0;
+        }
+        .modal-dialog.modal-resizable .modal-body {
+            min-height: 0;
+            overflow: auto;
+        }
+        .modal-dialog.modal-resizable .modal-footer {
+            padding-right: 2.5rem;
+        }
+        .modal-dialog.modal-resizable.is-user-resized .modal-content {
+            height: 100%;
+            max-height: none;
+        }
+        .modal-dialog.modal-resizable.is-resizing {
+            user-select: none;
+        }
+        .modal-resize-handle {
+            position: absolute;
+            right: 1px;
+            bottom: 1px;
+            z-index: 10;
+            width: 24px;
+            height: 24px;
+            cursor: nwse-resize;
+            pointer-events: auto !important;
+            touch-action: none;
+            border-bottom-right-radius: 10px;
+            background:
+                linear-gradient(135deg, transparent 0 47%, rgba(73, 80, 87, .58) 48% 53%, transparent 54%) 3px 3px / 8px 8px no-repeat,
+                linear-gradient(135deg, transparent 0 47%, rgba(73, 80, 87, .58) 48% 53%, transparent 54%) 9px 9px / 8px 8px no-repeat;
+        }
+        @media (max-width: 991.98px) {
+            .modal-resize-handle {
+                display: none;
+            }
+            .modal-dialog.modal-resizable,
+            .modal-dialog.modal-resizable.is-user-resized .modal-content {
+                width: auto !important;
+                height: auto !important;
+                max-height: none;
+            }
+        }
+
         /* 订单预警灯 */
         .warn-dot {
             display: inline-block;
@@ -237,6 +288,95 @@
     <script src="/static/autocomplete.js"></script>
     <script src="/static/date-picker.js?v=20260918"></script>
     <script>
+        // 让订单、采购单等大型表单弹窗可通过右下角拖拽调整宽高。
+        (function () {
+            var minWidth = 720;
+            var minHeight = 360;
+            var viewportGap = 32;
+            var resizeState = null;
+
+            function enhanceResizableModal(dialog) {
+                if (!dialog || dialog.dataset.resizeEnhanced === "1") return;
+                dialog.dataset.resizeEnhanced = "1";
+                dialog.classList.add("modal-resizable");
+
+                var handle = document.createElement("div");
+                handle.className = "modal-resize-handle";
+                handle.title = "拖动调整窗口大小";
+                handle.setAttribute("aria-label", "拖动调整窗口大小");
+                handle.setAttribute("role", "separator");
+                var modalContent = dialog.querySelector(".modal-content");
+                (modalContent || dialog).appendChild(handle);
+
+                handle.addEventListener("pointerdown", function (event) {
+                    if (window.innerWidth < 992) return;
+                    var rect = dialog.getBoundingClientRect();
+                    if (!rect.width || !rect.height) return;
+
+                    resizeState = {
+                        dialog: dialog,
+                        handle: handle,
+                        pointerId: event.pointerId,
+                        startX: event.clientX,
+                        startY: event.clientY,
+                        startWidth: rect.width,
+                        startHeight: rect.height,
+                        centerX: rect.left + rect.width / 2,
+                        top: rect.top
+                    };
+                    dialog.style.width = rect.width + "px";
+                    dialog.style.height = rect.height + "px";
+                    dialog.style.maxWidth = "none";
+                    dialog.classList.add("is-user-resized", "is-resizing");
+                    handle.setPointerCapture(event.pointerId);
+                    event.preventDefault();
+                });
+
+                handle.addEventListener("pointermove", function (event) {
+                    if (!resizeState || event.pointerId !== resizeState.pointerId) return;
+
+                    var maxWidthBySide = Math.min(
+                        resizeState.centerX - viewportGap / 2,
+                        window.innerWidth - resizeState.centerX - viewportGap / 2
+                    );
+                    var maxWidth = Math.max(320, maxWidthBySide * 2);
+                    var maxHeight = Math.max(240, window.innerHeight - resizeState.top - viewportGap / 2);
+                    var allowedMinWidth = Math.min(minWidth, maxWidth);
+                    var allowedMinHeight = Math.min(minHeight, maxHeight);
+                    var width = Math.min(maxWidth, Math.max(allowedMinWidth, resizeState.startWidth + (event.clientX - resizeState.startX) * 2));
+                    var height = Math.min(maxHeight, Math.max(allowedMinHeight, resizeState.startHeight + event.clientY - resizeState.startY));
+
+                    resizeState.dialog.style.width = width + "px";
+                    resizeState.dialog.style.height = height + "px";
+                    event.preventDefault();
+                });
+
+                function finishResize(event) {
+                    if (!resizeState || event.pointerId !== resizeState.pointerId) return;
+                    resizeState.dialog.classList.remove("is-resizing");
+                    if (resizeState.handle.hasPointerCapture(event.pointerId)) {
+                        resizeState.handle.releasePointerCapture(event.pointerId);
+                    }
+                    resizeState = null;
+                }
+
+                handle.addEventListener("pointerup", finishResize);
+                handle.addEventListener("pointercancel", finishResize);
+
+                var modal = dialog.closest(".modal");
+                if (modal) {
+                    modal.addEventListener("hidden.bs.modal", function () {
+                        dialog.style.width = "";
+                        dialog.style.height = "";
+                        dialog.style.maxWidth = "";
+                        dialog.classList.remove("is-user-resized", "is-resizing");
+                    });
+                }
+            }
+
+            document.querySelectorAll(".modal-dialog.modal-lg, .modal-dialog.modal-xl").forEach(enhanceResizableModal);
+        })();
+
         // 全局用户与权限信息（服务端注入）
         window.PERMS = {{.PermsJSON}};
         window.CURRENT_USER = {{.UserJSON}};
