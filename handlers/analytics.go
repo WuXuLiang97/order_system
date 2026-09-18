@@ -12,24 +12,30 @@ import (
 )
 
 type analyticsSummary struct {
-	Revenue      float64 `json:"revenue"`
-	Cost         float64 `json:"cost"`
-	Profit       float64 `json:"profit"`
-	CostRatio    float64 `json:"cost_ratio"`
-	ProfitMargin float64 `json:"profit_margin"`
-	OrderCount   int     `json:"order_count"`
-	Quantity     float64 `json:"quantity"`
+	Revenue         float64 `json:"revenue"`
+	Cost            float64 `json:"cost"`
+	Profit          float64 `json:"profit"`
+	Expense         float64 `json:"expense"`
+	NetProfit       float64 `json:"net_profit"`
+	CostRatio       float64 `json:"cost_ratio"`
+	ProfitMargin    float64 `json:"profit_margin"`
+	NetProfitMargin float64 `json:"net_profit_margin"`
+	OrderCount      int     `json:"order_count"`
+	Quantity        float64 `json:"quantity"`
 }
 
 type analyticsMonthlyRow struct {
-	Period       string  `json:"period"`
-	Revenue      float64 `json:"revenue"`
-	Cost         float64 `json:"cost"`
-	Profit       float64 `json:"profit"`
-	CostRatio    float64 `json:"cost_ratio"`
-	ProfitMargin float64 `json:"profit_margin"`
-	OrderCount   int     `json:"order_count"`
-	Quantity     float64 `json:"quantity"`
+	Period          string  `json:"period"`
+	Revenue         float64 `json:"revenue"`
+	Cost            float64 `json:"cost"`
+	Profit          float64 `json:"profit"`
+	Expense         float64 `json:"expense"`
+	NetProfit       float64 `json:"net_profit"`
+	CostRatio       float64 `json:"cost_ratio"`
+	ProfitMargin    float64 `json:"profit_margin"`
+	NetProfitMargin float64 `json:"net_profit_margin"`
+	OrderCount      int     `json:"order_count"`
+	Quantity        float64 `json:"quantity"`
 }
 
 type analyticsProductRow struct {
@@ -105,7 +111,30 @@ func roundAnalytics(value float64, digits int) float64 {
 	return math.Round(value*scale) / scale
 }
 
-// GetAnalyticsOverview 返回已发货订单的收入、材料成本、毛利及产品盈利排行。
+func loadAnalyticsMonthlyExpenses() (map[string]float64, error) {
+	rows, err := models.DB.Query(`
+		SELECT expense_month, COALESCE(SUM(amount), 0)
+		FROM expenses
+		GROUP BY expense_month
+	`)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	expenses := make(map[string]float64)
+	for rows.Next() {
+		var month string
+		var amount float64
+		if err := rows.Scan(&month, &amount); err != nil {
+			return nil, err
+		}
+		expenses[month] = amount
+	}
+	return expenses, rows.Err()
+}
+
+// GetAnalyticsOverview 返回已发货订单的收入、材料成本、毛利、纯利润及产品盈利排行。
 // 范围参数 range=month/year/all；未传时默认按月。
 func GetAnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -149,6 +178,12 @@ func GetAnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 		scopeLabel = year + "年"
 	} else {
 		scopeLabel = "全部已发货订单"
+	}
+
+	monthlyExpenses, err := loadAnalyticsMonthlyExpenses()
+	if err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
 	}
 
 	user := CurrentUser(r)
@@ -239,27 +274,50 @@ func GetAnalyticsOverview(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	summaryExpense := 0.0
+	for period, amount := range monthlyExpenses {
+		if matchesScope(period) {
+			summaryExpense += amount
+		}
+	}
+	summaryProfit := summary.Revenue - summary.Cost
+	summaryNetProfit := summaryProfit - summaryExpense
 	summaryResult := analyticsSummary{
-		Revenue:      roundAnalytics(summary.Revenue, 2),
-		Cost:         roundAnalytics(summary.Cost, 2),
-		Profit:       roundAnalytics(summary.Revenue-summary.Cost, 2),
-		CostRatio:    roundAnalytics(analyticsRatio(summary.Cost, summary.Revenue), 2),
-		ProfitMargin: roundAnalytics(analyticsRatio(summary.Revenue-summary.Cost, summary.Revenue), 2),
-		OrderCount:   len(summary.OrderIDs),
-		Quantity:     roundAnalytics(summary.Quantity, 3),
+		Revenue:         roundAnalytics(summary.Revenue, 2),
+		Cost:            roundAnalytics(summary.Cost, 2),
+		Profit:          roundAnalytics(summaryProfit, 2),
+		Expense:         roundAnalytics(summaryExpense, 2),
+		NetProfit:       roundAnalytics(summaryNetProfit, 2),
+		CostRatio:       roundAnalytics(analyticsRatio(summary.Cost, summary.Revenue), 2),
+		ProfitMargin:    roundAnalytics(analyticsRatio(summaryProfit, summary.Revenue), 2),
+		NetProfitMargin: roundAnalytics(analyticsRatio(summaryNetProfit, summary.Revenue), 2),
+		OrderCount:      len(summary.OrderIDs),
+		Quantity:        roundAnalytics(summary.Quantity, 3),
+	}
+
+	for period := range monthlyExpenses {
+		if monthly[period] == nil {
+			monthly[period] = newAnalyticsAccumulator()
+		}
 	}
 
 	monthlyRows := make([]analyticsMonthlyRow, 0, len(monthly))
 	for period, acc := range monthly {
+		expense := monthlyExpenses[period]
+		profit := acc.Revenue - acc.Cost
+		netProfit := profit - expense
 		monthlyRows = append(monthlyRows, analyticsMonthlyRow{
-			Period:       period,
-			Revenue:      roundAnalytics(acc.Revenue, 2),
-			Cost:         roundAnalytics(acc.Cost, 2),
-			Profit:       roundAnalytics(acc.Revenue-acc.Cost, 2),
-			CostRatio:    roundAnalytics(analyticsRatio(acc.Cost, acc.Revenue), 2),
-			ProfitMargin: roundAnalytics(analyticsRatio(acc.Revenue-acc.Cost, acc.Revenue), 2),
-			OrderCount:   len(acc.OrderIDs),
-			Quantity:     roundAnalytics(acc.Quantity, 3),
+			Period:          period,
+			Revenue:         roundAnalytics(acc.Revenue, 2),
+			Cost:            roundAnalytics(acc.Cost, 2),
+			Profit:          roundAnalytics(profit, 2),
+			Expense:         roundAnalytics(expense, 2),
+			NetProfit:       roundAnalytics(netProfit, 2),
+			CostRatio:       roundAnalytics(analyticsRatio(acc.Cost, acc.Revenue), 2),
+			ProfitMargin:    roundAnalytics(analyticsRatio(profit, acc.Revenue), 2),
+			NetProfitMargin: roundAnalytics(analyticsRatio(netProfit, acc.Revenue), 2),
+			OrderCount:      len(acc.OrderIDs),
+			Quantity:        roundAnalytics(acc.Quantity, 3),
 		})
 	}
 	sort.Slice(monthlyRows, func(i, j int) bool { return monthlyRows[i].Period < monthlyRows[j].Period })
