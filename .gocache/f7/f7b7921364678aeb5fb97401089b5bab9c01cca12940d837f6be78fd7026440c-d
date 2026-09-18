@@ -1,0 +1,11 @@
+./bom.go
+./customer.go
+./db.go
+./expense.go
+./inventory.go
+./order.go
+./outbound.go
+./product.go
+./purchase.go
+./raw_material.go
+./user.go

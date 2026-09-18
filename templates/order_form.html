@@ -211,6 +211,57 @@
             padding-left: .6rem;
         }
     }
+    .order-compact-section .editor-section-header {
+        padding: .68rem .85rem;
+    }
+    .order-compact-section .editor-section-header h5 {
+        font-size: .95rem;
+    }
+    .order-compact-section .editor-section-body {
+        padding: .78rem .85rem .12rem;
+    }
+    .order-compact-section .row {
+        --bs-gutter-x: .75rem;
+        --bs-gutter-y: 0;
+    }
+    .order-compact-section .mb-3 {
+        margin-bottom: .6rem !important;
+    }
+    .order-compact-section .form-label {
+        margin-bottom: .2rem;
+        font-size: .8rem;
+        font-weight: 600;
+    }
+    .order-compact-section .form-control,
+    .order-compact-section .form-select {
+        min-height: calc(1.5em + .5rem + 2px);
+        padding: .25rem .55rem;
+        font-size: .875rem;
+    }
+    .order-compact-section .custom-date-picker,
+    .order-compact-section .custom-date-picker__surface {
+        min-height: calc(1.5em + .5rem + 2px);
+        font-size: .875rem;
+    }
+    .order-compact-section .custom-date-picker__surface {
+        padding: .25rem .55rem;
+    }
+    .order-compact-section .form-text {
+        margin-top: .15rem;
+        font-size: .72rem;
+        line-height: 1.25;
+    }
+    .order-compact-section .input-group > .form-select {
+        max-width: 6.75rem !important;
+    }
+    @media (max-width: 767.98px) {
+        .order-compact-section .editor-section-body {
+            padding: .7rem .65rem 0;
+        }
+        .order-compact-section .mb-3 {
+            margin-bottom: .55rem !important;
+        }
+    }
 </style>
 <div class="editor-page-header">
     <div>
@@ -237,57 +288,57 @@
         <form id="orderEditorForm" novalidate>
             <input type="hidden" id="orderId" value="0">
 
-            <section class="editor-section" id="order-customer">
+            <section class="editor-section order-compact-section" id="order-customer">
                 <div class="editor-section-header">
                     <h5><i class="bi bi-person"></i> 客户与日期</h5>
                     <span class="badge bg-light text-dark border">第 1 区</span>
                 </div>
                 <div class="editor-section-body">
                     <div class="row">
-                        <div class="col-12 mb-3">
+                        <div class="col-16 mb-3">
                             <label class="form-label">选择已有客户</label>
                             <input type="text" class="form-control customer-search-input" id="customerSearchInput" list="customerAutocompleteOptions" placeholder="输入客户名称、编号或电话，也可直接手工填写下方客户名称" autocomplete="off">
                             <input type="hidden" id="customerId">
                             <datalist id="customerAutocompleteOptions"></datalist>
                             <div class="form-text">从客户档案选择后会自动带入电话、地址和地区。</div>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">客户名称 <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="customerName" required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">电话号码</label>
                             <input type="text" class="form-control" id="customerPhone">
                         </div>
-                        <div class="col-md-8 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">收货地址</label>
                             <input type="text" class="form-control" id="customerAddress">
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">地区</label>
                             <input type="text" class="form-control" id="region">
                         </div>
-                        <div class="col-md-6 col-xl-3 mb-3">
+                        <div class="col-md-6 col-xl-2 mb-2">
                             <label class="form-label">下单日期</label>
                             <input type="date" class="form-control" id="orderDate">
                         </div>
-                        <div class="col-md-6 col-xl-3 mb-3">
+                        <div class="col-md-6 col-xl-2 mb-2">
                             <label class="form-label">预计发货日期</label>
                             <input type="date" class="form-control" id="expectedShippingDate">
                         </div>
-                        <div class="col-md-6 col-xl-3 mb-3">
+                        <div class="col-md-6 col-xl-2 mb-2">
                             <label class="form-label">客户需求到货日</label>
                             <input type="date" class="form-control" id="customerRequiredDate">
                         </div>
-                        <div class="col-md-6 col-xl-3 mb-3">
+                        <div class="col-md-6 col-xl-2 mb-2">
                             <label class="form-label">物流天数（天）</label>
                             <input type="number" class="form-control" id="logisticsDays" min="0" step="1" value="0">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 col-xl-2 mb-2">
                             <label class="form-label">制单</label>
                             <input type="text" class="form-control" id="preparedBy" placeholder="默认当前登录人">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 col-xl-2 mb-2">
                             <label class="form-label">负责人（业务员）</label>
                             <select class="form-select" id="orderOwner"><option value="0">未分配</option></select>
                         </div>
@@ -295,7 +346,7 @@
                 </div>
             </section>
 
-            <section class="editor-section" id="order-logistics">
+            <section class="editor-section order-compact-section" id="order-logistics">
                 <div class="editor-section-header">
                     <h5><i class="bi bi-truck"></i> 物流与结算</h5>
                     <span class="badge bg-light text-dark border">第 2 区</span>
@@ -324,7 +375,7 @@
                                 <option value="不可回收">不可回收</option>
                             </select>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 col-xl-4 mb-3">
                             <label class="form-label">货款结算</label>
                             <div class="input-group">
                                 <select class="form-select flex-shrink-0" style="max-width:130px;" id="paymentSettlement">
@@ -334,7 +385,7 @@
                                 <input type="text" class="form-control" id="paymentSettlementCustom" placeholder="如：月结30天" disabled>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 col-xl-4 mb-3">
                             <label class="form-label">运费支付</label>
                             <div class="input-group">
                                 <select class="form-select flex-shrink-0" style="max-width:130px;" id="freightPayment">
@@ -344,7 +395,7 @@
                                 <input type="text" class="form-control" id="freightPaymentCustom" placeholder="请输入运费支付方式" disabled>
                             </div>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-6 col-xl-4 mb-3">
                             <label class="form-label">运输方式</label>
                             <div class="input-group">
                                 <select class="form-select flex-shrink-0" style="max-width:130px;" id="transportMethod">

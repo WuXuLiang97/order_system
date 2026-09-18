@@ -1,0 +1,14 @@
+./analytics.go
+./auth.go
+./customer.go
+./expense.go
+./inventory.go
+./order.go
+./order_status.go
+./order_summary.go
+./outbound.go
+./product.go
+./purchase.go
+./raw_material.go
+./users.go
+./template_test.go
