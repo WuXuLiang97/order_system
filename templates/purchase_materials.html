@@ -1,4 +1,34 @@
 {{define "content"}}
+<style>
+    .purchase-sticky-scroll {
+        max-height: clamp(320px, calc(100vh - 220px), 720px);
+        overflow: auto;
+        overscroll-behavior: contain;
+        border: 1px solid #e9ecef;
+        border-radius: .5rem;
+    }
+    .purchase-sticky-table {
+        margin-bottom: 0;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .table.purchase-sticky-table thead th {
+        position: sticky;
+        top: 0;
+        z-index: 3;
+        background: #f8f9fa;
+        background-clip: padding-box;
+        border-bottom: 1px solid #dee2e6;
+        box-shadow: 0 1px 0 rgba(0, 0, 0, .04);
+        white-space: nowrap;
+        vertical-align: middle;
+    }
+    @media (max-width: 767.98px) {
+        .purchase-sticky-scroll {
+            max-height: calc(100vh - 160px);
+        }
+    }
+</style>
 <div class="row">
     <div class="col-md-12">
         <div class="card">
@@ -22,8 +52,8 @@
                         <button type="button" class="btn btn-outline-warning btn-sm" onclick="loadPurchaseDemand()">刷新</button>
                     </div>
                     <div class="collapse" id="purchaseDemandCollapse">
-                        <div class="table-responsive">
-                            <table class="table table-sm table-hover mb-0">
+                        <div class="table-responsive purchase-sticky-scroll">
+                            <table class="table table-sm table-hover mb-0 purchase-sticky-table">
                                 <thead>
                                     <tr>
                                         <th>原材料</th>
@@ -46,8 +76,8 @@
                 <div class="mb-3">
                     <input type="text" id="searchPurchase" class="form-control" placeholder="搜索采购单号、物料名称或供应商...">
                 </div>
-                <div class="table-responsive">
-                    <table class="table table-striped table-hover" id="purchaseTable">
+                <div class="table-responsive purchase-sticky-scroll">
+                    <table class="table table-striped table-hover purchase-sticky-table" id="purchaseTable">
                         <thead>
                             <tr>
                                 <th>采购单号</th>
