@@ -473,13 +473,21 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	placeholderNo := fmt.Sprintf("TMP-%d", time.Now().UnixNano())
+	numberDate := time.Now()
+	if purchaseDate != nil {
+		numberDate = *purchaseDate
+	}
+	purchaseNo, err := models.NextPurchaseNoTx(tx, numberDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 	result, err := tx.Exec(`
         INSERT INTO purchase_orders
             (purchase_no, supplier, freight, purchase_date, expected_arrival_date,
              actual_arrival_date, payment_status, status, remark, payment_receipt)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, placeholderNo, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
+    `, purchaseNo, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
 		req.PaymentStatus, req.Status, req.Remark, receiptJSON)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -491,16 +499,6 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	orderID := int(orderID64)
-
-	datePart := time.Now().Format("20060102")
-	if purchaseDate != nil {
-		datePart = purchaseDate.Format("20060102")
-	}
-	purchaseNo := fmt.Sprintf("CG%s-%02d", datePart, orderID)
-	if _, err := tx.Exec("UPDATE purchase_orders SET purchase_no = ? WHERE id = ?", purchaseNo, orderID); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
 
 	userID := 0
 	if user := CurrentUser(r); user != nil {

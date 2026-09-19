@@ -55,6 +55,9 @@ func InitDB(dataSourceName string) {
 	if err = ensureOrderColumns(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureOrderSequencesTable(); err != nil {
+		log.Fatal(err)
+	}
 	if err = EnsureOrderBOMSnapshotTable(); err != nil {
 		log.Fatal(err)
 	}

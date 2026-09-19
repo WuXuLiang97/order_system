@@ -21,11 +21,14 @@ DROP TABLE IF EXISTS inventory_reservations;
 DROP TABLE IF EXISTS order_bom_snapshot;
 DROP TABLE IF EXISTS product_bom;
 DROP TABLE IF EXISTS order_items;
+DROP TABLE IF EXISTS order_sequences;
 DROP TABLE IF EXISTS orders;
 DROP TABLE IF EXISTS raw_materials;
 DROP TABLE IF EXISTS products;
 DROP TABLE IF EXISTS purchase_materials;
+DROP TABLE IF EXISTS purchase_order_sequences;
 DROP TABLE IF EXISTS purchase_orders;
+DROP TABLE IF EXISTS expense_sequences;
 DROP TABLE IF EXISTS expenses;
 
 -- =============================================
@@ -79,7 +82,15 @@ CREATE TABLE purchase_orders (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购单主表';
 
 -- =============================================
--- 4.6 创建采购物料明细表
+-- 4.6 创建采购单号按日序号表
+-- =============================================
+CREATE TABLE purchase_order_sequences (
+    purchase_date         DATE NOT NULL PRIMARY KEY COMMENT '采购日期',
+    current_no            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当天已使用的最大序号'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购单号按日序号表';
+
+-- =============================================
+-- 4.7 创建采购物料明细表
 -- =============================================
 CREATE TABLE purchase_materials (
     id                    INT AUTO_INCREMENT PRIMARY KEY COMMENT '采购物料明细ID',
@@ -108,7 +119,7 @@ CREATE TABLE purchase_materials (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购物料明细表';
 
 -- =============================================
--- 4.7 创建费用记录表
+-- 4.8 创建费用记录表
 -- =============================================
 CREATE TABLE expenses (
     id                       INT AUTO_INCREMENT PRIMARY KEY COMMENT '费用ID',
@@ -133,6 +144,15 @@ CREATE TABLE expenses (
     INDEX idx_expenses_category (category),
     INDEX idx_expenses_payment_status (payment_status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用记录表';
+
+-- =============================================
+-- 4.9 创建费用编号按日序号表
+-- =============================================
+CREATE TABLE expense_sequences (
+    expense_date  DATE NOT NULL PRIMARY KEY COMMENT '费用日期',
+    current_no    INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当天已使用的最大序号'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用编号按日序号表';
+
 -- =============================================
 -- 5. 创建订单主表
 -- =============================================
@@ -159,6 +179,14 @@ CREATE TABLE orders (
     remark          TEXT COMMENT '备注',
     created_at      DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单主表';
+
+-- =============================================
+-- 5.1 创建订单号按日序号表
+-- =============================================
+CREATE TABLE order_sequences (
+    order_date  DATE NOT NULL PRIMARY KEY COMMENT '下单日期',
+    current_no  INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当天已使用的最大序号'
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单号按日序号表';
 
 -- =============================================
 -- 6. 创建订单明细表

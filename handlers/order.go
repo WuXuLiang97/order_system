@@ -146,8 +146,16 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		total += price * float64(item.Quantity)
 	}
 
-	// 生成订单号
-	orderNo := "ORD" + time.Now().Format("20060102150405")
+	// 生成“YKL + 下单日期 + 4位当天序号”的订单号。
+	numberDate, ok := orderDate.(time.Time)
+	if !ok {
+		numberDate = time.Now()
+	}
+	orderNo, err := models.NextOrderNoTx(tx, numberDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
 
 	preparedBy := strings.TrimSpace(req.PreparedBy)
 	if preparedBy == "" {

@@ -159,6 +159,14 @@ func EnsurePurchaseOrdersTable() error {
 	if err != nil {
 		return err
 	}
+	if _, err := DB.Exec(`
+        CREATE TABLE IF NOT EXISTS purchase_order_sequences (
+            purchase_date         DATE NOT NULL PRIMARY KEY COMMENT '采购日期',
+            current_no            INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当天已使用的最大序号'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='采购单号按日序号表'
+    `); err != nil {
+		return err
+	}
 	return migrateLegacyPurchaseMaterials()
 }
 
@@ -225,11 +233,14 @@ func migrateLegacyPurchaseMaterials() error {
 	defer tx.Rollback()
 
 	for _, item := range legacy {
-		datePart := item.CreatedAt.Format("20060102")
+		numberDate := item.CreatedAt
 		if item.PurchaseDate.Valid {
-			datePart = item.PurchaseDate.Time.Format("20060102")
+			numberDate = item.PurchaseDate.Time
 		}
-		purchaseNo := fmt.Sprintf("CG%s-%02d", datePart, item.ID)
+		purchaseNo, err := NextPurchaseNoTx(tx, numberDate)
+		if err != nil {
+			return err
+		}
 		result, err := tx.Exec(`
             INSERT INTO purchase_orders
                 (purchase_no, supplier, freight, purchase_date, expected_arrival_date,
@@ -256,6 +267,63 @@ func nullableTime(value sql.NullTime) interface{} {
 		return nil
 	}
 	return value.Time
+}
+
+const (
+	purchaseNoPrefix           = "CG"
+	purchaseNoMaxDailySequence = 9999
+)
+
+// NextPurchaseNoTx 按采购日期生成“CG+YYYYMMDD+4位当天序号”，例如 CG202609190001。
+// 序号表行锁保证同一日期并发新增时不会生成重复单号，并会兼容已有无前缀单号。
+func NextPurchaseNoTx(tx *sql.Tx, purchaseDate time.Time) (string, error) {
+	datePart := purchaseDate.Format("20060102")
+	if _, err := tx.Exec(`
+        INSERT INTO purchase_order_sequences (purchase_date, current_no)
+        VALUES (?, 0)
+        ON DUPLICATE KEY UPDATE current_no = current_no
+    `, purchaseDate); err != nil {
+		return "", err
+	}
+
+	var currentNo int
+	if err := tx.QueryRow(`
+        SELECT current_no
+        FROM purchase_order_sequences
+        WHERE purchase_date = ?
+        FOR UPDATE
+    `, purchaseDate).Scan(&currentNo); err != nil {
+		return "", err
+	}
+
+	var existingMax int
+	if err := tx.QueryRow(`
+        SELECT COALESCE(MAX(CAST(RIGHT(purchase_no, 4) AS UNSIGNED)), 0)
+        FROM purchase_orders
+        WHERE (
+                (CHAR_LENGTH(purchase_no) = 14 AND purchase_no REGEXP '^CG[0-9]{12}$')
+             OR (CHAR_LENGTH(purchase_no) = 12 AND purchase_no REGEXP '^[0-9]{12}$')
+            )
+          AND SUBSTRING(purchase_no, IF(LEFT(purchase_no, 2) = 'CG', 3, 1), 8) = ?
+    `, datePart).Scan(&existingMax); err != nil {
+		return "", err
+	}
+	if existingMax > currentNo {
+		currentNo = existingMax
+	}
+	if currentNo >= purchaseNoMaxDailySequence {
+		return "", fmt.Errorf("当天采购单号已用完（最多%d单）", purchaseNoMaxDailySequence)
+	}
+
+	nextNo := currentNo + 1
+	if _, err := tx.Exec(`
+        UPDATE purchase_order_sequences
+        SET current_no = ?
+        WHERE purchase_date = ?
+    `, nextNo, purchaseDate); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s%s%04d", purchaseNoPrefix, datePart, nextNo), nil
 }
 
 // ensurePaymentReceiptColumnText 兼容旧版本：将支付水单字段从 VARCHAR 升级为 TEXT。

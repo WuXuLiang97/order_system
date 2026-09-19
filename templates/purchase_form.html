@@ -440,6 +440,7 @@ function loadPurchaseForEdit(id) {
             $('#purchaseDate').val(purchaseDateOnly(data.purchase_date));
             $('#expectedArrivalDate').val(purchaseDateOnly(data.expected_arrival_date));
             $('#actualArrivalDate').val(purchaseDateOnly(data.actual_arrival_date));
+            if (window.CustomDatePicker) window.CustomDatePicker.refreshAll();
             $('#paymentStatus').val(data.payment_status || '未付款');
             $('#purchaseStatus').val(String(data.status == null ? 0 : data.status));
             $('#freight').val(data.freight || 0);
@@ -474,6 +475,7 @@ $(document).ready(function () {
         loadPurchaseForEdit(EntityEditor.entityID('id'));
     } else {
         $('#purchaseDate').val(purchaseToday());
+        if (window.CustomDatePicker) window.CustomDatePicker.refreshAll();
         addPurchaseItem();
         recalcPurchaseSummary();
         EntityEditor.markClean();

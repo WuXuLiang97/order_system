@@ -58,6 +58,14 @@ func EnsureExpensesTable() error {
 	if err != nil {
 		return err
 	}
+	if _, err := DB.Exec(`
+        CREATE TABLE IF NOT EXISTS expense_sequences (
+            expense_date  DATE NOT NULL PRIMARY KEY COMMENT '费用日期',
+            current_no    INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当天已使用的最大序号'
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='费用编号按日序号表'
+    `); err != nil {
+		return err
+	}
 	if err := ensureIndex("expenses", "idx_expenses_date", "expense_date"); err != nil {
 		return err
 	}
@@ -178,14 +186,20 @@ func CreateExpense(expense *Expense) (int64, error) {
 	}
 	defer tx.Rollback()
 
-	placeholderNo := fmt.Sprintf("TMP-%d", time.Now().UnixNano())
+	expenseNo := expense.ExpenseNo
+	if expenseNo == "" {
+		expenseNo, err = NextExpenseNoTx(tx, expense.ExpenseDate)
+		if err != nil {
+			return 0, err
+		}
+	}
 	result, err := tx.Exec(`
         INSERT INTO expenses
             (expense_no, expense_date, expense_month, category, amount, tax_amount,
              amount_excluding_tax, counterparty_type, counterparty_name, payment_status,
              payment_method, vouchers, remark, created_by_user_id)
         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, placeholderNo, expense.ExpenseDate, expense.ExpenseMonth, expense.Category, expense.Amount,
+    `, expenseNo, expense.ExpenseDate, expense.ExpenseMonth, expense.Category, expense.Amount,
 		expense.TaxAmount, expense.AmountExcludingTax, expense.CounterpartyType, expense.CounterpartyName,
 		expense.PaymentStatus, expense.PaymentMethod, vouchersJSON, expense.Remark, expense.CreatedByUserID)
 	if err != nil {
@@ -196,17 +210,69 @@ func CreateExpense(expense *Expense) (int64, error) {
 		return 0, err
 	}
 
-	if expense.ExpenseNo == "" {
-		expense.ExpenseNo = fmt.Sprintf("FY%s-%02d", expense.ExpenseDate.Format("20060102"), id)
-	}
-	if _, err := tx.Exec("UPDATE expenses SET expense_no = ? WHERE id = ?", expense.ExpenseNo, id); err != nil {
-		return 0, err
-	}
 	if err := tx.Commit(); err != nil {
 		return 0, err
 	}
 	expense.ID = int(id)
+	expense.ExpenseNo = expenseNo
 	return id, nil
+}
+
+const (
+	expenseNoPrefix           = "FY"
+	expenseNoMaxDailySequence = 9999
+)
+
+// NextExpenseNoTx 按费用日期生成“FY+YYYYMMDD+4位当天序号”，例如 FY202609190001。
+// 序号表行锁保证同一日期并发新增时不会生成重复编号，并会兼容已有无前缀编号。
+func NextExpenseNoTx(tx *sql.Tx, expenseDate time.Time) (string, error) {
+	datePart := expenseDate.Format("20060102")
+	if _, err := tx.Exec(`
+        INSERT INTO expense_sequences (expense_date, current_no)
+        VALUES (?, 0)
+        ON DUPLICATE KEY UPDATE current_no = current_no
+    `, expenseDate); err != nil {
+		return "", err
+	}
+
+	var currentNo int
+	if err := tx.QueryRow(`
+        SELECT current_no
+        FROM expense_sequences
+        WHERE expense_date = ?
+        FOR UPDATE
+    `, expenseDate).Scan(&currentNo); err != nil {
+		return "", err
+	}
+
+	var existingMax int
+	if err := tx.QueryRow(`
+        SELECT COALESCE(MAX(CAST(RIGHT(expense_no, 4) AS UNSIGNED)), 0)
+        FROM expenses
+        WHERE (
+                (CHAR_LENGTH(expense_no) = 14 AND expense_no REGEXP '^FY[0-9]{12}$')
+             OR (CHAR_LENGTH(expense_no) = 12 AND expense_no REGEXP '^[0-9]{12}$')
+            )
+          AND SUBSTRING(expense_no, IF(LEFT(expense_no, 2) = 'FY', 3, 1), 8) = ?
+    `, datePart).Scan(&existingMax); err != nil {
+		return "", err
+	}
+	if existingMax > currentNo {
+		currentNo = existingMax
+	}
+	if currentNo >= expenseNoMaxDailySequence {
+		return "", fmt.Errorf("当天费用编号已用完（最多%d条）", expenseNoMaxDailySequence)
+	}
+
+	nextNo := currentNo + 1
+	if _, err := tx.Exec(`
+        UPDATE expense_sequences
+        SET current_no = ?
+        WHERE expense_date = ?
+    `, nextNo, expenseDate); err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%s%s%04d", expenseNoPrefix, datePart, nextNo), nil
 }
 
 // UpdateExpense 更新费用记录。

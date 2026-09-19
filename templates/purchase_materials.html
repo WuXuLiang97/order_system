@@ -80,8 +80,8 @@
                     <table class="table table-striped table-hover purchase-sticky-table" id="purchaseTable">
                         <thead>
                             <tr>
-                                <th>采购单号</th>
                                 <th>采购日期</th>
+                                <th>采购单号</th>
                                 <th>物料数</th>
                                 <th>采购数量</th>
                                 <th>采购金额</th>
@@ -355,13 +355,13 @@ function loadPurchaseMaterials() {
 
                 var mainRow = `
                     <tr class="purchase-main-row" data-order-id="${order.id}">
+                        <td>${formatDate(order.purchase_date)}</td>
                         <td class="text-nowrap">
                             <button type="button" class="btn btn-sm btn-outline-secondary me-1 purchase-detail-toggle" data-order-id="${order.id}" onclick="togglePurchaseDetails(${order.id})" aria-expanded="false">
                                 <i class="bi bi-chevron-right"></i>
                             </button>
                             <strong>${escapePurchaseHtml(order.purchase_no || '-')}</strong>
                         </td>
-                        <td>${formatDate(order.purchase_date)}</td>
                         <td>${parseInt(order.item_count || items.length, 10)} 项</td>
                         <td><strong>${parseFloat(order.total_quantity || 0)}</strong></td>
                         <td>¥${parseFloat(order.total_amount || 0).toFixed(2)}</td>

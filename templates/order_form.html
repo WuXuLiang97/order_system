@@ -969,6 +969,7 @@ function loadOrderForEdit(id) {
             $('#orderDate').val(orderDateOnly(order.order_date));
             $('#expectedShippingDate').val(orderDateOnly(order.expected_shipping_date));
             $('#customerRequiredDate').val(orderDateOnly(order.customer_required_date));
+            if (window.CustomDatePicker) window.CustomDatePicker.refreshAll();
             $('#logisticsDays').val(order.logistics_days || 0);
             $('#preparedBy').val(order.prepared_by || currentUserName());
             setOrderOwner(order.owner_user_id, order.owner_name);
@@ -1087,6 +1088,7 @@ $(document).ready(function () {
         addOrderItem();
         var today = new Date();
         $('#orderDate').val(today.getFullYear() + '-' + String(today.getMonth() + 1).padStart(2, '0') + '-' + String(today.getDate()).padStart(2, '0'));
+        if (window.CustomDatePicker) window.CustomDatePicker.refreshAll();
         $('#preparedBy').val(currentUserName());
         setOrderCustomField('paymentSettlement', 'paymentSettlementCustom', '现付', ['现付']);
         setOrderCustomField('freightPayment', 'freightPaymentCustom', '现付', ['现付']);
