@@ -355,7 +355,7 @@ function loadPurchaseMaterials() {
 
                 var mainRow = `
                     <tr class="purchase-main-row" data-order-id="${order.id}">
-                        <td>${formatDate(order.purchase_date)}</td>
+                        <td class="text-nowrap">${formatDate(order.purchase_date)}</td>
                         <td class="text-nowrap">
                             <button type="button" class="btn btn-sm btn-outline-secondary me-1 purchase-detail-toggle" data-order-id="${order.id}" onclick="togglePurchaseDetails(${order.id})" aria-expanded="false">
                                 <i class="bi bi-chevron-right"></i>
@@ -367,8 +367,8 @@ function loadPurchaseMaterials() {
                         <td>¥${parseFloat(order.total_amount || 0).toFixed(2)}</td>
                         <td>¥${parseFloat(order.freight || 0).toFixed(2)}</td>
                         <td>${escapePurchaseHtml(order.supplier || '-')}</td>
-                        <td>${formatDate(order.expected_arrival_date)}</td>
-                        <td>${formatDate(order.actual_arrival_date)}</td>
+                        <td class="text-nowrap">${formatDate(order.expected_arrival_date)}</td>
+                        <td class="text-nowrap">${formatDate(order.actual_arrival_date)}</td>
                         <td>${payment}</td>
                         <td>${status}</td>
                         <td class="text-nowrap">${receiptCell(order.payment_receipts)}</td>
