@@ -9,17 +9,12 @@
 
 <div id="editorNotice"></div>
 
-<div class="editor-layout">
-    <aside class="editor-nav">
-        <div class="small text-muted px-2 pt-1 pb-2">采购单分区</div>
-        <nav class="nav flex-column">
-            <a class="nav-link active" href="#purchase-basic" data-editor-section="#purchase-basic"><i class="bi bi-shop"></i> 供应商与日期</a>
-            <a class="nav-link" href="#purchase-payment" data-editor-section="#purchase-payment"><i class="bi bi-credit-card"></i> 付款与到货</a>
-            <a class="nav-link" href="#purchase-items" data-editor-section="#purchase-items"><i class="bi bi-boxes"></i> 采购物料</a>
-            <a class="nav-link" href="#purchase-notes" data-editor-section="#purchase-notes"><i class="bi bi-chat-left-text"></i> 备注与凭证</a>
-        </nav>
-    </aside>
-
+<style>
+.purchase-editor-layout {
+    grid-template-columns: minmax(0, 1fr);
+}
+</style>
+<div class="editor-layout purchase-editor-layout">
     <main>
         <form id="purchaseEditorForm" novalidate>
             <input type="hidden" id="purchaseId" value="0">
@@ -35,7 +30,7 @@
                             <label class="form-label">采购单号</label>
                             <input type="text" class="form-control" id="purchaseNo" readonly>
                         </div>
-                        <div class="col-md-8 mb-3">
+                        <div class="col-md-12 mb-3">
                             <label class="form-label">供应商</label>
                             <input type="text" class="form-control" id="supplier" placeholder="输入供应商名称">
                         </div>

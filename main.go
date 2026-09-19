@@ -52,6 +52,7 @@ func main() {
 	http.HandleFunc("/purchase-materials", handlers.RequirePermission(handlers.PermPurchaseView, page("templates/layout.html", "templates/purchase_materials.html")))
 	http.HandleFunc("/purchase-materials/form", handlers.RequirePermission(handlers.PermPurchaseManage, page("templates/layout.html", "templates/purchase_form.html")))
 	http.HandleFunc("/expenses", handlers.RequirePermission(handlers.PermExpenseView, page("templates/layout.html", "templates/expenses.html")))
+	http.HandleFunc("/expenses/form", handlers.RequirePermission(handlers.PermExpenseManage, page("templates/layout.html", "templates/expense_form.html")))
 	http.HandleFunc("/customers", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customers.html")))
 	http.HandleFunc("/customers/form", handlers.RequirePermission(handlers.PermCustomerManage, page("templates/layout.html", "templates/customer_form.html")))
 	http.HandleFunc("/customers/detail", handlers.RequirePermission(handlers.PermCustomerView, page("templates/layout.html", "templates/customer_detail.html")))

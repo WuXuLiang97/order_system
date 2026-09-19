@@ -262,6 +262,9 @@
             margin-bottom: .55rem !important;
         }
     }
+    .order-editor-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
 </style>
 <div class="editor-page-header">
     <div>
@@ -273,16 +276,7 @@
 
 <div id="editorNotice"></div>
 
-<div class="editor-layout">
-    <aside class="editor-nav">
-        <div class="small text-muted px-2 pt-1 pb-2">订单分区</div>
-        <nav class="nav flex-column">
-            <a class="nav-link active" href="#order-customer" data-editor-section="#order-customer"><i class="bi bi-person"></i> 客户与日期</a>
-            <a class="nav-link" href="#order-logistics" data-editor-section="#order-logistics"><i class="bi bi-truck"></i> 物流与结算</a>
-            <a class="nav-link" href="#order-products" data-editor-section="#order-products"><i class="bi bi-box-seam"></i> 产品明细</a>
-            <a class="nav-link" href="#order-notes" data-editor-section="#order-notes"><i class="bi bi-chat-left-text"></i> 备注与唛头</a>
-        </nav>
-    </aside>
+<div class="editor-layout order-editor-layout">
 
     <main>
         <form id="orderEditorForm" novalidate>

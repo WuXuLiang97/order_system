@@ -9,15 +9,12 @@
 
 <div id="editorNotice"></div>
 
-<div class="editor-layout">
-    <aside class="editor-nav">
-        <div class="small text-muted px-2 pt-1 pb-2">产品分区</div>
-        <nav class="nav flex-column">
-            <a class="nav-link active" href="#product-basic" data-editor-section="#product-basic"><i class="bi bi-info-circle"></i> 基础信息</a>
-            <a class="nav-link" href="#product-stock" data-editor-section="#product-stock"><i class="bi bi-bar-chart"></i> 库存与价格</a>
-            <a class="nav-link" href="#product-bom" data-editor-section="#product-bom"><i class="bi bi-diagram-3"></i> BOM 清单</a>
-        </nav>
-    </aside>
+<style>
+    .product-editor-layout {
+        grid-template-columns: minmax(0, 1fr);
+    }
+</style>
+<div class="editor-layout product-editor-layout">
 
     <main>
         <form id="productEditorForm" novalidate>
@@ -30,19 +27,19 @@
                 </div>
                 <div class="editor-section-body">
                     <div class="row">
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">产品名称 <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="productName" required>
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">规格型号</label>
                             <input type="text" class="form-control" id="productSpec">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">单位</label>
                             <input type="text" class="form-control" id="productUnit" value="个">
                         </div>
-                        <div class="col-md-6 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label">包装</label>
                             <select class="form-select" id="productPackaging">
                                 <option value="">未设置</option>
