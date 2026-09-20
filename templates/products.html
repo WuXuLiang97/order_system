@@ -76,6 +76,7 @@
                                 <th>客户名称</th>
                                 <th>型号数</th>
                                 <th>总数量</th>
+                                <th>物流信息</th>
                                 <th>操作人</th>
                                 <th>操作</th>
                             </tr>
@@ -134,6 +135,41 @@
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
                 <button type="button" class="btn btn-warning" onclick="submitOutbound()">保存出库并打印</button>
+            </div>
+        </div>
+    </div>
+</div>
+<!-- 送货单物流信息补录模态框 -->
+<div class="modal fade" id="logisticsModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title"><i class="bi bi-truck"></i> 补录送货单物流信息</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="logisticsOutboundId">
+                <div class="alert alert-info py-2">
+                    物流信息仅归属当前送货单。同一订单有多张送货单时，请分别补录。
+                    <div class="mt-1">送货单号：<strong id="logisticsOutboundNo">-</strong></div>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">物流公司</label>
+                    <input type="text" class="form-control" id="logisticsCompany" maxlength="100" placeholder="如：顺丰、德邦、专线名称">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">物流单号 / 快递单号</label>
+                    <input type="text" class="form-control" id="logisticsTrackingNo" maxlength="100" placeholder="请输入运单号">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">物流备注</label>
+                    <textarea class="form-control" id="logisticsRemark" rows="3" maxlength="500" placeholder="如：预计到货时间、送货车辆、异常说明"></textarea>
+                </div>
+                <div class="small text-muted d-none" id="logisticsUpdatedInfo"></div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" class="btn btn-warning" onclick="submitLogistics()">保存物流信息</button>
             </div>
         </div>
     </div>
@@ -380,6 +416,7 @@ function submitProduction() {
 // 成品出库 / 送货单
 // ============================
 var outboundProducts = [];
+var outboundRowsById = {};
 var outboundOrderID = 0;
 
 function qtyText(n) {
@@ -669,33 +706,102 @@ function loadOutbounds() {
         success: function(data) {
             var tbody = $('#outboundTableBody');
             tbody.empty();
+            outboundRowsById = {};
             if (!data || !data.length) {
-                tbody.append('<tr><td colspan="9" class="text-center text-muted">暂无出库记录</td></tr>');
+                tbody.append('<tr><td colspan="10" class="text-center text-muted">暂无出库记录</td></tr>');
                 return;
             }
             data.forEach(function(o) {
-                var actions = `<a class="btn btn-outline-primary btn-sm me-1" href="/outbound/detail?id=${o.id}" target="_blank"><i class="bi bi-printer"></i> 打印送货单</a>`;
+                outboundRowsById[o.id] = o;
+                var actions = '<a class="btn btn-outline-primary btn-sm me-1" href="/outbound/detail?id=' + o.id + '" target="_blank"><i class="bi bi-printer"></i> 打印送货单</a>';
                 if (window.PERMS && window.PERMS['product:manage']) {
-                    actions += `<button class="btn btn-danger btn-sm" onclick="deleteOutbound(${o.id})"><i class="bi bi-trash"></i> 删除</button>`;
+                    var logisticsActionText = (o.logistics_company || o.tracking_no || o.logistics_remark) ? '修正物流' : '补录物流';
+                    actions += '<button class="btn btn-outline-success btn-sm me-1" onclick="openLogisticsModal(' + o.id + ')"><i class="bi bi-truck"></i> ' + logisticsActionText + '</button>';
+                    actions += '<button class="btn btn-danger btn-sm" onclick="deleteOutbound(' + o.id + ')"><i class="bi bi-trash"></i> 删除</button>';
                 }
                 var orderCell = o.order_id
-                    ? `<a href="/order/detail?id=${o.order_id}" target="_blank">${escapeOut(o.order_no || ('#' + o.order_id))}</a>`
+                    ? '<a href="/order/detail?id=' + o.order_id + '" target="_blank">' + escapeOut(o.order_no || ('#' + o.order_id)) + '</a>'
                     : '-';
-                tbody.append(`<tr>
-                    <td><span class="badge bg-dark">${escapeOut(o.outbound_no)}</span></td>
-                    <td>${orderCell}</td>
-                    <td>${o.out_date ? String(o.out_date).slice(0, 10) : '-'}</td>
-                    <td><span class="badge ${o.settlement_method === '到付' ? 'bg-warning text-dark' : 'bg-success'}">${escapeOut(o.settlement_method || '现金')}</span></td>
-                    <td>${o.receiver ? escapeOut(o.receiver) : '-'}</td>
-                    <td>${o.item_count || 0} 项</td>
-                    <td><strong>${qtyText(o.total_quantity)}</strong></td>
-                    <td>${escapeOut(o.created_by_name || '-')}</td>
-                    <td class="text-nowrap">${actions}</td>
-                </tr>`);
+                var logisticsCell = '<span class="text-muted">未补录</span>';
+                if (o.logistics_company || o.tracking_no || o.logistics_remark) {
+                    logisticsCell = '';
+                    if (o.logistics_company) {
+                        logisticsCell += '<div><strong>' + escapeOut(o.logistics_company) + '</strong></div>';
+                    }
+                    if (o.tracking_no) {
+                        logisticsCell += '<div><code>' + escapeOut(o.tracking_no) + '</code></div>';
+                    }
+                    if (o.logistics_remark) {
+                        logisticsCell += '<div class="small text-muted">' + escapeOut(o.logistics_remark) + '</div>';
+                    }
+                }
+                tbody.append('<tr>' +
+                    '<td><span class="badge bg-dark">' + escapeOut(o.outbound_no) + '</span></td>' +
+                    '<td>' + orderCell + '</td>' +
+                    '<td>' + (o.out_date ? String(o.out_date).slice(0, 10) : '-') + '</td>' +
+                    '<td><span class="badge ' + (o.settlement_method === '到付' ? 'bg-warning text-dark' : 'bg-success') + '">' + escapeOut(o.settlement_method || '现金') + '</span></td>' +
+                    '<td>' + (o.receiver ? escapeOut(o.receiver) : '-') + '</td>' +
+                    '<td>' + (o.item_count || 0) + ' 项</td>' +
+                    '<td><strong>' + qtyText(o.total_quantity) + '</strong></td>' +
+                    '<td>' + logisticsCell + '</td>' +
+                    '<td>' + escapeOut(o.created_by_name || '-') + '</td>' +
+                    '<td class="text-nowrap">' + actions + '</td>' +
+                '</tr>');
             });
         },
         error: function(xhr) {
             alert('加载出库记录失败: ' + xhr.responseText);
+        }
+    });
+}
+
+function openLogisticsModal(id) {
+    var outbound = outboundRowsById[id];
+    if (!outbound) {
+        alert('未找到送货单信息，请刷新列表后重试');
+        return;
+    }
+    $('#logisticsOutboundId').val(id);
+    $('#logisticsOutboundNo').text(outbound.outbound_no || ('#' + id));
+    $('#logisticsCompany').val(outbound.logistics_company || '');
+    $('#logisticsTrackingNo').val(outbound.tracking_no || '');
+    $('#logisticsRemark').val(outbound.logistics_remark || '');
+    var updatedInfo = $('#logisticsUpdatedInfo');
+    if (outbound.logistics_updated_at) {
+        var updatedAt = String(outbound.logistics_updated_at).slice(0, 16).replace('T', ' ');
+        var updatedBy = outbound.logistics_updated_by_name || '未知用户';
+        updatedInfo.removeClass('d-none').text('最近补录：' + updatedAt + '，操作人：' + updatedBy);
+    } else {
+        updatedInfo.addClass('d-none').text('');
+    }
+    $('#logisticsModal').modal('show');
+}
+
+function submitLogistics() {
+    var id = parseInt($('#logisticsOutboundId').val(), 10) || 0;
+    if (!id) {
+        alert('送货单 ID 不正确');
+        return;
+    }
+    $.ajax({
+        url: '/api/outbounds/logistics',
+        method: 'POST',
+        contentType: 'application/json',
+        data: JSON.stringify({
+            id: id,
+            logistics_company: $('#logisticsCompany').val().trim(),
+            tracking_no: $('#logisticsTrackingNo').val().trim(),
+            logistics_remark: $('#logisticsRemark').val().trim()
+        }),
+        success: function(res) {
+            alert(res.message || '物流信息已保存');
+            $('#logisticsModal').modal('hide');
+            loadOutbounds();
+        },
+        error: function(xhr) {
+            var msg = xhr.responseText;
+            try { var j = JSON.parse(xhr.responseText); if (j.error) msg = j.error; } catch (e) {}
+            alert('保存物流信息失败: ' + msg);
         }
     });
 }

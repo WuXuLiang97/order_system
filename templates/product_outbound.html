@@ -112,6 +112,17 @@
             </tbody>
         </table>
 
+        {{if or .Outbound.LogisticsCompany .Outbound.TrackingNo .Outbound.LogisticsRemark}}
+        <div class="remark-box">
+            <strong>🚚 物流信息：</strong>
+            <div class="remark-content">
+                {{if .Outbound.LogisticsCompany}}<div>物流公司：{{.Outbound.LogisticsCompany}}</div>{{end}}
+                {{if .Outbound.TrackingNo}}<div>物流单号：{{.Outbound.TrackingNo}}</div>{{end}}
+                {{if .Outbound.LogisticsRemark}}<div>物流备注：{{.Outbound.LogisticsRemark}}</div>{{end}}
+            </div>
+        </div>
+        {{end}}
+
         {{if .Outbound.Remark}}
         <div class="remark-box">
             <strong>📝 备注：</strong>

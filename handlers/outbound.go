@@ -12,6 +12,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 type outboundItemReq struct {
@@ -27,6 +28,13 @@ type outboundCreateReq struct {
 	OrderID          int               `json:"order_id"`
 	Remark           string            `json:"remark"`
 	Items            []outboundItemReq `json:"items"`
+}
+
+type outboundLogisticsReq struct {
+	ID               int    `json:"id"`
+	LogisticsCompany string `json:"logistics_company"`
+	TrackingNo       string `json:"tracking_no"`
+	LogisticsRemark  string `json:"logistics_remark"`
 }
 
 type outboundItemSnapshot struct {
@@ -404,6 +412,74 @@ func ListProductOutboundsByOrder(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(list)
 }
 
+// UpdateProductOutboundLogistics 为单张送货单补录或修正物流信息。
+// 物流信息始终挂在送货单上，同一订单的多张送货单互不影响。
+func UpdateProductOutboundLogistics(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
+	var req outboundLogisticsReq
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSONError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+	if req.ID <= 0 {
+		writeJSONError(w, http.StatusBadRequest, "送货单 ID 不正确")
+		return
+	}
+
+	req.LogisticsCompany = strings.TrimSpace(req.LogisticsCompany)
+	req.TrackingNo = strings.TrimSpace(req.TrackingNo)
+	req.LogisticsRemark = strings.TrimSpace(req.LogisticsRemark)
+	if utf8.RuneCountInString(req.LogisticsCompany) > 100 {
+		writeJSONError(w, http.StatusBadRequest, "物流公司不能超过 100 个字符")
+		return
+	}
+	if utf8.RuneCountInString(req.TrackingNo) > 100 {
+		writeJSONError(w, http.StatusBadRequest, "物流单号不能超过 100 个字符")
+		return
+	}
+	if utf8.RuneCountInString(req.LogisticsRemark) > 500 {
+		writeJSONError(w, http.StatusBadRequest, "物流备注不能超过 500 个字符")
+		return
+	}
+
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	var exists int
+	if err := models.DB.QueryRow("SELECT COUNT(*) FROM product_outbound WHERE id = ?", req.ID).Scan(&exists); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+	if exists == 0 {
+		writeJSONError(w, http.StatusNotFound, "送货单不存在")
+		return
+	}
+
+	if _, err := models.DB.Exec(`
+        UPDATE product_outbound
+        SET logistics_company = ?,
+            tracking_no = ?,
+            logistics_remark = ?,
+            logistics_updated_at = NOW(),
+            logistics_updated_by_user_id = ?
+        WHERE id = ?
+    `, req.LogisticsCompany, req.TrackingNo, req.LogisticsRemark, userID, req.ID); err != nil {
+		writeJSONError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
+	message := "物流信息已补录"
+	if req.LogisticsCompany == "" && req.TrackingNo == "" && req.LogisticsRemark == "" {
+		message = "物流信息已清空"
+	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(map[string]string{"message": message})
+}
+
 // DeleteProductOutbound 删除出库记录并回补库存，同时重新计算订单发货状态。
 func DeleteProductOutbound(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodDelete && r.Method != http.MethodPost {
@@ -533,14 +609,17 @@ func ProductOutboundPrintPage(w http.ResponseWriter, r *http.Request) {
 	err = models.DB.QueryRow(`
         SELECT o.id, o.outbound_no, o.out_date, o.receiver,
                COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
-               o.order_id, o.order_no, o.remark, o.created_by_user_id,
+               o.order_id, o.order_no, o.remark,
+               o.logistics_company, o.tracking_no, o.logistics_remark,
+               o.created_by_user_id,
                COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at
         FROM product_outbound o
         LEFT JOIN users u ON u.id = o.created_by_user_id
         WHERE o.id = ?`, id).
 		Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod,
-			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt)
+			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.LogisticsCompany, &ob.TrackingNo, &ob.LogisticsRemark,
+			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt)
 	if err != nil {
 		http.Error(w, "出库记录不存在", http.StatusNotFound)
 		return

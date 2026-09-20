@@ -8,19 +8,25 @@ import (
 // ============ 成品出库（送货单） ============
 
 type ProductOutbound struct {
-	ID               int       `json:"id"`
-	OutboundNo       string    `json:"outbound_no"`
-	OutDate          time.Time `json:"out_date"`
-	Receiver         string    `json:"receiver"`
-	SettlementMethod string    `json:"settlement_method"`
-	OrderID          int       `json:"order_id"`
-	OrderNo          string    `json:"order_no"`
-	Remark           string    `json:"remark"`
-	CreatedByUserID  int       `json:"created_by_user_id"`
-	CreatedByName    string    `json:"created_by_name"`
-	TotalQuantity    float64   `json:"total_quantity"`
-	ItemCount        int       `json:"item_count"`
-	CreatedAt        time.Time `json:"created_at"`
+	ID                     int        `json:"id"`
+	OutboundNo             string     `json:"outbound_no"`
+	OutDate                time.Time  `json:"out_date"`
+	Receiver               string     `json:"receiver"`
+	SettlementMethod       string     `json:"settlement_method"`
+	OrderID                int        `json:"order_id"`
+	OrderNo                string     `json:"order_no"`
+	Remark                 string     `json:"remark"`
+	LogisticsCompany       string     `json:"logistics_company"`
+	TrackingNo             string     `json:"tracking_no"`
+	LogisticsRemark        string     `json:"logistics_remark"`
+	LogisticsUpdatedAt     *time.Time `json:"logistics_updated_at"`
+	LogisticsUpdatedByID   int        `json:"logistics_updated_by_id"`
+	LogisticsUpdatedByName string     `json:"logistics_updated_by_name"`
+	CreatedByUserID        int        `json:"created_by_user_id"`
+	CreatedByName          string     `json:"created_by_name"`
+	TotalQuantity          float64    `json:"total_quantity"`
+	ItemCount              int        `json:"item_count"`
+	CreatedAt              time.Time  `json:"created_at"`
 }
 
 type ProductOutboundItem struct {
@@ -47,6 +53,11 @@ func EnsureProductOutboundTables() error {
             order_id           INT NOT NULL DEFAULT 0 COMMENT '关联订单ID',
             order_no           VARCHAR(32) NOT NULL DEFAULT '' COMMENT '订单号快照',
             remark             VARCHAR(500) NOT NULL DEFAULT '' COMMENT '备注',
+            logistics_company  VARCHAR(100) NOT NULL DEFAULT '' COMMENT '物流公司',
+            tracking_no        VARCHAR(100) NOT NULL DEFAULT '' COMMENT '物流单号/快递单号',
+            logistics_remark   VARCHAR(500) NOT NULL DEFAULT '' COMMENT '物流备注',
+            logistics_updated_at DATETIME NULL COMMENT '物流补录时间',
+            logistics_updated_by_user_id INT NOT NULL DEFAULT 0 COMMENT '物流补录人用户ID',
             created_by_user_id INT NOT NULL DEFAULT 0 COMMENT '操作人用户ID',
             created_at         DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
             KEY idx_outbound_no (outbound_no),
@@ -64,7 +75,25 @@ func EnsureProductOutboundTables() error {
 	if err := ensureColumn("product_outbound", "order_no", "VARCHAR(32) NOT NULL DEFAULT '' COMMENT '订单号快照'"); err != nil {
 		return err
 	}
+	if err := ensureColumn("product_outbound", "logistics_company", "VARCHAR(100) NOT NULL DEFAULT '' COMMENT '物流公司'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("product_outbound", "tracking_no", "VARCHAR(100) NOT NULL DEFAULT '' COMMENT '物流单号/快递单号'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("product_outbound", "logistics_remark", "VARCHAR(500) NOT NULL DEFAULT '' COMMENT '物流备注'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("product_outbound", "logistics_updated_at", "DATETIME NULL COMMENT '物流补录时间'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("product_outbound", "logistics_updated_by_user_id", "INT NOT NULL DEFAULT 0 COMMENT '物流补录人用户ID'"); err != nil {
+		return err
+	}
 	if err := ensureIndex("product_outbound", "idx_outbound_order_id", "order_id"); err != nil {
+		return err
+	}
+	if err := ensureIndex("product_outbound", "idx_outbound_tracking_no", "tracking_no"); err != nil {
 		return err
 	}
 
@@ -99,14 +128,21 @@ func ListProductOutbounds(limit int) ([]ProductOutbound, error) {
 	rows, err := DB.Query(`
         SELECT o.id, o.outbound_no, o.out_date, o.receiver,
                COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
-               o.order_id, o.order_no, o.remark, o.created_by_user_id,
+               o.order_id, o.order_no, o.remark,
+               o.logistics_company, o.tracking_no, o.logistics_remark,
+               o.logistics_updated_at, o.logistics_updated_by_user_id,
+               COALESCE(NULLIF(lu.display_name, ''), lu.username, '') AS logistics_updated_by_name,
+               o.created_by_user_id,
                COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at, COALESCE(SUM(i.quantity), 0) AS total_quantity, COUNT(i.id) AS item_count
         FROM product_outbound o
         LEFT JOIN product_outbound_items i ON i.outbound_id = o.id
         LEFT JOIN users u ON u.id = o.created_by_user_id
+        LEFT JOIN users lu ON lu.id = o.logistics_updated_by_user_id
         GROUP BY o.id, o.outbound_no, o.out_date, o.receiver, o.settlement_method,
-                 o.order_id, o.order_no, o.remark, o.created_by_user_id, o.created_at
+                 o.order_id, o.order_no, o.remark, o.logistics_company, o.tracking_no,
+                 o.logistics_remark, o.logistics_updated_at, o.logistics_updated_by_user_id,
+                 lu.display_name, lu.username, o.created_by_user_id, u.display_name, u.username, o.created_at
         ORDER BY o.id DESC
         LIMIT ?`, limit)
 	if err != nil {
@@ -118,13 +154,19 @@ func ListProductOutbounds(limit int) ([]ProductOutbound, error) {
 	for rows.Next() {
 		var ob ProductOutbound
 		var outDate sql.NullTime
+		var logisticsUpdatedAt sql.NullTime
 		if err := rows.Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod,
-			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.CreatedByUserID, &ob.CreatedByName,
-			&ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount); err != nil {
+			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.LogisticsCompany, &ob.TrackingNo,
+			&ob.LogisticsRemark, &logisticsUpdatedAt, &ob.LogisticsUpdatedByID, &ob.LogisticsUpdatedByName,
+			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount); err != nil {
 			return nil, err
 		}
 		if outDate.Valid {
 			ob.OutDate = outDate.Time
+		}
+		if logisticsUpdatedAt.Valid {
+			t := logisticsUpdatedAt.Time
+			ob.LogisticsUpdatedAt = &t
 		}
 		list = append(list, ob)
 	}
@@ -136,15 +178,22 @@ func GetProductOutboundsByOrder(orderID int) ([]ProductOutbound, error) {
 	rows, err := DB.Query(`
         SELECT o.id, o.outbound_no, o.out_date, o.receiver,
                COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
-               o.order_id, o.order_no, o.remark, o.created_by_user_id,
+               o.order_id, o.order_no, o.remark,
+               o.logistics_company, o.tracking_no, o.logistics_remark,
+               o.logistics_updated_at, o.logistics_updated_by_user_id,
+               COALESCE(NULLIF(lu.display_name, ''), lu.username, '') AS logistics_updated_by_name,
+               o.created_by_user_id,
                COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at, COALESCE(SUM(i.quantity), 0) AS total_quantity, COUNT(i.id) AS item_count
         FROM product_outbound o
         LEFT JOIN product_outbound_items i ON i.outbound_id = o.id
         LEFT JOIN users u ON u.id = o.created_by_user_id
+        LEFT JOIN users lu ON lu.id = o.logistics_updated_by_user_id
         WHERE o.order_id = ?
         GROUP BY o.id, o.outbound_no, o.out_date, o.receiver, o.settlement_method,
-                 o.order_id, o.order_no, o.remark, o.created_by_user_id, o.created_at
+                 o.order_id, o.order_no, o.remark, o.logistics_company, o.tracking_no,
+                 o.logistics_remark, o.logistics_updated_at, o.logistics_updated_by_user_id,
+                 lu.display_name, lu.username, o.created_by_user_id, u.display_name, u.username, o.created_at
         ORDER BY o.id DESC`, orderID)
 	if err != nil {
 		return nil, err
@@ -155,13 +204,19 @@ func GetProductOutboundsByOrder(orderID int) ([]ProductOutbound, error) {
 	for rows.Next() {
 		var ob ProductOutbound
 		var outDate sql.NullTime
+		var logisticsUpdatedAt sql.NullTime
 		if err := rows.Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod,
-			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.CreatedByUserID, &ob.CreatedByName,
-			&ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount); err != nil {
+			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.LogisticsCompany, &ob.TrackingNo,
+			&ob.LogisticsRemark, &logisticsUpdatedAt, &ob.LogisticsUpdatedByID, &ob.LogisticsUpdatedByName,
+			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount); err != nil {
 			return nil, err
 		}
 		if outDate.Valid {
 			ob.OutDate = outDate.Time
+		}
+		if logisticsUpdatedAt.Valid {
+			t := logisticsUpdatedAt.Time
+			ob.LogisticsUpdatedAt = &t
 		}
 		list = append(list, ob)
 	}
@@ -196,23 +251,34 @@ func GetProductOutboundItems(outboundID int) ([]ProductOutboundItem, error) {
 func GetProductOutboundByNo(outboundNo string) (*ProductOutbound, error) {
 	var ob ProductOutbound
 	var outDate sql.NullTime
+	var logisticsUpdatedAt sql.NullTime
 	err := DB.QueryRow(`
         SELECT o.id, o.outbound_no, o.out_date, o.receiver,
                COALESCE(NULLIF(o.settlement_method, ''), '现金') AS settlement_method,
-               o.order_id, o.order_no, o.remark, o.created_by_user_id,
+               o.order_id, o.order_no, o.remark,
+               o.logistics_company, o.tracking_no, o.logistics_remark,
+               o.logistics_updated_at, o.logistics_updated_by_user_id,
+               COALESCE(NULLIF(lu.display_name, ''), lu.username, '') AS logistics_updated_by_name,
+               o.created_by_user_id,
                COALESCE(NULLIF(u.display_name, ''), u.username, '') AS created_by_name,
                o.created_at, 0 AS total_quantity, 0 AS item_count
         FROM product_outbound o
         LEFT JOIN users u ON u.id = o.created_by_user_id
+        LEFT JOIN users lu ON lu.id = o.logistics_updated_by_user_id
         WHERE o.outbound_no = ?`, outboundNo).
 		Scan(&ob.ID, &ob.OutboundNo, &outDate, &ob.Receiver, &ob.SettlementMethod,
-			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.CreatedByUserID, &ob.CreatedByName,
-			&ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount)
+			&ob.OrderID, &ob.OrderNo, &ob.Remark, &ob.LogisticsCompany, &ob.TrackingNo,
+			&ob.LogisticsRemark, &logisticsUpdatedAt, &ob.LogisticsUpdatedByID, &ob.LogisticsUpdatedByName,
+			&ob.CreatedByUserID, &ob.CreatedByName, &ob.CreatedAt, &ob.TotalQuantity, &ob.ItemCount)
 	if err != nil {
 		return nil, err
 	}
 	if outDate.Valid {
 		ob.OutDate = outDate.Time
+	}
+	if logisticsUpdatedAt.Valid {
+		t := logisticsUpdatedAt.Time
+		ob.LogisticsUpdatedAt = &t
 	}
 	return &ob, nil
 }

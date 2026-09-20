@@ -322,6 +322,7 @@
                         <th>结算方式</th>
                         <th>客户名称</th>
                         <th>数量</th>
+                        <th>物流信息</th>
                         <th>操作</th>
                     </tr>
                 </thead>
@@ -333,6 +334,12 @@
                         <td>{{if .SettlementMethod}}{{.SettlementMethod}}{{else}}现金{{end}}</td>
                         <td>{{if .Receiver}}{{.Receiver}}{{else}}—{{end}}</td>
                         <td>{{printf "%g" .TotalQuantity}}</td>
+                        <td>
+                            {{if or .LogisticsCompany .TrackingNo}}
+                                {{if .LogisticsCompany}}<div>{{.LogisticsCompany}}</div>{{end}}
+                                {{if .TrackingNo}}<div style="font-size:12px;">{{.TrackingNo}}</div>{{end}}
+                            {{else}}—{{end}}
+                        </td>
                         <td><a href="/outbound/detail?id={{.ID}}" target="_blank">打印送货单</a></td>
                     </tr>
                     {{end}}
