@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"order-system/models"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -162,7 +163,6 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		Spec      string  `json:"spec"`
 		Unit      string  `json:"unit"`
 		Packaging string  `json:"packaging"`
-		Stock     int     `json:"stock"`
 		Price     float64 `json:"price"`
 		BOM       []struct {
 			RawMaterialID int     `json:"raw_material_id"`
@@ -183,16 +183,12 @@ func UpdateProduct(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Name is required", http.StatusBadRequest)
 		return
 	}
-	if req.Stock < 0 {
-		http.Error(w, "Stock cannot be negative", http.StatusBadRequest)
-		return
-	}
 	if req.Price < 0 {
 		http.Error(w, "Price cannot be negative", http.StatusBadRequest)
 		return
 	}
 
-	err := models.UpdateProduct(req.ID, req.Name, req.Spec, req.Unit, req.Packaging, req.Stock, req.Price)
+	err := models.UpdateProduct(req.ID, req.Name, req.Spec, req.Unit, req.Packaging, 0, req.Price)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -262,8 +258,11 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ProductID int `json:"product_id"`
-		Quantity  int `json:"quantity"`
+		ProductID    int    `json:"product_id"`
+		Quantity     int    `json:"quantity"`
+		BusinessDate string `json:"business_date"`
+		BatchNo      string `json:"batch_no"`
+		Remark       string `json:"remark"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -276,6 +275,11 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.Quantity <= 0 {
 		http.Error(w, "Quantity must be greater than 0", http.StatusBadRequest)
+		return
+	}
+	occurredAt, err := businessTimeFromDate(req.BusinessDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -317,18 +321,33 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	productionNo := "SC" + time.Now().Format("20060102150405")
+	batchNo := strings.TrimSpace(req.BatchNo)
+	if batchNo == "" {
+		batchNo = productionNo
+	}
+	remark := strings.TrimSpace(req.Remark)
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	productionRemark := "生产完工入库"
+	if remark != "" {
+		productionRemark += "：" + remark
+	}
 	materialCost := 0.0
 	for _, bom := range boms {
 		consumeQty := bom.Quantity * float64(req.Quantity)
 		result, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
-			ItemType:      models.InventoryItemRawMaterial,
-			ItemID:        bom.RawMaterialID,
-			Quantity:      -consumeQty,
-			MovementType:  models.MovementProductionConsume,
-			ReferenceType: "production",
-			ReferenceNo:   productionNo,
-			OccurredAt:    time.Now(),
-			Remark:        "生产领料",
+			ItemType:        models.InventoryItemRawMaterial,
+			ItemID:          bom.RawMaterialID,
+			Quantity:        -consumeQty,
+			MovementType:    models.MovementProductionConsume,
+			ReferenceType:   "production",
+			ReferenceNo:     productionNo,
+			OccurredAt:      occurredAt,
+			BatchNo:         batchNo,
+			Remark:          productionRemark,
+			CreatedByUserID: userID,
 		})
 		if err != nil {
 			http.Error(w, fmt.Sprintf("生产领料失败：%v", err), http.StatusBadRequest)
@@ -342,15 +361,17 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 		unitCost = materialCost / float64(req.Quantity)
 	}
 	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
-		ItemType:      models.InventoryItemProduct,
-		ItemID:        req.ProductID,
-		Quantity:      float64(req.Quantity),
-		UnitCost:      unitCost,
-		MovementType:  models.MovementProductionIn,
-		ReferenceType: "production",
-		ReferenceNo:   productionNo,
-		OccurredAt:    time.Now(),
-		Remark:        "生产完工入库",
+		ItemType:        models.InventoryItemProduct,
+		ItemID:          req.ProductID,
+		Quantity:        float64(req.Quantity),
+		UnitCost:        unitCost,
+		MovementType:    models.MovementProductionIn,
+		ReferenceType:   "production",
+		ReferenceNo:     productionNo,
+		OccurredAt:      occurredAt,
+		BatchNo:         batchNo,
+		Remark:          productionRemark,
+		CreatedByUserID: userID,
 	}); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -371,6 +392,7 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 		"product_id":    req.ProductID,
 		"quantity":      req.Quantity,
 		"production_no": productionNo,
+		"batch_no":      batchNo,
 		"material_cost": materialCost,
 		"unit_cost":     unitCost,
 	})

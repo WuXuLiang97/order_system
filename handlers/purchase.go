@@ -180,7 +180,19 @@ func purchaseFreightAllocations(items []purchaseItemRequest, totalFreight float6
 	return allocations
 }
 
-func addPurchaseItemStockTx(tx *sql.Tx, itemID int64, item purchaseItemRequest, landedUnitCost float64, userID int) error {
+func purchaseStockBusinessTime(actualDate, purchaseDate *time.Time) time.Time {
+	date := time.Now()
+	if purchaseDate != nil {
+		date = *purchaseDate
+	}
+	if actualDate != nil {
+		date = *actualDate
+	}
+	now := time.Now()
+	return time.Date(date.Year(), date.Month(), date.Day(), now.Hour(), now.Minute(), now.Second(), 0, time.Local)
+}
+
+func addPurchaseItemStockTx(tx *sql.Tx, itemID int64, item purchaseItemRequest, landedUnitCost float64, userID int, occurredAt time.Time) error {
 	rawMaterialID := item.RawMaterialID
 	if rawMaterialID > 0 {
 		_, _, _, err := models.GetRawMaterialIdentityTx(tx, rawMaterialID)
@@ -206,7 +218,7 @@ func addPurchaseItemStockTx(tx *sql.Tx, itemID int64, item purchaseItemRequest, 
 		ReferenceType:   "purchase_material",
 		ReferenceID:     itemID,
 		CreatedByUserID: userID,
-		OccurredAt:      time.Now(),
+		OccurredAt:      occurredAt,
 		Remark:          "采购到货入库，含按金额分摊的运费",
 	}); err != nil {
 		return err
@@ -516,7 +528,7 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 			if item.Quantity > 0 {
 				unitCost += allocations[i] / item.Quantity
 			}
-			if err := addPurchaseItemStockTx(tx, itemID, item, unitCost, userID); err != nil {
+			if err := addPurchaseItemStockTx(tx, itemID, item, unitCost, userID, purchaseStockBusinessTime(actualDate, purchaseDate)); err != nil {
 				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusInternalServerError)
 				return
 			}
@@ -695,7 +707,7 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 			if item.Quantity > 0 {
 				unitCost += allocations[i] / item.Quantity
 			}
-			if err := addPurchaseItemStockTx(tx, itemID, item, unitCost, userID); err != nil {
+			if err := addPurchaseItemStockTx(tx, itemID, item, unitCost, userID, purchaseStockBusinessTime(actualDate, purchaseDate)); err != nil {
 				http.Error(w, fmt.Sprintf("加入原材料库存失败: %v", err), http.StatusBadRequest)
 				return
 			}

@@ -128,7 +128,8 @@
                     </div>
                     <div class="mb-3">
                         <label class="form-label">库存</label>
-                        <input type="number" class="form-control" id="editStock" step="any">
+                        <input type="number" class="form-control" id="editStock" step="any" readonly>
+                        <div class="form-text">库存只能通过入库、出库、生产领料或库存盘点改变。</div>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">单位</label>
@@ -191,6 +192,25 @@
                     <div class="mb-3">
                         <label class="form-label">数量 <span class="text-danger">*</span></label>
                         <input type="number" class="form-control" id="stockQuantity" step="any" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">业务日期 <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="stockBusinessDate" required>
+                    </div>
+                    <div id="stockInboundCostFields">
+                        <div class="mb-3">
+                            <label class="form-label">入库成本单价</label>
+                            <input type="number" class="form-control" id="stockUnitCost" step="0.0001" min="0" placeholder="留空按当前平均成本">
+                            <div class="form-text">采购外的手工入库可填写实际成本；填 0 表示零成本入库。</div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">入库批次</label>
+                            <input type="text" class="form-control" id="stockBatchNo" maxlength="64" placeholder="可留空">
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">来源说明 / 备注</label>
+                        <textarea class="form-control" id="stockRemark" rows="2" maxlength="500" placeholder="如：供应商补货、退货重新入库、盘盈说明"></textarea>
                     </div>
                 </form>
             </div>
@@ -290,6 +310,13 @@ function viewMaterialImage(url) {
             modal.modal('show');
         });
     }
+}
+
+function rawToday() {
+    var d = new Date();
+    var m = ('0' + (d.getMonth() + 1)).slice(-2);
+    var day = ('0' + d.getDate()).slice(-2);
+    return d.getFullYear() + '-' + m + '-' + day;
 }
 
 // 加载原材料列表
@@ -445,7 +472,6 @@ function updateMaterial() {
         id: parseInt($('#editId').val()),
         name: $('#editName').val().trim(),
         spec: $('#editSpec').val().trim(),
-        stock: parseFloat($('#editStock').val()) || 0,
         unit: $('#editUnit').val().trim(),
         min_stock: parseFloat($('#editMinStock').val()) || 0,
         price: parseFloat($('#editPrice').val()) || 0,
@@ -484,6 +510,13 @@ function showStockModal(id, operation) {
             $('#stockOperation').val(operation);
             $('#currentStock').val(data.stock);
             $('#stockQuantity').val(1);
+            $('#stockBusinessDate').val(rawToday());
+            $('#stockBatchNo').val('');
+            $('#stockRemark').val('');
+            var defaultCost = Number(data.avg_cost || 0);
+            if (defaultCost <= 0) defaultCost = Number(data.price || 0);
+            $('#stockUnitCost').val(defaultCost || '');
+            $('#stockInboundCostFields').toggle(operation === 'inbound');
             
             var title = operation === 'inbound' ? '原材料入库' : '原材料出库';
             $('#stockModalTitle').text(title);
@@ -509,7 +542,11 @@ function confirmStockOperation() {
     var url = operation === 'inbound' ? '/api/raw-materials/inbound' : '/api/raw-materials/outbound';
     var data = {
         id: id,
-        quantity: quantity
+        quantity: quantity,
+        business_date: $('#stockBusinessDate').val(),
+        remark: $('#stockRemark').val(),
+        batch_no: operation === 'inbound' ? $('#stockBatchNo').val() : '',
+        unit_cost: operation === 'inbound' && $('#stockUnitCost').val() !== '' ? parseFloat($('#stockUnitCost').val()) : null
     };
     
     $.ajax({

@@ -62,8 +62,8 @@
                     <div class="row">
                         <div class="col-md-6 mb-3">
                             <label class="form-label">实际库存</label>
-                            <input type="number" class="form-control" id="productStock" value="0" step="any">
-                            <div class="form-text">历史编辑功能保留；日常库存变动仍建议通过生产、出库或盘点完成。</div>
+                            <input type="number" class="form-control" id="productStock" value="0" step="any" readonly>
+                            <div class="form-text">库存为只读字段，只能通过生产入库、成品出库或库存盘点改变。</div>
                         </div>
                         <div class="col-md-6 mb-3">
                             <label class="form-label">销售单价</label>
@@ -270,7 +270,6 @@ function saveProductEditor() {
         spec: ($('#productSpec').val() || '').trim(),
         unit: ($('#productUnit').val() || '').trim(),
         packaging: $('#productPackaging').val() || '',
-        stock: parseFloat($('#productStock').val()) || 0,
         price: parseFloat($('#productPrice').val()) || 0,
         bom: bom.items
     };

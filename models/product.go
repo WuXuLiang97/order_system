@@ -1,6 +1,9 @@
 package models
 
-import "time"
+import (
+	"fmt"
+	"time"
+)
 
 type Product struct {
 	ID             int       `json:"id"`
@@ -103,50 +106,19 @@ func AddProduct(name, spec, unit, packaging string, stock int, price float64) (i
 	return id, nil
 }
 
-// 更新产品。库存数量变化统一记调整流水，成本仍由实际入库流水维护。
-func UpdateProduct(id int, name, spec, unit, packaging string, stock int, price float64) error {
-	tx, err := DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-
-	var currentStock, avgCost float64
-	if err := tx.QueryRow("SELECT stock, avg_cost FROM products WHERE id = ? FOR UPDATE", id).Scan(&currentStock, &avgCost); err != nil {
-		return err
-	}
-	if _, err := tx.Exec(`
+// 更新产品资料。库存不属于资料字段，必须通过生产、出库或盘点改变。
+func UpdateProduct(id int, name, spec, unit, packaging string, _ int, price float64) error {
+	_, err := DB.Exec(`
 		UPDATE products
 		SET name = ?, spec = ?, unit = ?, packaging = ?, price = ?
 		WHERE id = ?
-	`, name, spec, unit, packaging, price, id); err != nil {
-		return err
-	}
-	delta := float64(stock) - currentStock
-	if delta != 0 {
-		if _, err := ApplyStockDeltaTx(tx, StockMovementInput{
-			ItemType:      InventoryItemProduct,
-			ItemID:        id,
-			Quantity:      delta,
-			UnitCost:      avgCost,
-			MovementType:  MovementAdjustment,
-			ReferenceType: "product_edit",
-			ReferenceID:   int64(id),
-			Remark:        "产品资料编辑中的库存调整",
-		}); err != nil {
-			return err
-		}
-	}
-	return tx.Commit()
+	`, name, spec, unit, packaging, price, id)
+	return err
 }
 
-// 更新产品库存（保留兼容入口，实际写入调整流水）。
-func UpdateProductStock(id int, newStock int) error {
-	product, err := GetProductByID(id)
-	if err != nil {
-		return err
-	}
-	return UpdateProduct(id, product.Name, product.Spec, product.Unit, product.Packaging, newStock, product.Price)
+// UpdateProductStock 已停用资料编辑直接改库存的旧入口。
+func UpdateProductStock(_ int, _ int) error {
+	return fmt.Errorf("库存不能通过编辑资料修改，请使用生产入库、出库或库存盘点")
 }
 
 // 删除产品

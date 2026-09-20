@@ -3,6 +3,8 @@ package models
 import (
 	"database/sql"
 	"encoding/json"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -162,8 +164,8 @@ func UpdateRawMaterial(id int, name, spec, unit string, stock float64, minStock 
 	return UpdateRawMaterialWithImages(id, name, spec, unit, stock, minStock, price, nil)
 }
 
-// 更新原材料。库存变化写入调整流水，avg_cost 不随参考单价直接改写。
-func UpdateRawMaterialWithImages(id int, name, spec, unit string, stock float64, minStock float64, price float64, images []string) error {
+// 更新原材料资料。库存不属于资料字段，必须通过入库、出库、生产领料或盘点改变。
+func UpdateRawMaterialWithImages(id int, name, spec, unit string, _ float64, minStock float64, price float64, images []string) error {
 	imagesJSON, err := encodeRawMaterialImages(images)
 	if err != nil {
 		return err
@@ -174,10 +176,6 @@ func UpdateRawMaterialWithImages(id int, name, spec, unit string, stock float64,
 	}
 	defer tx.Rollback()
 
-	var currentStock, avgCost float64
-	if err := tx.QueryRow("SELECT stock, avg_cost FROM raw_materials WHERE id = ? FOR UPDATE", id).Scan(&currentStock, &avgCost); err != nil {
-		return err
-	}
 	if _, err := tx.Exec(`
 		UPDATE raw_materials
 		SET name = ?, spec = ?, unit = ?, min_stock = ?, price = ?, images = ?
@@ -192,60 +190,92 @@ func UpdateRawMaterialWithImages(id int, name, spec, unit string, stock float64,
 	`, name, spec, unit, id); err != nil {
 		return err
 	}
-	delta := stock - currentStock
-	if delta != 0 {
-		adjustCost := avgCost
-		if adjustCost <= 0 {
-			adjustCost = price
-		}
-		if _, err := ApplyStockDeltaTx(tx, StockMovementInput{
-			ItemType:      InventoryItemRawMaterial,
-			ItemID:        id,
-			Quantity:      delta,
-			UnitCost:      adjustCost,
-			MovementType:  MovementAdjustment,
-			ReferenceType: "raw_material_edit",
-			ReferenceID:   int64(id),
-			Remark:        "原材料资料编辑中的库存调整",
-		}); err != nil {
-			return err
-		}
-	}
 	return tx.Commit()
 }
 
-// 更新原材料库存（入库/出库），quantity 带方向。
-func UpdateRawMaterialStock(id int, quantity float64) error {
-	tx, err := DB.Begin()
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+type RawMaterialMovementInput struct {
+	ID              int
+	Quantity        float64
+	UnitCost        *float64
+	OccurredAt      time.Time
+	BatchNo         string
+	Remark          string
+	CreatedByUserID int
+}
 
-	var price, avgCost float64
-	if err := tx.QueryRow("SELECT price, avg_cost FROM raw_materials WHERE id = ? FOR UPDATE", id).Scan(&price, &avgCost); err != nil {
-		return err
+// RecordRawMaterialMovement 记录带业务日期、来源、成本和经办人的手工出入库。
+func RecordRawMaterialMovement(input RawMaterialMovementInput) (StockMovementResult, error) {
+	var result StockMovementResult
+	if input.ID <= 0 {
+		return result, fmt.Errorf("原材料ID无效")
 	}
-	if quantity > 0 && price == 0 {
+	if input.Quantity == 0 {
+		return result, fmt.Errorf("库存变动数量不能为0")
+	}
+	var price, avgCost float64
+	if err := DB.QueryRow("SELECT price, avg_cost FROM raw_materials WHERE id = ?", input.ID).Scan(&price, &avgCost); err != nil {
+		return result, err
+	}
+	if price <= 0 {
 		price = avgCost
 	}
+	movingOut := input.Quantity < 0
+	unitCost := price
+	overrideUnitCost := false
+	if input.UnitCost != nil {
+		unitCost = *input.UnitCost
+		overrideUnitCost = true
+	}
+	if movingOut {
+		unitCost = avgCost
+		overrideUnitCost = false
+	}
 	movementType := MovementManualIn
-	if quantity < 0 {
+	if movingOut {
 		movementType = MovementManualOut
 	}
-	if _, err := ApplyStockDeltaTx(tx, StockMovementInput{
-		ItemType:      InventoryItemRawMaterial,
-		ItemID:        id,
-		Quantity:      quantity,
-		UnitCost:      price,
-		MovementType:  movementType,
-		ReferenceType: "manual",
-		ReferenceID:   int64(id),
-		Remark:        "原材料手工库存操作",
-	}); err != nil {
-		return err
+	remark := strings.TrimSpace(input.Remark)
+	if remark == "" {
+		if movingOut {
+			remark = "原材料手工出库"
+		} else {
+			remark = "原材料手工入库"
+		}
 	}
-	return tx.Commit()
+	tx, err := DB.Begin()
+	if err != nil {
+		return result, err
+	}
+	defer tx.Rollback()
+	result, err = ApplyStockDeltaTx(tx, StockMovementInput{
+		ItemType:         InventoryItemRawMaterial,
+		ItemID:           input.ID,
+		Quantity:         input.Quantity,
+		UnitCost:         unitCost,
+		MovementType:     movementType,
+		ReferenceType:    "manual",
+		ReferenceID:      int64(input.ID),
+		OccurredAt:       input.OccurredAt,
+		BatchNo:          strings.TrimSpace(input.BatchNo),
+		Remark:           remark,
+		OverrideUnitCost: overrideUnitCost,
+		CreatedByUserID:  input.CreatedByUserID,
+	})
+	if err != nil {
+		return result, err
+	}
+	if err := tx.Commit(); err != nil {
+		return result, err
+	}
+	return result, nil
+}
+
+// UpdateRawMaterialStock 保留旧调用入口，默认由系统时间与当前用户上下文之外调用。
+func UpdateRawMaterialStock(id int, quantity float64) error {
+	_, err := RecordRawMaterialMovement(RawMaterialMovementInput{
+		ID: id, Quantity: quantity, OccurredAt: time.Now(),
+	})
+	return err
 }
 
 // 删除原材料

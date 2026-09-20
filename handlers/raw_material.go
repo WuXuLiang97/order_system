@@ -113,7 +113,7 @@ func AddRawMaterial(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 更新原材料（支持小数实际库存，不允许负库存）
+// 更新原材料资料（库存只读，不允许通过编辑资料修改库存）
 func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPut && r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -124,7 +124,6 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 		ID       int      `json:"id"`
 		Name     string   `json:"name"`
 		Spec     string   `json:"spec"`
-		Stock    float64  `json:"stock"` // 改为 float64
 		Unit     string   `json:"unit"`
 		MinStock float64  `json:"min_stock"` // 改为 float64
 		Price    float64  `json:"price"`
@@ -144,10 +143,6 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Name is required", http.StatusBadRequest)
 		return
 	}
-	if req.Stock < 0 {
-		http.Error(w, "实际库存不能为负数", http.StatusBadRequest)
-		return
-	}
 	if req.MinStock < 0 {
 		req.MinStock = 0
 	}
@@ -155,7 +150,7 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 		req.Price = 0
 	}
 
-	err := models.UpdateRawMaterialWithImages(req.ID, req.Name, req.Spec, req.Unit, req.Stock, req.MinStock, req.Price, req.Images)
+	err := models.UpdateRawMaterialWithImages(req.ID, req.Name, req.Spec, req.Unit, 0, req.MinStock, req.Price, req.Images)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -167,7 +162,20 @@ func UpdateRawMaterial(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// 原材料入库操作（支持小数数量）
+func businessTimeFromDate(value string) (time.Time, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return time.Now(), nil
+	}
+	t, err := time.ParseInLocation("2006-01-02", value, time.Local)
+	if err != nil {
+		return time.Time{}, fmt.Errorf("业务日期格式无效")
+	}
+	now := time.Now()
+	return time.Date(t.Year(), t.Month(), t.Day(), now.Hour(), now.Minute(), now.Second(), 0, time.Local), nil
+}
+
+// 原材料入库操作（支持小数数量、业务日期、来源说明、批次和成本）。
 func RawMaterialInbound(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -175,15 +183,17 @@ func RawMaterialInbound(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID       int     `json:"id"`
-		Quantity float64 `json:"quantity"` // 改为 float64
+		ID           int      `json:"id"`
+		Quantity     float64  `json:"quantity"`
+		BusinessDate string   `json:"business_date"`
+		BatchNo      string   `json:"batch_no"`
+		UnitCost     *float64 `json:"unit_cost"`
+		Remark       string   `json:"remark"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
 	if req.ID <= 0 {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
@@ -192,28 +202,47 @@ func RawMaterialInbound(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Quantity must be positive", http.StatusBadRequest)
 		return
 	}
-
-	err := models.UpdateRawMaterialStock(req.ID, req.Quantity)
+	if req.UnitCost != nil && *req.UnitCost < 0 {
+		http.Error(w, "单位成本不能小于0", http.StatusBadRequest)
+		return
+	}
+	occurredAt, err := businessTimeFromDate(req.BusinessDate)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	result, err := models.RecordRawMaterialMovement(models.RawMaterialMovementInput{
+		ID:              req.ID,
+		Quantity:        req.Quantity,
+		UnitCost:        req.UnitCost,
+		OccurredAt:      occurredAt,
+		BatchNo:         req.BatchNo,
+		Remark:          req.Remark,
+		CreatedByUserID: userID,
+	})
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	material, err := models.GetRawMaterialByID(req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":   "入库成功",
 		"new_stock": material.Stock,
 		"material":  material,
+		"movement":  result,
 	})
 }
 
-// 原材料出库操作（实际库存不足时拒绝）
+// 原材料出库操作（实际库存不足时拒绝）。
 func RawMaterialOutbound(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -221,15 +250,15 @@ func RawMaterialOutbound(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ID       int     `json:"id"`
-		Quantity float64 `json:"quantity"` // 改为 float64
+		ID           int     `json:"id"`
+		Quantity     float64 `json:"quantity"`
+		BusinessDate string  `json:"business_date"`
+		Remark       string  `json:"remark"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
 	if req.ID <= 0 {
 		http.Error(w, "Invalid ID", http.StatusBadRequest)
 		return
@@ -238,19 +267,27 @@ func RawMaterialOutbound(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Quantity must be positive", http.StatusBadRequest)
 		return
 	}
-
-	err := models.UpdateRawMaterialStock(req.ID, -req.Quantity)
+	occurredAt, err := businessTimeFromDate(req.BusinessDate)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-
+	userID := 0
+	if user := CurrentUser(r); user != nil {
+		userID = user.ID
+	}
+	if _, err := models.RecordRawMaterialMovement(models.RawMaterialMovementInput{
+		ID: req.ID, Quantity: -req.Quantity, OccurredAt: occurredAt,
+		Remark: req.Remark, CreatedByUserID: userID,
+	}); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
 	updatedMaterial, err := models.GetRawMaterialByID(req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"message":   "出库成功",

@@ -17,6 +17,8 @@ const (
 	MovementManualOut         = "manual_out"
 	MovementProductionIn      = "production_in"
 	MovementProductionConsume = "production_consume"
+	MovementStocktakeIn       = "stocktake_in"
+	MovementStocktakeOut      = "stocktake_out"
 	MovementSalesOut          = "sales_out"
 	MovementSalesOutReversal  = "sales_out_reversal"
 	MovementAdjustment        = "adjustment"
@@ -38,15 +40,17 @@ type StockMovementInput struct {
 	OverrideUnitCost bool
 	CreatedByUserID  int
 	OccurredAt       time.Time
+	BatchNo          string
 	Remark           string
 }
 
 type StockMovementResult struct {
-	MovementID int64
-	NewStock   float64
-	UnitCost   float64
-	TotalCost  float64
-	AvgCost    float64
+	MovementID  int64
+	StockBefore float64
+	NewStock    float64
+	UnitCost    float64
+	TotalCost   float64
+	AvgCost     float64
 }
 
 type StockMovement struct {
@@ -57,15 +61,36 @@ type StockMovement struct {
 	Quantity        float64   `json:"quantity"`
 	UnitCost        float64   `json:"unit_cost"`
 	TotalCost       float64   `json:"total_cost"`
+	StockBefore     *float64  `json:"stock_before"`
+	StockAfter      *float64  `json:"stock_after"`
 	ReferenceType   string    `json:"reference_type"`
 	ReferenceID     int64     `json:"reference_id"`
 	ReferenceNo     string    `json:"reference_no"`
 	OrderItemID     int       `json:"order_item_id"`
 	ReversalOf      int64     `json:"reversal_of"`
 	OccurredAt      time.Time `json:"occurred_at"`
+	BusinessDate    string    `json:"business_date"`
+	BatchNo         string    `json:"batch_no"`
 	CreatedByUserID int       `json:"created_by_user_id"`
 	Remark          string    `json:"remark"`
 	CreatedAt       time.Time `json:"created_at"`
+	ItemName        string    `json:"item_name"`
+	ItemSpec        string    `json:"item_spec"`
+	ItemUnit        string    `json:"item_unit"`
+	OperatorName    string    `json:"operator_name"`
+}
+
+type StockMovementFilter struct {
+	StartDate    string
+	EndDate      string
+	ItemType     string
+	ItemID       int
+	Direction    string
+	MovementType string
+	ReferenceNo  string
+	Operator     string
+	Limit        int
+	Offset       int
 }
 
 type ProductAvailability struct {
@@ -107,6 +132,10 @@ func EnsureInventoryAccounting() error {
 			item_id             INT NOT NULL,
 			movement_type       VARCHAR(40) NOT NULL,
 			quantity            DECIMAL(14,3) NOT NULL COMMENT '带方向，入库为正出库为负',
+			stock_before        DECIMAL(14,3) NULL COMMENT '变动前库存',
+			stock_after         DECIMAL(14,3) NULL COMMENT '变动后库存',
+			batch_no            VARCHAR(64) NOT NULL DEFAULT '' COMMENT '生产批次或入库批次',
+			business_date       DATE NULL COMMENT '业务日期',
 			unit_cost           DECIMAL(14,4) NOT NULL DEFAULT 0,
 			total_cost          DECIMAL(14,2) NOT NULL DEFAULT 0 COMMENT '带方向',
 			reference_type      VARCHAR(40) NOT NULL DEFAULT '',
@@ -119,10 +148,27 @@ func EnsureInventoryAccounting() error {
 			remark              VARCHAR(500) NOT NULL DEFAULT '',
 			created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
 			KEY idx_stock_movement_item (item_type, item_id, occurred_at),
+			KEY idx_stock_movement_business_date (business_date),
 			KEY idx_stock_movement_reference (reference_type, reference_id),
 			KEY idx_stock_movement_order_item (order_item_id)
 		) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='不可变库存与成本流水'
 	`); err != nil {
+		return err
+	}
+
+	if err := ensureColumn("stock_movements", "stock_before", "DECIMAL(14,3) NULL COMMENT '变动前库存'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("stock_movements", "stock_after", "DECIMAL(14,3) NULL COMMENT '变动后库存'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("stock_movements", "batch_no", "VARCHAR(64) NOT NULL DEFAULT '' COMMENT '生产批次或入库批次'"); err != nil {
+		return err
+	}
+	if err := ensureColumn("stock_movements", "business_date", "DATE NULL COMMENT '业务日期'"); err != nil {
+		return err
+	}
+	if err := ensureIndex("stock_movements", "idx_stock_movement_business_date", "`business_date`"); err != nil {
 		return err
 	}
 
@@ -188,6 +234,7 @@ func ApplyStockDeltaTx(tx *sql.Tx, input StockMovementInput) (StockMovementResul
 	if err := tx.QueryRow(fmt.Sprintf("SELECT stock, avg_cost FROM `%s` WHERE id = ? FOR UPDATE", table), input.ItemID).Scan(&stock, &avgCost); err != nil {
 		return result, err
 	}
+	stockBefore := canonicalQty(stock)
 
 	unitCost := input.UnitCost
 	if quantity < 0 {
@@ -226,20 +273,22 @@ func ApplyStockDeltaTx(tx *sql.Tx, input StockMovementInput) (StockMovementResul
 	if occurredAt.IsZero() {
 		occurredAt = time.Now()
 	}
+	businessDate := occurredAt.Format("2006-01-02")
 	res, err := tx.Exec(`
 		INSERT INTO stock_movements
-			(item_type, item_id, movement_type, quantity, unit_cost, total_cost,
-			 reference_type, reference_id, reference_no, order_item_id, reversal_of,
+			(item_type, item_id, movement_type, quantity, stock_before, stock_after, batch_no, business_date,
+			 unit_cost, total_cost, reference_type, reference_id, reference_no, order_item_id, reversal_of,
 			 occurred_at, created_by_user_id, remark)
-		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-	`, input.ItemType, input.ItemID, input.MovementType, quantity, unitCost, totalCost,
-		input.ReferenceType, input.ReferenceID, input.ReferenceNo, input.OrderItemID, input.ReversalOf,
+		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+	`, input.ItemType, input.ItemID, input.MovementType, quantity, stockBefore, newStock, input.BatchNo, businessDate,
+		unitCost, totalCost, input.ReferenceType, input.ReferenceID, input.ReferenceNo, input.OrderItemID, input.ReversalOf,
 		occurredAt, input.CreatedByUserID, input.Remark)
 	if err != nil {
 		return result, err
 	}
 	movementID, _ := res.LastInsertId()
 	result.MovementID = movementID
+	result.StockBefore = stockBefore
 	result.NewStock = newStock
 	result.UnitCost = unitCost
 	result.TotalCost = totalCost
@@ -694,17 +743,33 @@ func scanStockMovement(scanner interface {
 	Scan(dest ...interface{}) error
 }) (*StockMovement, error) {
 	var movement StockMovement
-	err := scanner.Scan(&movement.ID, &movement.ItemType, &movement.ItemID, &movement.MovementType,
-		&movement.Quantity, &movement.UnitCost, &movement.TotalCost,
+	var stockBefore, stockAfter sql.NullFloat64
+	err := scanner.Scan(
+		&movement.ID, &movement.ItemType, &movement.ItemID, &movement.MovementType,
+		&movement.Quantity, &stockBefore, &stockAfter, &movement.BatchNo, &movement.BusinessDate,
+		&movement.UnitCost, &movement.TotalCost,
 		&movement.ReferenceType, &movement.ReferenceID, &movement.ReferenceNo,
 		&movement.OrderItemID, &movement.ReversalOf, &movement.OccurredAt,
-		&movement.CreatedByUserID, &movement.Remark, &movement.CreatedAt)
-	return &movement, err
+		&movement.CreatedByUserID, &movement.Remark, &movement.CreatedAt,
+		&movement.ItemName, &movement.ItemSpec, &movement.ItemUnit, &movement.OperatorName,
+	)
+	if err != nil {
+		return nil, err
+	}
+	if stockBefore.Valid {
+		value := stockBefore.Float64
+		movement.StockBefore = &value
+	}
+	if stockAfter.Valid {
+		value := stockAfter.Float64
+		movement.StockAfter = &value
+	}
+	return &movement, nil
 }
 
+// ListStockMovementsByReferenceTx 返回某业务单据下尚未冲回的净入库流水。
 func ListStockMovementsByReferenceTx(tx *sql.Tx, referenceType string, referenceID int64, movementType string) ([]StockMovement, error) {
-	// 返回尚未冲回的净数量。更新采购单时会先冲回旧入库、再重新入库，
-	// 原始入库流水仍会保留；若删除时再次读取原始流水，会导致重复冲回。
+	// 更新采购单时先冲回旧入库、再重新入库，原始入库流水仍保留。
 	rows, err := tx.Query(`
 		SELECT sm.id, sm.item_type, sm.item_id, sm.movement_type,
 		       sm.quantity + COALESCE((
@@ -746,30 +811,75 @@ func ListStockMovementsByReferenceTx(tx *sql.Tx, referenceType string, reference
 	return list, rows.Err()
 }
 
-func ListStockMovements(limit int, itemType string, itemID int) ([]StockMovement, error) {
+// ListStockMovementsFiltered 查询面向账务审计的库存流水，包含物料与经办人信息。
+func ListStockMovementsFiltered(filter StockMovementFilter) ([]StockMovement, error) {
+	limit := filter.Limit
 	if limit <= 0 || limit > 500 {
 		limit = 100
 	}
-	query := `
-		SELECT id, item_type, item_id, movement_type, quantity, unit_cost, total_cost,
-		       reference_type, reference_id, reference_no, order_item_id, reversal_of,
-		       occurred_at, created_by_user_id, remark, created_at
-		FROM stock_movements
-		WHERE 1 = 1`
-	args := []interface{}{}
-	if itemType != "" {
-		if _, err := inventoryTable(itemType); err != nil {
+	if filter.Offset < 0 {
+		filter.Offset = 0
+	}
+	if filter.ItemType != "" {
+		if _, err := inventoryTable(filter.ItemType); err != nil {
 			return nil, err
 		}
-		query += " AND item_type = ?"
-		args = append(args, itemType)
 	}
-	if itemID > 0 {
-		query += " AND item_id = ?"
-		args = append(args, itemID)
+	query := `
+		SELECT sm.id, sm.item_type, sm.item_id, sm.movement_type,
+		       sm.quantity, sm.stock_before, sm.stock_after, sm.batch_no,
+		       COALESCE(DATE_FORMAT(sm.business_date, '%Y-%m-%d'), '') AS business_date,
+		       sm.unit_cost, sm.total_cost,
+		       sm.reference_type, sm.reference_id, sm.reference_no,
+		       sm.order_item_id, sm.reversal_of, sm.occurred_at,
+		       sm.created_by_user_id, sm.remark, sm.created_at,
+		       COALESCE(p.name, rm.name, '') AS item_name,
+		       COALESCE(p.spec, rm.spec, '') AS item_spec,
+		       COALESCE(p.unit, rm.unit, '') AS item_unit,
+		       COALESCE(NULLIF(u.display_name, ''), u.username, '') AS operator_name
+		FROM stock_movements sm
+		LEFT JOIN products p ON sm.item_type = 'product' AND p.id = sm.item_id
+		LEFT JOIN raw_materials rm ON sm.item_type = 'raw_material' AND rm.id = sm.item_id
+		LEFT JOIN users u ON u.id = sm.created_by_user_id
+		WHERE 1 = 1`
+	args := []interface{}{}
+	if filter.StartDate != "" {
+		query += " AND COALESCE(sm.business_date, DATE(sm.occurred_at)) >= ?"
+		args = append(args, filter.StartDate)
 	}
-	query += " ORDER BY id DESC LIMIT ?"
-	args = append(args, limit)
+	if filter.EndDate != "" {
+		query += " AND COALESCE(sm.business_date, DATE(sm.occurred_at)) <= ?"
+		args = append(args, filter.EndDate)
+	}
+	if filter.ItemType != "" {
+		query += " AND sm.item_type = ?"
+		args = append(args, filter.ItemType)
+	}
+	if filter.ItemID > 0 {
+		query += " AND sm.item_id = ?"
+		args = append(args, filter.ItemID)
+	}
+	switch filter.Direction {
+	case "in":
+		query += " AND sm.quantity > 0"
+	case "out":
+		query += " AND sm.quantity < 0"
+	}
+	if filter.MovementType != "" {
+		query += " AND sm.movement_type = ?"
+		args = append(args, filter.MovementType)
+	}
+	if filter.ReferenceNo != "" {
+		query += " AND (sm.reference_no LIKE ? OR sm.batch_no LIKE ?)"
+		like := "%" + filter.ReferenceNo + "%"
+		args = append(args, like, like)
+	}
+	if filter.Operator != "" {
+		query += " AND COALESCE(NULLIF(u.display_name, ''), u.username, '') LIKE ?"
+		args = append(args, "%"+filter.Operator+"%")
+	}
+	query += " ORDER BY sm.occurred_at DESC, sm.id DESC LIMIT ? OFFSET ?"
+	args = append(args, limit, filter.Offset)
 	rows, err := DB.Query(query, args...)
 	if err != nil {
 		return nil, err
@@ -786,6 +896,12 @@ func ListStockMovements(limit int, itemType string, itemID int) ([]StockMovement
 	return list, rows.Err()
 }
 
+// ListStockMovements 保留原有调用方式，内部转到扩展查询。
+func ListStockMovements(limit int, itemType string, itemID int) ([]StockMovement, error) {
+	return ListStockMovementsFiltered(StockMovementFilter{
+		Limit: limit, ItemType: itemType, ItemID: itemID,
+	})
+}
 func migrateInventoryFoundation() error {
 	if _, err := DB.Exec(`
 		CREATE TABLE IF NOT EXISTS schema_migrations (

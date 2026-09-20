@@ -34,9 +34,21 @@ func ListStockMovements(w http.ResponseWriter, r *http.Request) {
 	if value, err := strconv.Atoi(r.URL.Query().Get("limit")); err == nil && value > 0 {
 		limit = value
 	}
-	itemType := strings.TrimSpace(r.URL.Query().Get("item_type"))
+	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
 	itemID, _ := strconv.Atoi(r.URL.Query().Get("item_id"))
-	list, err := models.ListStockMovements(limit, itemType, itemID)
+	filter := models.StockMovementFilter{
+		StartDate:    strings.TrimSpace(r.URL.Query().Get("start_date")),
+		EndDate:      strings.TrimSpace(r.URL.Query().Get("end_date")),
+		ItemType:     strings.TrimSpace(r.URL.Query().Get("item_type")),
+		ItemID:       itemID,
+		Direction:    strings.TrimSpace(r.URL.Query().Get("direction")),
+		MovementType: strings.TrimSpace(r.URL.Query().Get("movement_type")),
+		ReferenceNo:  strings.TrimSpace(r.URL.Query().Get("reference_no")),
+		Operator:     strings.TrimSpace(r.URL.Query().Get("operator")),
+		Limit:        limit,
+		Offset:       offset,
+	}
+	list, err := models.ListStockMovementsFiltered(filter)
 	if err != nil {
 		writeJSONError(w, http.StatusBadRequest, err.Error())
 		return

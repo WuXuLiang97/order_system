@@ -45,6 +45,7 @@ func main() {
 	http.HandleFunc("/", handlers.RequireAuth(page("templates/layout.html", "templates/index.html")))
 	http.HandleFunc("/orders", handlers.RequireAnyPermission(handlers.PermOrderViewOwn, handlers.PermOrderViewAll)(page("templates/layout.html", "templates/orders.html")))
 	http.HandleFunc("/orders/form", handlers.RequireAnyPermission(handlers.PermOrderEditOwn, handlers.PermOrderEditAll)(page("templates/layout.html", "templates/order_form.html")))
+	http.HandleFunc("/inventory", handlers.RequireAnyPermission(handlers.PermProductView, handlers.PermMaterialView)(page("templates/layout.html", "templates/inventory.html")))
 	http.HandleFunc("/products", handlers.RequirePermission(handlers.PermProductView, page("templates/layout.html", "templates/products.html")))
 	http.HandleFunc("/products/form", handlers.RequirePermission(handlers.PermProductManage, page("templates/layout.html", "templates/product_form.html")))
 	http.HandleFunc("/raw-materials", handlers.RequirePermission(handlers.PermMaterialView, page("templates/layout.html", "templates/raw_materials.html")))
@@ -137,6 +138,15 @@ func main() {
 	http.HandleFunc("/api/raw-materials/outbound", handlers.RequirePermission(handlers.PermMaterialManage, handlers.RawMaterialOutbound))
 	http.HandleFunc("/api/raw-materials/low-stock", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView)(handlers.GetLowStockRawMaterials))
 	http.HandleFunc("/api/stock-movements", handlers.RequireAnyPermission(handlers.PermMaterialView, handlers.PermProductView, handlers.PermPurchaseView)(handlers.ListStockMovements))
+
+	// API 路由 - 库存盘点
+	http.HandleFunc("/api/stocktakes/list", handlers.RequireAnyPermission(handlers.PermProductView, handlers.PermMaterialView)(handlers.ListStocktakes))
+	http.HandleFunc("/api/stocktakes/get", handlers.RequireAnyPermission(handlers.PermProductView, handlers.PermMaterialView)(handlers.GetStocktake))
+	http.HandleFunc("/api/stocktakes/create", handlers.RequireAnyPermission(handlers.PermProductManage, handlers.PermMaterialManage)(handlers.CreateStocktake))
+	http.HandleFunc("/api/stocktakes/update", handlers.RequireAnyPermission(handlers.PermProductManage, handlers.PermMaterialManage)(handlers.UpdateStocktake))
+	http.HandleFunc("/api/stocktakes/submit", handlers.RequireAnyPermission(handlers.PermProductManage, handlers.PermMaterialManage)(handlers.SubmitStocktake))
+	http.HandleFunc("/api/stocktakes/post", handlers.RequireAnyPermission(handlers.PermProductManage, handlers.PermMaterialManage)(handlers.PostStocktake))
+	http.HandleFunc("/api/stocktakes/cancel", handlers.RequireAnyPermission(handlers.PermProductManage, handlers.PermMaterialManage)(handlers.CancelStocktake))
 
 	// API 路由 - 用户管理（仅管理员）
 	http.HandleFunc("/api/users", handlers.RequirePermission(handlers.PermUserManage, handlers.ListUsers))

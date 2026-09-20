@@ -64,6 +64,9 @@ func InitDB(dataSourceName string) {
 	if err = EnsureInventoryAccounting(); err != nil {
 		log.Fatal(err)
 	}
+	if err = EnsureStocktakeTables(); err != nil {
+		log.Fatal(err)
+	}
 	log.Println("Database connected")
 }
 

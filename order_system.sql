@@ -16,6 +16,9 @@ CREATE DATABASE IF NOT EXISTS order_system
 USE order_system;
 
 -- 2. 删除已存在的表（按依赖顺序倒序删除）
+DROP TABLE IF EXISTS stocktake_items;
+DROP TABLE IF EXISTS stocktake_orders;
+DROP TABLE IF EXISTS stocktake_order_sequences;
 DROP TABLE IF EXISTS stock_movements;
 DROP TABLE IF EXISTS inventory_reservations;
 DROP TABLE IF EXISTS order_bom_snapshot;
@@ -242,6 +245,10 @@ CREATE TABLE stock_movements (
     item_id             INT NOT NULL,
     movement_type       VARCHAR(40) NOT NULL,
     quantity            DECIMAL(14,3) NOT NULL COMMENT '带方向，入库为正出库为负',
+    stock_before        DECIMAL(14,3) NULL COMMENT '变动前库存',
+    stock_after         DECIMAL(14,3) NULL COMMENT '变动后库存',
+    batch_no            VARCHAR(64) NOT NULL DEFAULT '' COMMENT '生产批次或入库批次',
+    business_date       DATE NULL COMMENT '业务日期',
     unit_cost           DECIMAL(14,4) NOT NULL DEFAULT 0,
     total_cost          DECIMAL(14,2) NOT NULL DEFAULT 0 COMMENT '带方向',
     reference_type      VARCHAR(40) NOT NULL DEFAULT '',
@@ -254,6 +261,7 @@ CREATE TABLE stock_movements (
     remark              VARCHAR(500) NOT NULL DEFAULT '',
     created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     KEY idx_stock_movement_item (item_type, item_id, occurred_at),
+    KEY idx_stock_movement_business_date (business_date),
     KEY idx_stock_movement_reference (reference_type, reference_id),
     KEY idx_stock_movement_order_item (order_item_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='不可变库存与成本流水';
@@ -277,7 +285,54 @@ CREATE TABLE inventory_reservations (
     KEY idx_inventory_reservation_order (order_id),
     KEY idx_inventory_reservation_item_lookup (item_type, item_id, status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='订单占用账';
--- 7.5 创建系统用户表（登录鉴权）
+-- 7.5 库存盘点单、明细与按日序号
+-- =============================================
+CREATE TABLE stocktake_order_sequences (
+    stocktake_date DATE NOT NULL PRIMARY KEY,
+    current_no     INT UNSIGNED NOT NULL DEFAULT 0
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='盘点单按日序号表';
+
+CREATE TABLE stocktake_orders (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stocktake_no        VARCHAR(32) NOT NULL,
+    stocktake_date      DATE NOT NULL,
+    scope_type          VARCHAR(20) NOT NULL DEFAULT 'all',
+    status              VARCHAR(20) NOT NULL DEFAULT 'draft',
+    counted_by          INT NOT NULL DEFAULT 0,
+    reviewed_by         INT NOT NULL DEFAULT 0,
+    posted_by           INT NOT NULL DEFAULT 0,
+    posted_at           DATETIME NULL,
+    remark              VARCHAR(500) NOT NULL DEFAULT '',
+    created_by_user_id  INT NOT NULL DEFAULT 0,
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_stocktake_no (stocktake_no),
+    KEY idx_stocktake_date_status (stocktake_date, status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点单';
+
+CREATE TABLE stocktake_items (
+    id                  BIGINT AUTO_INCREMENT PRIMARY KEY,
+    stocktake_order_id  BIGINT NOT NULL,
+    item_type           VARCHAR(20) NOT NULL,
+    item_id             INT NOT NULL,
+    item_name           VARCHAR(200) NOT NULL DEFAULT '',
+    item_spec           VARCHAR(100) NOT NULL DEFAULT '',
+    item_unit           VARCHAR(20) NOT NULL DEFAULT '',
+    book_qty            DECIMAL(14,3) NOT NULL DEFAULT 0,
+    counted_qty         DECIMAL(14,3) NULL,
+    variance_qty        DECIMAL(14,3) NULL,
+    unit_cost           DECIMAL(14,4) NOT NULL DEFAULT 0,
+    variance_amount     DECIMAL(14,2) NOT NULL DEFAULT 0,
+    reason              VARCHAR(300) NOT NULL DEFAULT '',
+    remark              VARCHAR(500) NOT NULL DEFAULT '',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uniq_stocktake_item (stocktake_order_id, item_type, item_id),
+    KEY idx_stocktake_item_order (stocktake_order_id, item_type, item_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='库存盘点明细';
+
+-- =============================================
+-- 7.6 创建系统用户表（登录鉴权）
 --     角色：admin-管理员（全部权限），user-普通用户（仅查看）
 -- =============================================
 DROP TABLE IF EXISTS users;

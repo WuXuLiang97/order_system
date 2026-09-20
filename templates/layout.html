@@ -465,6 +465,11 @@
                         <a class="nav-link" href="/products"><i class="bi bi-box"></i> 库存管理</a>
                     </li>
                     {{end}}
+                    {{if .CanAny "product:view" "material:view"}}
+                    <li class="nav-item">
+                        <a class="nav-link" href="/inventory"><i class="bi bi-journal-text"></i> 库存台账</a>
+                    </li>
+                    {{end}}
                     {{if .Can "material:view"}}
                     <li class="nav-item">
                         <a class="nav-link" href="/raw-materials"><i class="bi bi-cubes"></i> 原材料管理</a>

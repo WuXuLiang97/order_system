@@ -1,0 +1,550 @@
+{{define "content"}}
+<ul class="nav nav-tabs entity-tabs" id="inventoryTabs">
+    <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#inventoryRecordsPane" data-tab-key="records" type="button"><i class="bi bi-journal-text"></i> 入库与库存流水</button></li>
+    <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#stocktakePane" data-tab-key="stocktake" type="button"><i class="bi bi-clipboard-check"></i> 库存盘点</button></li>
+</ul>
+<div class="tab-content">
+<div class="tab-pane fade show active" id="inventoryRecordsPane">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0"><i class="bi bi-journal-text"></i> 入库与库存流水</h5>
+                <div class="small text-muted mt-1">以不可变库存流水为准，展示入库时间、来源、经办人、成本与批次。</div>
+            </div>
+            <span class="badge text-bg-light border">默认只看入库</span>
+        </div>
+        <div class="card-body">
+            <div class="row g-2 mb-3">
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label small text-muted mb-1">开始日期</label>
+                    <input type="date" class="form-control form-control-sm" id="inventoryStartDate">
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label small text-muted mb-1">结束日期</label>
+                    <input type="date" class="form-control form-control-sm" id="inventoryEndDate">
+                </div>
+                <div class="col-lg-1 col-md-4">
+                    <label class="form-label small text-muted mb-1">方向</label>
+                    <select class="form-select form-select-sm" id="inventoryDirection">
+                        <option value="in" selected>入库</option>
+                        <option value="out">出库</option>
+                        <option value="">全部</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label small text-muted mb-1">物料类型</label>
+                    <select class="form-select form-select-sm" id="inventoryItemType">
+                        <option value="">全部</option>
+                        <option value="product">成品</option>
+                        <option value="raw_material">原材料</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label small text-muted mb-1">入库来源</label>
+                    <select class="form-select form-select-sm" id="inventoryMovementType">
+                        <option value="">全部来源</option>
+                        <option value="opening">期初库存</option>
+                        <option value="purchase_in">采购入库</option>
+                        <option value="production_in">生产入库</option>
+                        <option value="manual_in">手工入库</option>
+                        <option value="stocktake_in">盘点盘盈</option>
+                        <option value="sales_out_reversal">销售出库冲回</option>
+                        <option value="adjustment">库存调整</option>
+                        <option value="manual_out">手工出库</option>
+                        <option value="production_consume">生产领料</option>
+                        <option value="sales_out">销售出库</option>
+                        <option value="stocktake_out">盘点盘亏</option>
+                    </select>
+                </div>
+                <div class="col-lg-2 col-md-4">
+                    <label class="form-label small text-muted mb-1">来源单号 / 批次</label>
+                    <input type="text" class="form-control form-control-sm" id="inventoryReferenceNo" placeholder="模糊查询">
+                </div>
+                <div class="col-lg-1 col-md-4">
+                    <label class="form-label small text-muted mb-1">经办人</label>
+                    <input type="text" class="form-control form-control-sm" id="inventoryOperator" placeholder="姓名">
+                </div>
+            </div>
+            <div class="d-flex gap-2 mb-3">
+                <button type="button" class="btn btn-primary btn-sm" onclick="loadInventoryMovements()"><i class="bi bi-search"></i> 查询</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="resetInventoryFilters()">重置</button>
+            </div>
+            <div class="table-responsive sticky-list-scroll">
+                <table class="table table-hover table-sm align-middle sticky-list-table" id="inventoryMovementTable">
+                    <thead>
+                        <tr>
+                            <th>业务时间</th>
+                            <th>来源单号</th>
+                            <th>类型</th>
+                            <th>名称</th>
+                            <th>规格</th>
+                            <th>数量</th>
+                            <th>单位</th>
+                            <th>单位成本</th>
+                            <th>金额</th>
+                            <th>来源</th>
+                            <th>批次</th>
+                            <th>变动前</th>
+                            <th>变动后</th>
+                            <th>经办人</th>
+                            <th>备注</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventoryMovementBody">
+                        <tr><td colspan="15" class="text-center text-muted py-4">正在加载...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="tab-pane fade" id="stocktakePane">
+    <div class="card">
+        <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0"><i class="bi bi-clipboard-check"></i> 库存盘点</h5>
+                <div class="small text-muted mt-1">盘点单保存实盘数、差异原因和审核过账记录；过账时按最新库存重算并写入库存流水。</div>
+            </div>
+            {{if .CanAny "product:manage" "material:manage"}}
+            <button type="button" class="btn btn-primary btn-sm" onclick="openStocktakeCreate()"><i class="bi bi-plus-circle"></i> 新建盘点单</button>
+            {{end}}
+        </div>
+        <div class="card-body">
+            <div class="table-responsive sticky-list-scroll">
+                <table class="table table-hover align-middle sticky-list-table" id="stocktakeTable">
+                    <thead>
+                        <tr>
+                            <th>盘点单号</th><th>盘点日期</th><th>范围</th><th>状态</th>
+                            <th>明细数</th><th>待录入</th><th>差异项</th><th>创建人</th>
+                            <th>过账人</th><th>创建时间</th><th>操作</th>
+                        </tr>
+                    </thead>
+                    <tbody id="stocktakeTableBody">
+                        <tr><td colspan="11" class="text-center text-muted py-4">正在加载...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+</div>
+
+<!-- 库存盘点编辑弹窗 -->
+<div class="modal fade" id="stocktakeModal" tabindex="-1" data-bs-backdrop="static">
+    <div class="modal-dialog modal-xl">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="stocktakeModalTitle">新建盘点单</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="stocktakeID" value="0">
+                <div class="row g-3 mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label">盘点日期 <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="stocktakeDate">
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">盘点范围 <span class="text-danger">*</span></label>
+                        <select class="form-select" id="stocktakeScope"></select>
+                    </div>
+                    <div class="col-md-6">
+                        <label class="form-label">盘点说明</label>
+                        <input type="text" class="form-control" id="stocktakeRemark" maxlength="500" placeholder="如：月末全盘、抽盘范围说明">
+                    </div>
+                </div>
+                <div id="stocktakeStatusInfo" class="alert alert-info py-2 d-none"></div>
+                <div class="table-responsive" style="max-height:58vh;">
+                    <table class="table table-sm table-bordered align-middle" id="stocktakeItemsTable">
+                        <thead class="table-light" style="position:sticky;top:0;z-index:2;">
+                            <tr>
+                                <th>类型</th><th>物料</th><th>规格</th><th>单位</th>
+                                <th class="text-end">账面数</th><th style="width:120px;">实盘数</th>
+                                <th class="text-end">差异</th><th class="text-end">差异金额</th>
+                                <th style="width:180px;">差异原因</th><th style="width:180px;">备注</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stocktakeItemsBody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer justify-content-between">
+                <div id="stocktakeFooterHint" class="small text-muted"></div>
+                <div id="stocktakeModalActions" class="d-flex gap-2"></div>
+            </div>
+        </div>
+    </div>
+</div>
+{{end}}
+
+{{define "scripts"}}
+<script>
+function invEscape(value) {
+    return String(value == null ? '' : value)
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+function invQty(value) {
+    var n = Number(value || 0);
+    return n.toLocaleString('zh-CN', {minimumFractionDigits: 0, maximumFractionDigits: 3});
+}
+function invMoney(value) {
+    return '¥' + Number(value || 0).toFixed(2);
+}
+function invDateTime(value) {
+    if (!value) return '-';
+    return String(value).replace('T', ' ').slice(0, 16);
+}
+function invTypeLabel(type) {
+    return type === 'product' ? '<span class="badge text-bg-primary">成品</span>' : '<span class="badge text-bg-info">原材料</span>';
+}
+function invMovementLabel(type) {
+    var labels = {
+        opening: '期初库存', purchase_in: '采购入库', production_in: '生产入库',
+        manual_in: '手工入库', stocktake_in: '盘点盘盈', sales_out_reversal: '销售出库冲回',
+        adjustment: '库存调整', manual_out: '手工出库', production_consume: '生产领料',
+        sales_out: '销售出库', stocktake_out: '盘点盘亏', legacy_shortage: '历史缺口'
+    };
+    return labels[type] || type || '-';
+}
+function invSourceCell(row) {
+    var label = invMovementLabel(row.movement_type);
+    var id = Number(row.reference_id || 0);
+    if (id <= 0) return label;
+    if (row.reference_type === 'purchase_material') {
+        return label + ' <a class="small" href="/purchase-materials/form?id=' + id + '">查看采购单</a>';
+    }
+    if (row.reference_type === 'product_outbound') {
+        return label + ' <a class="small" href="/outbound/detail?id=' + id + '" target="_blank">查看送货单</a>';
+    }
+    if (row.reference_type === 'stocktake') {
+        return label + ' <button type="button" class="btn btn-link btn-sm p-0 align-baseline" onclick="openStocktake(' + id + ')">查看盘点单</button>';
+    }
+    return label;
+}
+function loadInventoryMovements() {
+    var params = new URLSearchParams();
+    var fields = {
+        start_date: '#inventoryStartDate', end_date: '#inventoryEndDate',
+        direction: '#inventoryDirection', item_type: '#inventoryItemType',
+        movement_type: '#inventoryMovementType', reference_no: '#inventoryReferenceNo',
+        operator: '#inventoryOperator'
+    };
+    Object.keys(fields).forEach(function(key) {
+        var value = ($(fields[key]).val() || '').trim();
+        if (value) params.set(key, value);
+    });
+    params.set('limit', '500');
+    var body = $('#inventoryMovementBody');
+    body.html('<tr><td colspan="15" class="text-center text-muted py-4">正在加载...</td></tr>');
+    $.ajax({
+        url: '/api/stock-movements?' + params.toString(),
+        method: 'GET',
+        success: function(data) {
+            if (!Array.isArray(data) || data.length === 0) {
+                body.html('<tr><td colspan="15" class="text-center text-muted py-4">没有符合条件的库存流水</td></tr>');
+                return;
+            }
+            body.empty();
+            data.forEach(function(row) {
+                var before = row.stock_before == null ? '-' : invQty(row.stock_before);
+                var after = row.stock_after == null ? '-' : invQty(row.stock_after);
+                var quantityClass = Number(row.quantity) >= 0 ? 'text-success' : 'text-danger';
+                body.append('<tr>' +
+                    '<td>' + invEscape(invDateTime(row.occurred_at || row.business_date)) + '</td>' +
+                    '<td>' + invEscape(row.reference_no || '-') + '</td>' +
+                    '<td>' + invTypeLabel(row.item_type) + '</td>' +
+                    '<td><strong>' + invEscape(row.item_name || '-') + '</strong></td>' +
+                    '<td>' + invEscape(row.item_spec || '-') + '</td>' +
+                    '<td class="' + quantityClass + '"><strong>' + invQty(row.quantity) + '</strong></td>' +
+                    '<td>' + invEscape(row.item_unit || '-') + '</td>' +
+                    '<td>' + invMoney(row.unit_cost) + '</td>' +
+                    '<td>' + invMoney(row.total_cost) + '</td>' +
+                    '<td>' + invSourceCell(row) + '</td>' +
+                    '<td>' + invEscape(row.batch_no || '-') + '</td>' +
+                    '<td>' + before + '</td>' +
+                    '<td>' + after + '</td>' +
+                    '<td>' + invEscape(row.operator_name || '系统') + '</td>' +
+                    '<td class="text-muted small">' + invEscape(row.remark || '-') + '</td>' +
+                '</tr>');
+            });
+        },
+        error: function(xhr) {
+            body.html('<tr><td colspan="15" class="text-center text-danger py-4">加载失败：' + invEscape(xhr.responseText || '请求失败') + '</td></tr>');
+        }
+    });
+}
+function resetInventoryFilters() {
+    $('#inventoryStartDate,#inventoryEndDate,#inventoryReferenceNo,#inventoryOperator').val('');
+    $('#inventoryDirection').val('in');
+    $('#inventoryItemType,#inventoryMovementType').val('');
+    loadInventoryMovements();
+}
+$(document).ready(function() {
+    loadInventoryMovements();
+    loadStocktakes();
+    $('button[data-bs-target="#stocktakePane"]').on('shown.bs.tab', loadStocktakes);
+});
+
+function stocktakeToday() {
+    var d = new Date();
+    var m = ('0' + (d.getMonth() + 1)).slice(-2);
+    var day = ('0' + d.getDate()).slice(-2);
+    return d.getFullYear() + '-' + m + '-' + day;
+}
+function stocktakeStatusLabel(status) {
+    var labels = {draft:'草稿', submitted:'待审核', posted:'已过账', cancelled:'已取消'};
+    var cls = {draft:'text-bg-secondary', submitted:'text-bg-warning', posted:'text-bg-success', cancelled:'text-bg-danger'};
+    return '<span class="badge ' + (cls[status] || 'text-bg-secondary') + '">' + (labels[status] || invEscape(status)) + '</span>';
+}
+function stocktakeScopeLabel(scope) {
+    return scope === 'product' ? '成品' : scope === 'raw_material' ? '原材料' : '成品 + 原材料';
+}
+function stocktakeCanManage(scope) {
+    var perms = window.PERMS || {};
+    if (scope === 'product') return !!perms['product:manage'];
+    if (scope === 'raw_material') return !!perms['material:manage'];
+    if (scope === 'all') return !!perms['product:manage'] && !!perms['material:manage'];
+    return false;
+}
+function stocktakeCanView(scope) {
+    var perms = window.PERMS || {};
+    var product = !!perms['product:view'] || !!perms['product:manage'];
+    var material = !!perms['material:view'] || !!perms['material:manage'];
+    if (scope === 'product') return product;
+    if (scope === 'raw_material') return material;
+    if (scope === 'all') return product && material;
+    return false;
+}
+function stocktakeScopeOptions(manageOnly) {
+    var perms = window.PERMS || {};
+    var product = manageOnly ? !!perms['product:manage'] : (!!perms['product:view'] || !!perms['product:manage']);
+    var material = manageOnly ? !!perms['material:manage'] : (!!perms['material:view'] || !!perms['material:manage']);
+    var options = [];
+    if (product && material) options.push(['all', '成品 + 原材料']);
+    if (product) options.push(['product', '仅成品']);
+    if (material) options.push(['raw_material', '仅原材料']);
+    return options;
+}
+function renderStocktakeScopeOptions(selected, options) {
+    var select = $('#stocktakeScope').empty();
+    (options || stocktakeScopeOptions(false)).forEach(function(option) {
+        select.append('<option value="' + option[0] + '">' + option[1] + '</option>');
+    });
+    if (selected) select.val(selected);
+}
+function loadStocktakes() {
+    var body = $('#stocktakeTableBody');
+    body.html('<tr><td colspan="11" class="text-center text-muted py-4">正在加载...</td></tr>');
+    $.ajax({
+        url: '/api/stocktakes/list', method: 'GET',
+        success: function(data) {
+            if (!Array.isArray(data) || !data.length) {
+                body.html('<tr><td colspan="11" class="text-center text-muted py-4">暂无盘点单</td></tr>');
+                return;
+            }
+            body.empty();
+            data.forEach(function(order) {
+                body.append('<tr>' +
+                    '<td><strong>' + invEscape(order.stocktake_no) + '</strong></td>' +
+                    '<td>' + invEscape(order.stocktake_date || '-') + '</td>' +
+                    '<td>' + stocktakeScopeLabel(order.scope_type) + '</td>' +
+                    '<td>' + stocktakeStatusLabel(order.status) + '</td>' +
+                    '<td>' + Number(order.item_count || 0) + '</td>' +
+                    '<td>' + Number(order.pending_count || 0) + '</td>' +
+                    '<td>' + (Number(order.variance_count || 0) > 0 ? '<span class="text-danger fw-bold">' + Number(order.variance_count) + '</span>' : '0') + '</td>' +
+                    '<td>' + invEscape(order.created_by_name || '系统') + '</td>' +
+                    '<td>' + invEscape(order.posted_by_name || '-') + '</td>' +
+                    '<td>' + invEscape(invDateTime(order.created_at)) + '</td>' +
+                    '<td><button type="button" class="btn btn-sm btn-outline-primary" onclick="openStocktake(' + order.id + ')">查看</button></td>' +
+                '</tr>');
+            });
+        },
+        error: function(xhr) {
+            body.html('<tr><td colspan="11" class="text-center text-danger py-4">加载失败：' + invEscape(xhr.responseText || '请求失败') + '</td></tr>');
+        }
+    });
+}
+function openStocktakeCreate() {
+    var options = stocktakeScopeOptions(true);
+    if (!options.length) {
+        alert('没有库存管理权限');
+        return;
+    }
+    $('#stocktakeID').val('0');
+    $('#stocktakeModalTitle').text('新建盘点单');
+    $('#stocktakeDate').val(stocktakeToday());
+    renderStocktakeScopeOptions(options[0][0], options);
+    $('#stocktakeScope').prop('disabled', false);
+    $('#stocktakeRemark').val('');
+    $('#stocktakeStatusInfo').addClass('d-none').empty();
+    $('#stocktakeItemsBody').html('<tr><td colspan="10" class="text-center text-muted py-4">创建盘点单后自动带入当前账面库存</td></tr>');
+    $('#stocktakeFooterHint').text('盘点单创建后，初始状态为草稿。');
+    $('#stocktakeModalActions').html('<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button><button type="button" class="btn btn-primary" onclick="createStocktake()">创建盘点单</button>');
+    $('#stocktakeModal').modal('show');
+}
+function createStocktake() {
+    var date = $('#stocktakeDate').val();
+    if (!date) { alert('请选择盘点日期'); return; }
+    $.ajax({
+        url: '/api/stocktakes/create', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({stocktake_date: date, scope_type: $('#stocktakeScope').val(), remark: $('#stocktakeRemark').val()}),
+        success: function(order) { openStocktake(order.id); },
+        error: function(xhr) { alert('创建失败：' + (xhr.responseText || '请求失败')); }
+    });
+}
+function recalcStocktakeRow(row) {
+    var book = Number(row.attr('data-book-qty') || 0);
+    var input = row.find('.stocktake-counted');
+    var diffCell = row.find('.stocktake-diff');
+    if (input.val() === '') {
+        diffCell.text('-').removeClass('text-danger text-success');
+        row.find('.stocktake-diff-amount').text('-');
+        return;
+    }
+    var counted = Number(input.val());
+    var cost = Number(row.data('unit-cost') || 0);
+    var diff = Math.round((counted - book) * 1000) / 1000;
+    diffCell.text(diff.toLocaleString('zh-CN', {maximumFractionDigits: 3}));
+    diffCell.toggleClass('text-danger', diff < 0).toggleClass('text-success', diff > 0);
+    row.find('.stocktake-diff-amount').text(invMoney(diff * cost));
+}
+function renderStocktakeItems(order, editable) {
+    var body = $('#stocktakeItemsBody').empty();
+    if (!order.items || !order.items.length) {
+        body.html('<tr><td colspan="10" class="text-center text-muted py-4">盘点范围内没有物料</td></tr>');
+        return;
+    }
+    order.items.forEach(function(item) {
+        var countedRaw = item.counted_qty == null ? '' : String(item.counted_qty);
+        var countedDisplay = item.counted_qty == null ? '-' : invQty(item.counted_qty);
+        var variance = item.variance_qty == null ? '-' : invQty(item.variance_qty);
+        var varianceClass = item.variance_qty == null ? '' : (Number(item.variance_qty) < 0 ? 'text-danger' : Number(item.variance_qty) > 0 ? 'text-success' : '');
+        var amount = item.variance_qty == null ? '-' : invMoney(item.variance_amount);
+        var step = item.item_type === 'product' ? '1' : 'any';
+        var countedControl = editable
+            ? '<input type="number" class="form-control form-control-sm stocktake-counted" step="' + step + '" min="0" value="' + invEscape(countedRaw) + '">'
+            : countedDisplay;
+        var reasonControl = editable
+            ? '<input type="text" class="form-control form-control-sm stocktake-reason" maxlength="300" value="' + invEscape(item.reason || '') + '">'
+            : invEscape(item.reason || '-');
+        var remarkControl = editable
+            ? '<input type="text" class="form-control form-control-sm stocktake-remark" maxlength="500" value="' + invEscape(item.remark || '') + '">'
+            : invEscape(item.remark || '-');
+        body.append('<tr data-item-id="' + item.id + '" data-book-qty="' + Number(item.book_qty || 0) + '" data-unit-cost="' + Number(item.unit_cost || 0) + '">' +
+            '<td>' + invTypeLabel(item.item_type) + '</td>' +
+            '<td><strong>' + invEscape(item.item_name || '-') + '</strong></td>' +
+            '<td>' + invEscape(item.item_spec || '-') + '</td>' +
+            '<td>' + invEscape(item.item_unit || '-') + '</td>' +
+            '<td class="text-end stocktake-book">' + invQty(item.book_qty) + '</td>' +
+            '<td>' + countedControl + '</td>' +
+            '<td class="text-end stocktake-diff ' + varianceClass + '">' + variance + '</td>' +
+            '<td class="text-end stocktake-diff-amount">' + amount + '</td>' +
+            '<td>' + reasonControl + '</td><td>' + remarkControl + '</td>' +
+        '</tr>');
+    });
+    body.find('.stocktake-counted').on('input', function() { recalcStocktakeRow($(this).closest('tr')); });
+}
+function renderStocktakeActions(order) {
+    var canManage = stocktakeCanManage(order.scope_type) && window.PERMS && (window.PERMS['product:manage'] || window.PERMS['material:manage']);
+    var actions = '<button type="button" class="btn btn-secondary" data-bs-dismiss="modal">关闭</button>';
+    if (canManage && order.status === 'draft') {
+        actions = '<button type="button" class="btn btn-outline-danger" onclick="cancelStocktake(' + order.id + ')">取消盘点</button>' +
+            '<button type="button" class="btn btn-primary" onclick="saveStocktakeDraft(false)">保存草稿</button>' +
+            '<button type="button" class="btn btn-warning" onclick="saveStocktakeDraft(true)">提交审核</button>' + actions;
+    } else if (canManage && order.status === 'submitted') {
+        actions = '<button type="button" class="btn btn-outline-danger" onclick="cancelStocktake(' + order.id + ')">取消盘点</button>' +
+            '<button type="button" class="btn btn-success" onclick="postStocktake(' + order.id + ')">审核过账</button>' + actions;
+    }
+    $('#stocktakeModalActions').html(actions);
+}
+function openStocktake(id) {
+    $.ajax({
+        url: '/api/stocktakes/get?id=' + encodeURIComponent(id), method: 'GET',
+        success: function(order) {
+            $('#stocktakeID').val(order.id);
+            $('#stocktakeModalTitle').text('盘点单 ' + (order.stocktake_no || ''));
+            $('#stocktakeDate').val(order.stocktake_date || '');
+            renderStocktakeScopeOptions(order.scope_type, stocktakeScopeOptions(false));
+            $('#stocktakeScope').prop('disabled', true);
+            $('#stocktakeRemark').val(order.remark || '');
+            var editable = order.status === 'draft' && stocktakeCanManage(order.scope_type);
+            renderStocktakeItems(order, editable);
+            var hint = '创建人：' + (order.created_by_name || '系统') + '；实盘录入：' + (order.counted_by_name || '-');
+            if (order.posted_by_name) hint += '；过账人：' + order.posted_by_name;
+            $('#stocktakeFooterHint').text(hint);
+            $('#stocktakeStatusInfo').removeClass('d-none')
+                .html('状态：' + stocktakeStatusLabel(order.status) + '；范围：' + stocktakeScopeLabel(order.scope_type) +
+                    '；待录入 ' + Number(order.pending_count || 0) + ' 项；差异 ' + Number(order.variance_count || 0) + ' 项');
+            renderStocktakeActions(order);
+            $('#stocktakeModal').modal('show');
+        },
+        error: function(xhr) { alert('加载盘点单失败：' + (xhr.responseText || '请求失败')); }
+    });
+}
+function collectStocktakeLines() {
+    var lines = [];
+    $('#stocktakeItemsBody tr[data-item-id]').each(function() {
+        var row = $(this);
+        var value = row.find('.stocktake-counted').val();
+        lines.push({
+            id: Number(row.data('item-id')),
+            counted_qty: value === '' || value == null ? null : Number(value),
+            reason: row.find('.stocktake-reason').val() || '',
+            remark: row.find('.stocktake-remark').val() || ''
+        });
+    });
+    return lines;
+}
+function saveStocktakeDraft(thenSubmit) {
+    var id = Number($('#stocktakeID').val());
+    if (!id) return;
+    if (thenSubmit) {
+        var missingCount = 0;
+        $('#stocktakeItemsBody .stocktake-counted').each(function() {
+            if ($(this).val() === '') missingCount++;
+        });
+        if (missingCount > 0) {
+            alert('还有 ' + missingCount + ' 项未录入实盘数量，请录入后再提交审核');
+            return;
+        }
+    }
+    $.ajax({
+        url: '/api/stocktakes/update', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({id: id, stocktake_date: $('#stocktakeDate').val(), remark: $('#stocktakeRemark').val(), items: collectStocktakeLines()}),
+        success: function() {
+            if (thenSubmit) {
+                $.ajax({
+                    url: '/api/stocktakes/submit', method: 'POST', contentType: 'application/json',
+                    data: JSON.stringify({id: id}),
+                    success: function() { loadStocktakes(); openStocktake(id); },
+                    error: function(xhr) { alert('提交失败：' + (xhr.responseText || '请求失败')); }
+                });
+            } else {
+                loadStocktakes(); openStocktake(id);
+            }
+        },
+        error: function(xhr) { alert('保存失败：' + (xhr.responseText || '请求失败')); }
+    });
+}
+function postStocktake(id) {
+    if (!confirm('审核过账会按最新库存写入盘点盈亏流水，确定继续吗？')) return;
+    $.ajax({
+        url: '/api/stocktakes/post', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({id: id}),
+        success: function() { loadStocktakes(); openStocktake(id); loadInventoryMovements(); },
+        error: function(xhr) { alert('过账失败：' + (xhr.responseText || '请求失败')); }
+    });
+}
+function cancelStocktake(id) {
+    if (!confirm('确定取消该盘点单吗？已过账盘点单不能取消。')) return;
+    $.ajax({
+        url: '/api/stocktakes/cancel', method: 'POST', contentType: 'application/json',
+        data: JSON.stringify({id: id}),
+        success: function() { loadStocktakes(); openStocktake(id); },
+        error: function(xhr) { alert('取消失败：' + (xhr.responseText || '请求失败')); }
+    });
+}
+</script>
+{{end}}

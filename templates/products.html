@@ -193,8 +193,21 @@
                         <datalist id="productionProductOptions"></datalist>
                     </div>
                     <div class="mb-3">
+
                         <label class="form-label">生产数量 <span class="text-danger">*</span></label>
                         <input type="number" class="form-control" id="productionQuantity" placeholder="请输入生产数量" step="any" min="0" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">业务日期 <span class="text-danger">*</span></label>
+                        <input type="date" class="form-control" id="productionBusinessDate" required>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">生产批次</label>
+                        <input type="text" class="form-control" id="productionBatchNo" maxlength="64" placeholder="可留空，系统自动使用生产编号">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">生产说明 / 备注</label>
+                        <textarea class="form-control" id="productionRemark" rows="2" maxlength="500" placeholder="如：批次、返工或质量说明"></textarea>
                     </div>
                     <div id="productionBomInfo" class="text-muted small"></div>
                 </form>
@@ -274,6 +287,8 @@ $(document).ready(function() {
     // 生产入库模态框打开时加载产品下拉框
     $('#productionModal').on('show.bs.modal', function() {
         loadProductionProducts();
+        if (!$('#productionBusinessDate').val()) $('#productionBusinessDate').val(todayStr());
+        $('#productionBatchNo,#productionRemark').val('');
     });
 
     // 从订单管理跳转过来时，直接打开该订单的发货窗口。
@@ -396,14 +411,24 @@ function submitProduction() {
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({
+
             product_id: parseInt(productId),
-            quantity: quantity
+
+            quantity: quantity,
+
+            business_date: $('#productionBusinessDate').val(),
+
+            batch_no: $('#productionBatchNo').val(),
+
+            remark: $('#productionRemark').val()
+
         }),
         success: function(response) {
             alert(response.message || '生产入库成功');
             $('#productionModal').modal('hide');
             $('#productionForm')[0].reset();
             $('#productionBomInfo').text('');
+            $('#productionBusinessDate').val(todayStr());
             loadProducts(); // 刷新列表
             loadProductionProducts(); // 刷新下拉框
         },
@@ -517,7 +542,6 @@ function buildOrderShipmentRow(item) {
     </div>`;
 }
 
-
 function addOutboundRow() {
     if (outboundOrderID) return;
     $('#outboundItems').append(buildOutboundRow());
@@ -607,7 +631,6 @@ $('#outboundModal').on('hidden.bs.modal', function() {
     $('#outboundOrderId').val('');
     $('#outboundItems').empty();
 });
-
 
 $(document).on('click', '.remove-outbound-row', function() {
     if ($('#outboundItems .outbound-row').length > 1) {
