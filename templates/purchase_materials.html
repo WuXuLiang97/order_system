@@ -325,17 +325,27 @@ function loadPurchaseMaterials() {
             tbody.empty();
             (Array.isArray(data) ? data : []).forEach(function(order) {
                 var items = Array.isArray(order.items) ? order.items : [];
-                var status = order.status === 1
-                    ? '<span class="badge bg-success">已到货</span>'
-                    : '<span class="badge bg-warning">采购中</span>';
-                var payment = order.payment_status === '已付款'
-                    ? '<span class="badge bg-success">已付款</span>'
-                    : '<span class="badge bg-secondary">未付款</span>';
+                var isDraft = Number(order.status) === 2;
+                var status = isDraft
+                    ? '<span class="badge bg-light text-dark border">草稿</span>'
+                    : (order.status === 1
+                        ? '<span class="badge bg-success">已到货</span>'
+                        : '<span class="badge bg-warning">采购中</span>');
+                var payment = isDraft
+                    ? '<span class="badge bg-light text-dark border">未提交</span>'
+                    : (order.payment_status === '已付款'
+                        ? '<span class="badge bg-success">已付款</span>'
+                        : '<span class="badge bg-secondary">未付款</span>');
                 var actions = '';
                 if (window.PERMS && window.PERMS['purchase:manage']) {
-                    actions = `<a class="btn btn-warning btn-sm me-1" href="/purchase-materials/form?id=${order.id}">编辑</a>
-                               <button class="btn btn-outline-primary btn-sm me-1" onclick="openPurchaseQuickModal(${order.id})">状态/付款</button>
-                               <button class="btn btn-danger btn-sm" onclick="deletePurchase(${order.id})">删除</button>`;
+                    if (isDraft) {
+                        actions = `<a class="btn btn-warning btn-sm me-1" href="/purchase-materials/form?id=${order.id}">继续编辑</a>
+                                   <button class="btn btn-danger btn-sm" onclick="deletePurchase(${order.id})">删除</button>`;
+                    } else {
+                        actions = `<a class="btn btn-warning btn-sm me-1" href="/purchase-materials/form?id=${order.id}">编辑</a>
+                                   <button class="btn btn-outline-primary btn-sm me-1" onclick="openPurchaseQuickModal(${order.id})">状态/付款</button>
+                                   <button class="btn btn-danger btn-sm" onclick="deletePurchase(${order.id})">删除</button>`;
+                    }
                 }
                 var detailHtml = items.map(function(item, index) {
                     return `<tr>
@@ -360,7 +370,7 @@ function loadPurchaseMaterials() {
                             <button type="button" class="btn btn-sm btn-outline-secondary me-1 purchase-detail-toggle" data-order-id="${order.id}" onclick="togglePurchaseDetails(${order.id})" aria-expanded="false">
                                 <i class="bi bi-chevron-right"></i>
                             </button>
-                            <strong>${escapePurchaseHtml(order.purchase_no || '-')}</strong>
+                            <strong>${isDraft ? '草稿 #' + order.id : escapePurchaseHtml(order.purchase_no || '-')}</strong>
                         </td>
                         <td>${parseInt(order.item_count || items.length, 10)} 项</td>
                         <td><strong>${parseFloat(order.total_quantity || 0)}</strong></td>

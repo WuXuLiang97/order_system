@@ -61,6 +61,10 @@ func UpdateOrderStatus(w http.ResponseWriter, r *http.Request) {
 		writeJSONError(w, http.StatusForbidden, "没有权限修改该订单状态")
 		return
 	}
+	if currentStatus == orderStatusDraft {
+		writeJSONError(w, http.StatusBadRequest, "请通过创建订单页提交草稿")
+		return
+	}
 
 	// 有关联送货单的订单不能取消，避免已发货库存与订单状态、库存回补相互冲突。
 	if req.Status == 4 && currentStatus != 4 {

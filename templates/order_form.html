@@ -270,7 +270,7 @@
     <div>
         <a href="/orders" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> 返回订单列表</a>
         <h4 class="mb-1" id="orderEditorTitle"><i class="bi bi-cart-plus"></i> 创建订单</h4>
-        <div class="text-muted small">按客户、物流、产品明细和备注顺序填写，底部汇总栏会实时计算。</div>
+        <div class="text-muted small">按客户、物流、产品明细和备注顺序填写，底部汇总栏会实时计算；未完成的内容可先保存为草稿。</div>
     </div>
 </div>
 
@@ -469,6 +469,9 @@
         </div>
         <div class="editor-summary-actions">
             <a href="/orders" class="btn btn-outline-secondary">取消</a>
+            <button type="button" class="btn btn-outline-primary" id="saveDraftButton" onclick="saveOrderDraft()">
+                <i class="bi bi-save"></i> 保存草稿
+            </button>
             <button type="submit" form="orderEditorForm" class="btn btn-primary px-4" id="saveOrderButton">
                 <i class="bi bi-check2-circle"></i> 提交订单
             </button>
@@ -488,6 +491,8 @@ var orderProductAutocompleteInput = null;
 var orderProductAutocompleteItems = [];
 var orderProductAutocompleteIndex = -1;
 var orderIsEdit = false;
+var orderIsDraft = false;
+var orderItemsReadOnly = false;
 
 var ORDER_CURRENCIES = ['CNY','USD','EUR','GBP','JPY','HKD','AUD'];
 var ORDER_TRADE_TERMS = ['EXW','FOB','CIF','DDP'];
@@ -691,7 +696,7 @@ function setOrderProductAutocompleteIndex(index) {
 function renderOrderProductAutocomplete(keyword) {
     var input = orderProductAutocompleteInput;
     var menu = $('#orderProductAutocomplete');
-    if (!input || !input.length || orderIsEdit) {
+    if (!input || !input.length || orderItemsReadOnly) {
         hideOrderProductAutocomplete();
         return;
     }
@@ -804,7 +809,7 @@ function orderItemRowHtml(item) {
     var quantity = item.quantity == null ? '' : item.quantity;
     var price = item.price == null ? '' : item.price;
     var amount = item.amount == null ? ((parseFloat(quantity) || 0) * (parseFloat(price) || 0)).toFixed(2) : Number(item.amount || 0).toFixed(2);
-    var disabled = orderIsEdit ? 'disabled' : '';
+    var disabled = orderItemsReadOnly ? 'disabled' : '';
     var specText = spec || '—';
     var unitText = unit || '—';
     var specClass = spec ? '' : ' is-empty';
@@ -825,18 +830,18 @@ function renderOrderItemRow(item) {
 }
 
 function addOrderItem(item) {
-    if (orderIsEdit) return;
+    if (orderItemsReadOnly) return;
     renderOrderItemRow(item);
 }
 
 function addOrderItemAndFocus() {
-    if (orderIsEdit) return;
+    if (orderItemsReadOnly) return;
     addOrderItem();
     EntityEditor.focusField('#orderItems .order-item-row:last .item-product-name');
 }
 
 function removeOrderItem(button) {
-    if (orderIsEdit) return;
+    if (orderItemsReadOnly) return;
     if ($('#orderItems .order-item-row').length <= 1) {
         EntityEditor.notify('订单至少保留一个产品。', 'error');
         return;
@@ -890,8 +895,23 @@ function validateOrderItems() {
     return { items: items, errors: errors };
 }
 
-function collectOrderEditorData(includeItems) {
-    var data = {
+function collectOrderDraftItems() {
+    var items = [];
+    $('#orderItems .order-item-row').each(function () {
+        var row = $(this);
+        var productID = parseInt(row.find('.item-product-id').val(), 10) || 0;
+        if (!productID) return;
+        var quantity = parseInt(row.find('.item-quantity').val(), 10);
+        if (isNaN(quantity) || quantity < 0) quantity = 0;
+        var price = parseFloat(row.find('.item-price').val());
+        if (isNaN(price) || price < 0) price = 0;
+        items.push({ product_id: productID, quantity: quantity, price: price });
+    });
+    return items;
+}
+
+function collectOrderEditorData() {
+    return {
         customer_name: ($('#customerName').val() || '').trim(),
         customer_phone: ($('#customerPhone').val() || '').trim(),
         customer_address: ($('#customerAddress').val() || '').trim(),
@@ -913,8 +933,6 @@ function collectOrderEditorData(includeItems) {
         shipping_mark: ($('#shippingMark').val() || '').trim(),
         remark: ($('#orderRemark').val() || '').trim()
     };
-    if (includeItems) data.items = validateOrderItems().items;
-    return data;
 }
 
 function saveOrderEditor() {
@@ -924,8 +942,10 @@ function saveOrderEditor() {
         EntityEditor.focusField('#customerName');
         return false;
     }
-    var data = collectOrderEditorData(!orderIsEdit);
-    if (!orderIsEdit) {
+
+    var data = collectOrderEditorData();
+    var needsItems = !orderIsEdit || orderIsDraft;
+    if (needsItems) {
         var itemResult = validateOrderItems();
         if (itemResult.errors.length) {
             EntityEditor.notify(itemResult.errors.join('；'), 'error');
@@ -937,20 +957,47 @@ function saveOrderEditor() {
             return false;
         }
         data.items = itemResult.items;
-    } else {
-        data.id = parseInt($('#orderId').val(), 10) || 0;
     }
+    if (orderIsEdit) data.id = parseInt($('#orderId').val(), 10) || 0;
+    if (orderIsDraft) data.save_as_draft = false;
+
+    var updatingExistingOrder = orderIsEdit && !orderIsDraft;
     return EntityEditor.save({
-        url: orderIsEdit ? '/api/orders/update' : '/api/orders',
+        url: updatingExistingOrder ? '/api/orders/update' : '/api/orders',
         data: data,
-        errorMessage: orderIsEdit ? '保存失败：' : '创建失败：',
+        errorMessage: orderIsDraft ? '提交失败：' : (updatingExistingOrder ? '保存失败：' : '创建失败：'),
         success: function (response) {
-            if (!orderIsEdit) {
+            if (orderIsDraft) {
+                EntityEditor.notify('订单提交成功，订单号：' + (response.order_no || ''), 'success');
+            } else if (!orderIsEdit) {
                 EntityEditor.notify('订单创建成功，订单号：' + (response.order_no || ''), 'success');
             }
             window.location.href = '/orders';
         }
     });
+}
+
+function saveOrderDraft() {
+    if (orderIsEdit && !orderIsDraft) return false;
+    var data = collectOrderEditorData();
+    data.save_as_draft = true;
+    data.items = collectOrderDraftItems();
+    if (orderIsEdit) data.id = parseInt($('#orderId').val(), 10) || 0;
+
+    EntityEditor.setBusy('#saveDraftButton', true, '保存中...');
+    var request = EntityEditor.save({
+        url: '/api/orders',
+        data: data,
+        errorMessage: '草稿保存失败：',
+        success: function (response) {
+            EntityEditor.notify(response.message || '草稿保存成功', 'success');
+            window.location.href = '/orders?status=5';
+        }
+    });
+    if (request && request.always) {
+        request.always(function () { EntityEditor.setBusy('#saveDraftButton', false); });
+    }
+    return request;
 }
 
 function loadOrderForEdit(id) {
@@ -959,6 +1006,8 @@ function loadOrderForEdit(id) {
         method: 'GET',
         success: function (data) {
             var order = data.order || {};
+            orderIsDraft = Number(order.status) === 5;
+            orderItemsReadOnly = !orderIsDraft;
             $('#orderId').val(order.id || id);
             $('#customerId').val(order.customer_id || '');
             $('#customerSearchInput').val(order.customer_name || '');
@@ -986,11 +1035,21 @@ function loadOrderForEdit(id) {
             $('#orderItems').empty();
             if (!items.length) renderOrderItemRow();
             items.forEach(function (item) { renderOrderItemRow(item); });
-            $('#orderEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑订单 ' + orderEscape(order.order_no || ''));
-            $('#summaryMode').text('编辑订单');
-            $('#saveOrderButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
-            $('#orderItemsModeHint').text('编辑订单时产品明细只读；如需调整产品或数量，请在订单详情流程中处理。');
-            $('#addBlankOrderItem').prop('disabled', true);
+            if (orderIsDraft) {
+                $('#orderEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑草稿 #' + orderEscape(order.id || id));
+                $('#summaryMode').text('草稿编辑');
+                $('#saveOrderButton').html('<i class="bi bi-check2-circle"></i> 提交订单');
+                $('#saveDraftButton').show().html('<i class="bi bi-save"></i> 保存草稿');
+                $('#orderItemsModeHint').text('草稿可继续修改客户、产品、数量和备注；点击“提交订单”后才占用库存并生成正式订单号。');
+                $('#addBlankOrderItem').prop('disabled', false);
+            } else {
+                $('#orderEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑订单 ' + orderEscape(order.order_no || ''));
+                $('#summaryMode').text('编辑订单');
+                $('#saveOrderButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
+                $('#saveDraftButton').hide();
+                $('#orderItemsModeHint').text('编辑订单时产品明细只读；如需调整产品或数量，请在订单详情流程中处理。');
+                $('#addBlankOrderItem').prop('disabled', true);
+            }
             recalcOrderSummary();
             EntityEditor.markClean();
         },
@@ -1008,13 +1067,13 @@ $(document).ready(function () {
     loadOrderProducts();
     $(document)
         .on('focus.orderProductAutocomplete', '.item-product-name', function () {
-            if (orderIsEdit) return;
+            if (orderItemsReadOnly) return;
             orderProductAutocompleteInput = $(this);
             if ((parseInt($(this).closest('tr').find('.item-product-id').val(), 10) || 0) && this.value) this.select();
             renderOrderProductAutocomplete(this.value);
         })
         .on('input.orderProductAutocomplete', '.item-product-name', function () {
-            if (orderIsEdit) return;
+            if (orderItemsReadOnly) return;
             var input = $(this);
             if (parseInt(input.closest('tr').find('.item-product-id').val(), 10) || 0) {
                 clearOrderItemProduct(input);

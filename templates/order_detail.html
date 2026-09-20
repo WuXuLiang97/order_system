@@ -72,6 +72,7 @@
         .status-2 { background: #17a2b8; }
 .status-3 { background: #5cb85c; }
 .status-4 { background: #d9534f; }
+.status-5 { background: #6c757d; }
         table {
             width: 100%;
             border-collapse: collapse;
@@ -231,7 +232,7 @@
 
         <!-- 单据信息 -->
         <div class="info-row">
-            <div class="info-item"><strong>订单状态：</strong><span class="status-badge status-{{.Order.Status}}">{{if eq .Order.Status 0}}待生产{{else if eq .Order.Status 1}}生产中{{else if eq .Order.Status 2}}待发货{{else if eq .Order.Status 3}}已发货{{else if eq .Order.Status 4}}已取消{{else}}未知{{end}}</span></div>
+            <div class="info-item"><strong>订单状态：</strong><span class="status-badge status-{{.Order.Status}}">{{if eq .Order.Status 0}}待生产{{else if eq .Order.Status 1}}生产中{{else if eq .Order.Status 2}}待发货{{else if eq .Order.Status 3}}已发货{{else if eq .Order.Status 4}}已取消{{else if eq .Order.Status 5}}草稿{{else}}未知{{end}}</span></div>
             <div class="info-item"><strong>回款状态：</strong><span>{{if eq .Order.PaymentStatus 1}}是{{else}}否{{end}}</span></div>
             <div class="info-item"><strong>制单：</strong><span>{{if .Order.PreparedBy}}{{.Order.PreparedBy}}{{else}}未填写{{end}}</span></div>
             <div class="info-item"><strong>负责人（业务员）：</strong><span>{{if .Order.OwnerName}}{{.Order.OwnerName}}{{else}}未分配{{end}}</span></div>

@@ -22,6 +22,7 @@ const (
 	PurchaseMaterialTypeFixedAsset  = "固定资产"
 	PurchaseMaterialTypeOffice      = "办公用品"
 	PurchaseMaterialTypeEquipment   = "设备"
+	purchaseStatusDraft             = 2
 )
 
 var purchaseMaterialTypes = map[string]bool{
@@ -44,6 +45,7 @@ type purchaseItemRequest struct {
 
 type purchaseOrderRequest struct {
 	ID                  int                   `json:"id"`
+	SaveAsDraft         bool                  `json:"save_as_draft"`
 	Supplier            string                `json:"supplier"`
 	Freight             float64               `json:"freight"`
 	PurchaseDate        string                `json:"purchase_date"`
@@ -67,6 +69,10 @@ func parsePurchaseOrderDate(s string) (*time.Time, error) {
 	return &t, nil
 }
 
+func newDraftPurchaseNo(userID int) string {
+	return fmt.Sprintf("DRAFT-%x-%x", userID, time.Now().UnixNano())
+}
+
 func parsePurchaseDate(s string) (interface{}, error) {
 	if s == "" {
 		return nil, nil
@@ -81,11 +87,25 @@ func validatePurchaseOrderRequest(req purchaseOrderRequest) string {
 	if req.Freight < 0 {
 		return "运费不能为负数"
 	}
-	if req.Status != 0 && req.Status != 1 {
-		return "采购状态不正确"
-	}
 	if req.PaymentStatus != "" && req.PaymentStatus != "未付款" && req.PaymentStatus != "已付款" {
 		return "付款状态不正确"
+	}
+	if req.SaveAsDraft {
+		for index, item := range req.Items {
+			if !purchaseMaterialTypes[item.MaterialType] {
+				return fmt.Sprintf("第%d行物料类型不正确", index+1)
+			}
+			if item.Quantity < 0 {
+				return fmt.Sprintf("第%d行采购数量不能为负数", index+1)
+			}
+			if item.Price < 0 {
+				return fmt.Sprintf("第%d行单价不能为负数", index+1)
+			}
+		}
+		return ""
+	}
+	if req.Status != 0 && req.Status != 1 {
+		return "采购状态不正确"
 	}
 	if len(req.Items) == 0 {
 		return "请至少添加一种采购物料"
@@ -115,13 +135,27 @@ func normalizePurchaseOrderRequest(req *purchaseOrderRequest) {
 		req.PaymentStatus = "未付款"
 	}
 	req.Remark = strings.TrimSpace(req.Remark)
+	if req.SaveAsDraft {
+		req.Status = purchaseStatusDraft
+	}
 	for i := range req.Items {
 		req.Items[i].MaterialName = strings.TrimSpace(req.Items[i].MaterialName)
 		req.Items[i].MaterialType = strings.TrimSpace(req.Items[i].MaterialType)
+		if req.Items[i].MaterialType == "" {
+			req.Items[i].MaterialType = PurchaseMaterialTypeRawMaterial
+		}
 		req.Items[i].Spec = strings.TrimSpace(req.Items[i].Spec)
 		req.Items[i].Unit = strings.TrimSpace(req.Items[i].Unit)
 		if req.Items[i].Unit == "" {
 			req.Items[i].Unit = "个"
+		}
+		if req.SaveAsDraft {
+			if req.Items[i].Quantity < 0 {
+				req.Items[i].Quantity = 0
+			}
+			if req.Items[i].Price < 0 {
+				req.Items[i].Price = 0
+			}
 		}
 		if req.Items[i].MaterialType != PurchaseMaterialTypeRawMaterial || req.Items[i].RawMaterialID < 0 {
 			req.Items[i].RawMaterialID = 0
@@ -426,7 +460,7 @@ func GetPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(order)
 }
 
-// AddPurchaseMaterial 新增一张包含多种物料的采购单。
+// AddPurchaseMaterial 新增采购单、保存草稿或提交已有草稿。
 func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -485,37 +519,88 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	numberDate := time.Now()
-	if purchaseDate != nil {
-		numberDate = *purchaseDate
-	}
-	purchaseNo, err := models.NextPurchaseNoTx(tx, numberDate)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	result, err := tx.Exec(`
-        INSERT INTO purchase_orders
-            (purchase_no, supplier, freight, purchase_date, expected_arrival_date,
-             actual_arrival_date, payment_status, status, remark, payment_receipt)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, purchaseNo, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
-		req.PaymentStatus, req.Status, req.Remark, receiptJSON)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	orderID64, err := result.LastInsertId()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	orderID := int(orderID64)
-
 	userID := 0
 	if user := CurrentUser(r); user != nil {
 		userID = user.ID
 	}
+
+	orderID := req.ID
+	existingDraft := false
+	purchaseNo := ""
+	if orderID > 0 {
+		var currentStatus int
+		err := tx.QueryRow(`
+            SELECT purchase_no, status
+            FROM purchase_orders
+            WHERE id = ?
+            FOR UPDATE
+        `, orderID).Scan(&purchaseNo, &currentStatus)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Purchase order not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if currentStatus != purchaseStatusDraft {
+			http.Error(w, "仅草稿采购单可以通过创建页继续提交", http.StatusBadRequest)
+			return
+		}
+		existingDraft = true
+	}
+
+	if req.SaveAsDraft {
+		if !existingDraft {
+			purchaseNo = newDraftPurchaseNo(userID)
+		}
+	} else {
+		numberDate := time.Now()
+		if purchaseDate != nil {
+			numberDate = *purchaseDate
+		}
+		purchaseNo, err = models.NextPurchaseNoTx(tx, numberDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if existingDraft {
+		if _, err := tx.Exec("DELETE FROM purchase_materials WHERE purchase_order_id = ?", orderID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if _, err := tx.Exec(`
+            UPDATE purchase_orders SET
+                purchase_no = ?, supplier = ?, freight = ?, purchase_date = ?, expected_arrival_date = ?,
+                actual_arrival_date = ?, payment_status = ?, status = ?, remark = ?, payment_receipt = ?
+            WHERE id = ?
+        `, purchaseNo, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
+			req.PaymentStatus, req.Status, req.Remark, receiptJSON, orderID); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		result, err := tx.Exec(`
+            INSERT INTO purchase_orders
+                (purchase_no, supplier, freight, purchase_date, expected_arrival_date,
+                 actual_arrival_date, payment_status, status, remark, payment_receipt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `, purchaseNo, req.Supplier, req.Freight, purchaseDate, expectedDate, actualDate,
+			req.PaymentStatus, req.Status, req.Remark, receiptJSON)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		orderID64, err := result.LastInsertId()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		orderID = int(orderID64)
+	}
+
 	allocations := purchaseFreightAllocations(req.Items, req.Freight)
 	for i, item := range req.Items {
 		itemID, err := insertPurchaseItemTx(tx, orderID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, 0)
@@ -540,12 +625,23 @@ func AddPurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	message := "采购单添加成功"
+	responseStatus := http.StatusCreated
+	if req.SaveAsDraft {
+		message = "采购单草稿保存成功"
+	} else if existingDraft {
+		message = "采购单提交成功"
+	}
+	if existingDraft {
+		responseStatus = http.StatusOK
+	}
 	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
+	w.WriteHeader(responseStatus)
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"id":          orderID,
 		"purchase_no": purchaseNo,
-		"message":     "采购单添加成功",
+		"status":      req.Status,
+		"message":     message,
 	})
 }
 
@@ -562,6 +658,10 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 	if req.ID <= 0 {
 		http.Error(w, "Invalid id", http.StatusBadRequest)
+		return
+	}
+	if req.SaveAsDraft {
+		http.Error(w, "请通过采购单创建页保存草稿", http.StatusBadRequest)
 		return
 	}
 	normalizePurchaseOrderRequest(&req)
@@ -612,13 +712,17 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var existingID int
-	if err := tx.QueryRow("SELECT id FROM purchase_orders WHERE id = ? FOR UPDATE", req.ID).Scan(&existingID); err != nil {
+	var existingID, existingStatus int
+	if err := tx.QueryRow("SELECT id, status FROM purchase_orders WHERE id = ? FOR UPDATE", req.ID).Scan(&existingID, &existingStatus); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Purchase order not found", http.StatusNotFound)
 		} else {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 		}
+		return
+	}
+	if existingStatus == purchaseStatusDraft {
+		http.Error(w, "请通过采购单创建页继续编辑或提交草稿", http.StatusBadRequest)
 		return
 	}
 

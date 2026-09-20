@@ -3,7 +3,7 @@
     <div>
         <a href="/purchase-materials" class="btn btn-outline-secondary btn-sm mb-2"><i class="bi bi-arrow-left"></i> 返回采购单列表</a>
         <h4 class="mb-1" id="purchaseEditorTitle"><i class="bi bi-cart-plus"></i> 新建采购单</h4>
-        <div class="text-muted small">采购单、到货、付款和物料明细集中在同一编辑器内。</div>
+        <div class="text-muted small">采购单、到货、付款和物料明细集中在同一编辑器内；未完成时可先保存草稿。</div>
     </div>
 </div>
 
@@ -151,6 +151,9 @@
         </div>
         <div class="editor-summary-actions">
             <a href="/purchase-materials" class="btn btn-outline-secondary">取消</a>
+            <button type="button" class="btn btn-outline-primary" id="savePurchaseDraftButton" onclick="savePurchaseDraft()">
+                <i class="bi bi-save"></i> 保存草稿
+            </button>
             <button type="submit" form="purchaseEditorForm" class="btn btn-primary px-4" id="savePurchaseButton">
                 <i class="bi bi-check2-circle"></i> 提交采购单
             </button>
@@ -181,6 +184,7 @@ var purchaseRawMaterials = [];
 var purchaseReceiptURLs = [];
 var purchaseMaterialAutocomplete = null;
 var purchaseIsEdit = false;
+var purchaseIsDraft = false;
 
 function purchaseEscape(value) {
     return String(value == null ? '' : value)
@@ -349,6 +353,36 @@ function collectPurchaseItems() {
     return { items: items, errors: errors };
 }
 
+function collectPurchaseDraftItems() {
+    var items = [];
+    $('#purchaseItems .purchase-item-row').each(function () {
+        var row = $(this);
+        var name = ($(row.find('.item-material-name')[0]).val() || '').trim();
+        var spec = ($(row.find('.item-spec')[0]).val() || '').trim();
+        var quantityText = String(row.find('.item-quantity').val() || '').trim();
+        var priceText = String(row.find('.item-price').val() || '').trim();
+        var rawMaterialID = parseInt(row.find('.item-raw-material-id').val(), 10) || 0;
+        var materialType = row.find('.item-material-type').val() || '原材料';
+        if (!name && !spec && !quantityText && !priceText && !rawMaterialID && materialType === '原材料') return;
+
+        var quantity = parseFloat(quantityText);
+        if (isNaN(quantity) || quantity < 0) quantity = 0;
+        var price = parseFloat(priceText);
+        if (isNaN(price) || price < 0) price = 0;
+        items.push({
+            id: parseInt(row.attr('data-item-id'), 10) || 0,
+            raw_material_id: rawMaterialID,
+            material_type: materialType,
+            material_name: name,
+            spec: spec,
+            unit: ($(row.find('.item-unit')[0]).val() || '').trim() || '个',
+            quantity: quantity,
+            price: price
+        });
+    });
+    return items;
+}
+
 function collectPurchaseEditorData() {
     return {
         id: purchaseIsEdit ? (parseInt($('#purchaseId').val(), 10) || 0) : 0,
@@ -406,6 +440,17 @@ function viewPurchaseReceipt(url) {
     $('#purchaseReceiptViewModal').modal('show');
 }
 
+function updatePurchaseStatusHint() {
+    var status = $('#purchaseStatus').val();
+    if (purchaseIsDraft) {
+        $('#purchaseStatusHint').text(status === '1'
+            ? '提交后按已到货处理，并增加原材料库存。'
+            : '提交后生成正式采购单号，并计入在途采购。');
+        return;
+    }
+    $('#purchaseStatusHint').text(status === '1' ? '已到货：保存时会按实际到货处理。' : '采购中：保存后计入在途采购。');
+}
+
 function savePurchaseEditor() {
     var itemResult = collectPurchaseItems();
     if (itemResult.errors.length) {
@@ -420,12 +465,37 @@ function savePurchaseEditor() {
     var data = collectPurchaseEditorData();
     data.items = itemResult.items;
     if (!data.purchase_date) data.purchase_date = purchaseToday();
+    var updatingExistingPurchase = purchaseIsEdit && !purchaseIsDraft;
+    if (purchaseIsDraft) data.save_as_draft = false;
     return EntityEditor.save({
-        url: purchaseIsEdit ? '/api/purchase-materials/update' : '/api/purchase-materials/add',
+        url: updatingExistingPurchase ? '/api/purchase-materials/update' : '/api/purchase-materials/add',
         data: data,
-        errorMessage: purchaseIsEdit ? '保存失败：' : '创建失败：',
+        errorMessage: purchaseIsDraft ? '提交失败：' : (updatingExistingPurchase ? '保存失败：' : '创建失败：'),
         success: function () { window.location.href = '/purchase-materials'; }
     });
+}
+
+function savePurchaseDraft() {
+    if (purchaseIsEdit && !purchaseIsDraft) return false;
+    var data = collectPurchaseEditorData();
+    data.save_as_draft = true;
+    data.items = collectPurchaseDraftItems();
+    if (!data.purchase_date) data.purchase_date = purchaseToday();
+
+    EntityEditor.setBusy('#savePurchaseDraftButton', true, '保存中...');
+    var request = EntityEditor.save({
+        url: '/api/purchase-materials/add',
+        data: data,
+        errorMessage: '草稿保存失败：',
+        success: function (response) {
+            EntityEditor.notify(response.message || '采购单草稿保存成功', 'success');
+            window.location.href = '/purchase-materials';
+        }
+    });
+    if (request && request.always) {
+        request.always(function () { EntityEditor.setBusy('#savePurchaseDraftButton', false); });
+    }
+    return request;
 }
 
 function loadPurchaseForEdit(id) {
@@ -433,16 +503,17 @@ function loadPurchaseForEdit(id) {
         url: '/api/purchase-materials/get?id=' + id,
         method: 'GET',
         success: function (data) {
+            purchaseIsDraft = Number(data.status) === 2;
             $('#purchaseId').val(data.id || id);
             $('#purchaseNo').val(data.purchase_no || '');
-            $('#purchaseNoWrap').show();
+            $('#purchaseNoWrap').toggle(!purchaseIsDraft);
             $('#supplier').val(data.supplier || '');
             $('#purchaseDate').val(purchaseDateOnly(data.purchase_date));
             $('#expectedArrivalDate').val(purchaseDateOnly(data.expected_arrival_date));
             $('#actualArrivalDate').val(purchaseDateOnly(data.actual_arrival_date));
             if (window.CustomDatePicker) window.CustomDatePicker.refreshAll();
             $('#paymentStatus').val(data.payment_status || '未付款');
-            $('#purchaseStatus').val(String(data.status == null ? 0 : data.status));
+            $('#purchaseStatus').val(purchaseIsDraft ? '0' : String(data.status == null ? 0 : data.status));
             $('#freight').val(data.freight || 0);
             $('#purchaseRemark').val(data.remark || '');
             purchaseReceiptURLs = Array.isArray(data.payment_receipts) ? data.payment_receipts.slice() : [];
@@ -451,8 +522,16 @@ function loadPurchaseForEdit(id) {
             $('#purchaseItems').empty();
             if (!items.length) addPurchaseItem();
             items.forEach(function (item) { addPurchaseItem(item); });
-            $('#purchaseEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑采购单 ' + purchaseEscape(data.purchase_no || ''));
-            $('#savePurchaseButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
+            if (purchaseIsDraft) {
+                $('#purchaseEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑采购单草稿 #' + purchaseEscape(data.id || id));
+                $('#savePurchaseButton').html('<i class="bi bi-check2-circle"></i> 提交采购单');
+                $('#savePurchaseDraftButton').show().html('<i class="bi bi-save"></i> 保存草稿');
+            } else {
+                $('#purchaseEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑采购单 ' + purchaseEscape(data.purchase_no || ''));
+                $('#savePurchaseButton').html('<i class="bi bi-check2-circle"></i> 保存修改');
+                $('#savePurchaseDraftButton').hide();
+            }
+            updatePurchaseStatusHint();
             recalcPurchaseSummary();
             EntityEditor.markClean();
         },
@@ -465,9 +544,7 @@ function loadPurchaseForEdit(id) {
 $(document).ready(function () {
     loadPurchaseRawMaterials();
     $('#freight, #purchaseStatus').on('input change', recalcPurchaseSummary);
-    $('#purchaseStatus').on('change', function () {
-        $('#purchaseStatusHint').text($(this).val() === '1' ? '已到货：保存时会按实际到货处理。' : '采购中：保存后计入在途采购。');
-    });
+    $('#purchaseStatus').on('change', updatePurchaseStatusHint);
     EntityEditor.bindForm('#purchaseEditorForm', savePurchaseEditor, { button: '#savePurchaseButton' });
 
     purchaseIsEdit = EntityEditor.entityID('id') > 0;
@@ -477,6 +554,7 @@ $(document).ready(function () {
         $('#purchaseDate').val(purchaseToday());
         if (window.CustomDatePicker) window.CustomDatePicker.refreshAll();
         addPurchaseItem();
+        updatePurchaseStatusHint();
         recalcPurchaseSummary();
         EntityEditor.markClean();
     }

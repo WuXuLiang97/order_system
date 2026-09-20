@@ -86,7 +86,7 @@ func EnsurePurchaseMaterialsTable() error {
             purchase_date         DATE NULL COMMENT '采购日期',
             expected_arrival_date DATE NULL COMMENT '预计到货日期',
             actual_arrival_date   DATE NULL COMMENT '实际到货日期',
-            status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货',
+            status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货 2-草稿',
             payment_status        VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
             remark                TEXT COMMENT '备注',
             payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
@@ -150,7 +150,7 @@ func EnsurePurchaseOrdersTable() error {
             expected_arrival_date DATE NULL COMMENT '预计到货日期',
             actual_arrival_date   DATE NULL COMMENT '实际到货日期',
             payment_status        VARCHAR(20) NOT NULL DEFAULT '未付款' COMMENT '付款状态',
-            status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货',
+            status                TINYINT NOT NULL DEFAULT 0 COMMENT '0-采购中 1-已到货 2-草稿',
             remark                TEXT COMMENT '备注',
             payment_receipt       TEXT COMMENT '支付水单图片路径(JSON数组)',
             created_at            DATETIME DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间'

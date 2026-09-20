@@ -20,6 +20,7 @@
                             <option value="2">待发货</option>
                             <option value="3">已发货</option>
                             <option value="4">已取消</option>
+                            <option value="5">草稿</option>
                         </select>
                     </div>
                     <div class="col-md-5 col-6 mb-2">
@@ -192,6 +193,7 @@ function loadOrders(status, keyword) {
                 <option value="2">待发货</option>
                 <option value="3">已发货</option>
                 <option value="4">已取消</option>
+                <option value="5">草稿</option>
             `;
 
 
@@ -218,32 +220,44 @@ function loadOrders(status, keyword) {
                     shippedQuantity += Number(item.shipped_quantity || 0);
                     totalAmount += Number(item.price || 0) * Number(item.quantity || 0);
                 });
+                var isDraft = Number(order.status) === 5;
                 var remainingQuantity = Math.max(0, totalQuantity - shippedQuantity);
                 var progressClass = remainingQuantity <= 0 ? 'bg-success' : (shippedQuantity > 0 ? 'bg-info text-dark' : 'bg-secondary');
-                var progressCell = `<span class="badge ${progressClass}">已发 ${shippedQuantity} / ${totalQuantity}</span><div class="small text-muted mt-1">剩余 ${remainingQuantity}</div>`;
+                var progressCell = isDraft
+                    ? '<span class="badge bg-light text-dark border">未提交</span>'
+                    : `<span class="badge ${progressClass}">已发 ${shippedQuantity} / ${totalQuantity}</span><div class="small text-muted mt-1">剩余 ${remainingQuantity}</div>`;
 
                 var canEditThis = canEditAll || (canEditOwn && isMine(order));
-                var payment = order.payment_status === 1
-                    ? '<span class="badge bg-success">已回款</span>'
-                    : '<span class="badge bg-secondary">未回款</span>';
-                if (canEditThis) {
+                var payment = isDraft
+                    ? '<span class="badge bg-light text-dark border">未提交</span>'
+                    : (order.payment_status === 1 ? '<span class="badge bg-success">已回款</span>' : '<span class="badge bg-secondary">未回款</span>');
+                if (canEditThis && !isDraft) {
                     payment = `<button type="button" class="btn btn-sm ${order.payment_status === 1 ? 'btn-outline-success' : 'btn-outline-secondary'}" onclick="openOrderPaymentModal(${order.id})">${order.payment_status === 1 ? '已回款' : '未回款'}</button>`;
                 }
                 var actions = '';
-                actions += `<button class="btn btn-info btn-sm me-1" onclick="viewOrder(${order.id})">查看</button>`;
-                if ((order.status === 1 || order.status === 2) && P['product:manage']) {
-                    actions += `<button class="btn btn-success btn-sm me-1" onclick="openShipment(${order.id})"><i class="bi bi-truck"></i> 生成送货单</button>`;
-                }
-                if (canEditThis) {
-                    actions += `<a class="btn btn-warning btn-sm me-1" href="/orders/form?id=${order.id}">编辑</a>`;
-                }
-                if (canEditAll) {
-                    actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
+                if (isDraft) {
+                    if (canEditThis) {
+                        actions += `<a class="btn btn-warning btn-sm me-1" href="/orders/form?id=${order.id}">继续编辑</a>`;
+                    }
+                    if (canEditAll) {
+                        actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
+                    }
+                } else {
+                    actions += `<button class="btn btn-info btn-sm me-1" onclick="viewOrder(${order.id})">查看</button>`;
+                    if ((order.status === 1 || order.status === 2) && P['product:manage']) {
+                        actions += `<button class="btn btn-success btn-sm me-1" onclick="openShipment(${order.id})"><i class="bi bi-truck"></i> 生成送货单</button>`;
+                    }
+                    if (canEditThis) {
+                        actions += `<a class="btn btn-warning btn-sm me-1" href="/orders/form?id=${order.id}">编辑</a>`;
+                    }
+                    if (canEditAll) {
+                        actions += `<button class="btn btn-danger btn-sm" onclick="deleteOrder(${order.id})">删除</button>`;
+                    }
                 }
 
                 var statusCell;
-                var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消'}[order.status] || '未知';
-                if (canEditThis) {
+                var st = {0:'待生产',1:'生产中',2:'待发货',3:'已发货',4:'已取消',5:'草稿'}[order.status] || '未知';
+                if (canEditThis && !isDraft) {
                     statusCell = `<button type="button" class="btn btn-sm btn-outline-primary" onclick="openOrderStatusModal(${order.id})">${st}</button>`;
                 } else {
                     statusCell = `<span class="badge ${statusBadge(order.status)}">${st}</span>`;
@@ -274,7 +288,7 @@ function loadOrders(status, keyword) {
                             <button type="button" class="btn btn-sm btn-outline-secondary me-1 order-detail-toggle" data-order-id="${order.id}" onclick="toggleOrderDetails(${order.id})" aria-expanded="false">
                                 <i class="bi bi-chevron-right"></i>
                             </button>
-                            <strong>${escapeOrderHtml(order.order_no)}</strong>
+                            <strong>${isDraft ? '草稿 #' + order.id : escapeOrderHtml(order.order_no)}</strong>
                         </td>
                         <td>${escapeOrderHtml(order.customer_name)}${order.owner_name ? ' <span class="small text-muted">负责：' + escapeOrderHtml(order.owner_name) + '</span>' : ''}</td>
                         <td>${escapeOrderHtml(order.region || '-')}</td>
@@ -342,7 +356,7 @@ function openShipment(orderID) {
 }
 
 function statusBadge(s) {
-    return {0:'bg-warning text-dark',1:'bg-info text-dark',2:'bg-primary',3:'bg-success',4:'bg-secondary'}[s] || 'bg-secondary';
+    return {0:'bg-warning text-dark',1:'bg-info text-dark',2:'bg-primary',3:'bg-success',4:'bg-secondary',5:'bg-light text-dark border'}[s] || 'bg-secondary';
 }
 
 
@@ -482,7 +496,9 @@ $(document).ready(function() {
     if (!$('#summaryMonth').val()) $('#summaryMonth').val(currentMonthStr());
     loadOrderSummary();
     $('#summaryMonth').on('change', loadOrderSummary);
-    loadOrders();
+    var initialStatus = new URLSearchParams(window.location.search || '').get('status') || '';
+    $('#filterStatus').val(initialStatus);
+    loadOrders(initialStatus);
 
     $('#searchKeyword').on('keypress', function(e) {
         if (e.which === 13) applyFilter();

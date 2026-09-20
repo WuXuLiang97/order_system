@@ -15,6 +15,8 @@ import (
 )
 
 type OrderCreateRequest struct {
+	ID                   int               `json:"id"`
+	SaveAsDraft          bool              `json:"save_as_draft"`
 	CustomerName         string            `json:"customer_name"`
 	CustomerID           int               `json:"customer_id"`
 	OwnerUserID          int               `json:"owner_user_id"`
@@ -66,7 +68,41 @@ type orderStockItem struct {
 	Quantity  int
 }
 
-// CreateOrder 创建订单：只建立订单占用，不修改实际库存
+// orderStatusDraft 表示订单尚未正式提交，不占用库存，也不会进入生产/采购需求。
+const orderStatusDraft = 5
+
+type preparedOrderItem struct {
+	ProductID int
+	Quantity  int
+	Price     float64
+}
+
+type orderMainValues struct {
+	OrderNo              string
+	CustomerName         string
+	CustomerID           int
+	OwnerUserID          int
+	Region               string
+	CustomerAddress      string
+	CustomerPhone        string
+	OrderDate            interface{}
+	ExpectedShippingDate interface{}
+	CustomerRequiredDate interface{}
+	LogisticsDays        int
+	TotalAmount          float64
+	PaymentStatus        int
+	PreparedBy           string
+	PaymentSettlement    string
+	FreightPayment       string
+	FreightRecovery      string
+	TransportMethod      string
+	Currency             string
+	TradeTerms           string
+	ShippingMark         string
+	Remark               string
+}
+
+// CreateOrder 创建订单或保存/提交草稿。草稿不占用库存，正式提交时才生成订单号并建立占用。
 func CreateOrder(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -79,22 +115,69 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if req.CustomerName == "" {
-		http.Error(w, "Customer name is required", http.StatusBadRequest)
+	tx, err := models.DB.Begin()
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	if len(req.Items) == 0 {
-		http.Error(w, "At least one product is required", http.StatusBadRequest)
-		return
+	defer tx.Rollback()
+
+	existingDraft := false
+	currentOrderNo := ""
+	if req.ID > 0 {
+		var currentStatus int
+		var orderCreatedBy sql.NullInt64
+		var orderOwner sql.NullInt64
+		err = tx.QueryRow(`
+            SELECT order_no, status, created_by_user_id, owner_user_id
+            FROM orders
+            WHERE id = ?
+            FOR UPDATE
+        `, req.ID).Scan(&currentOrderNo, &currentStatus, &orderCreatedBy, &orderOwner)
+		if err == sql.ErrNoRows {
+			http.Error(w, "Order not found", http.StatusNotFound)
+			return
+		}
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		if currentStatus != orderStatusDraft {
+			writeJSONError(w, http.StatusBadRequest, "仅草稿订单可以通过创建页继续提交")
+			return
+		}
+		if !canEditOrder(CurrentUser(r), nullIntPtr(orderCreatedBy), nullIntPtr(orderOwner)) {
+			writeJSONError(w, http.StatusForbidden, "没有权限修改该草稿")
+			return
+		}
+		existingDraft = true
 	}
 
-	orderDate, err := parsePurchaseDate(req.OrderDate)
+	customerName := strings.TrimSpace(req.CustomerName)
+	if !req.SaveAsDraft {
+		if customerName == "" {
+			http.Error(w, "Customer name is required", http.StatusBadRequest)
+			return
+		}
+		if len(req.Items) == 0 {
+			http.Error(w, "At least one product is required", http.StatusBadRequest)
+			return
+		}
+	}
+
+	orderDateRaw, err := parsePurchaseDate(req.OrderDate)
 	if err != nil {
 		http.Error(w, "下单日期格式不正确", http.StatusBadRequest)
 		return
 	}
-	if orderDate == nil {
-		orderDate = time.Now()
+	orderDate := time.Now()
+	if t, ok := orderDateRaw.(time.Time); ok {
+		orderDate = t
+	}
+	expectedShippingDate, err := parsePurchaseDate(req.ExpectedShippingDate)
+	if err != nil {
+		http.Error(w, "预计发货日期格式不正确", http.StatusBadRequest)
+		return
 	}
 	customerRequiredDate, err := parsePurchaseDate(req.CustomerRequiredDate)
 	if err != nil {
@@ -106,31 +189,35 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		logisticsDays = 0
 	}
 
-	expectedShippingDate, err := parsePurchaseDate(req.ExpectedShippingDate)
-	if err != nil {
-		http.Error(w, "预计发货日期格式不正确", http.StatusBadRequest)
-		return
-	}
-
-	tx, err := models.DB.Begin()
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	// 计算总金额。单价由客户端按客户报价传入；未传时兼容使用产品默认单价。
-	itemPrices := make([]float64, len(req.Items))
+	items := make([]preparedOrderItem, 0, len(req.Items))
 	var total float64
-	for i, item := range req.Items {
-		if item.Quantity <= 0 {
+	for _, item := range req.Items {
+		if req.SaveAsDraft {
+			if item.ProductID <= 0 {
+				continue
+			}
+		} else if item.ProductID <= 0 {
+			http.Error(w, "请选择产品", http.StatusBadRequest)
+			return
+		}
+
+		quantity := item.Quantity
+		if req.SaveAsDraft && quantity < 0 {
+			quantity = 0
+		}
+		if !req.SaveAsDraft && quantity <= 0 {
 			http.Error(w, "产品数量必须大于0", http.StatusBadRequest)
 			return
 		}
+
 		var productPrice float64
 		err := tx.QueryRow("SELECT price FROM products WHERE id = ?", item.ProductID).Scan(&productPrice)
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Product ID %d not found", item.ProductID), http.StatusBadRequest)
+			if err == sql.ErrNoRows {
+				http.Error(w, fmt.Sprintf("Product ID %d not found", item.ProductID), http.StatusBadRequest)
+			} else {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+			}
 			return
 		}
 
@@ -138,22 +225,20 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		if item.Price != nil {
 			price = *item.Price
 		}
-		if price < 0 {
+		if req.SaveAsDraft && price < 0 {
+			price = 0
+		}
+		if !req.SaveAsDraft && price < 0 {
 			http.Error(w, "产品单价不能小于0", http.StatusBadRequest)
 			return
 		}
-		itemPrices[i] = price
-		total += price * float64(item.Quantity)
+
+		items = append(items, preparedOrderItem{ProductID: item.ProductID, Quantity: quantity, Price: price})
+		total += price * float64(quantity)
 	}
 
-	// 生成“YKL + 下单日期 + 4位当天序号”的订单号。
-	numberDate, ok := orderDate.(time.Time)
-	if !ok {
-		numberDate = time.Now()
-	}
-	orderNo, err := models.NextOrderNoTx(tx, numberDate)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+	if !req.SaveAsDraft && len(items) == 0 {
+		http.Error(w, "At least one product is required", http.StatusBadRequest)
 		return
 	}
 
@@ -166,75 +251,237 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	paymentSettlement := orderOptionDefault(req.PaymentSettlement, "现付")
-	freightPayment := orderOptionDefault(req.FreightPayment, "现付")
-	freightRecovery := orderOptionDefault(req.FreightRecovery, "可回收")
-	transportMethod := orderOptionDefault(req.TransportMethod, "物流")
 	customerID := req.CustomerID
 	if customerID < 0 {
 		customerID = 0
 	}
-	currency := orderOptionDefault(req.Currency, "CNY")
-	tradeTerms := strings.TrimSpace(req.TradeTerms)
-	shippingMark := strings.TrimSpace(req.ShippingMark)
-
 	ownerUserID := req.OwnerUserID
 	if ownerUserID < 0 {
 		ownerUserID = 0
 	}
 	if ownerUserID == 0 {
-		if u := CurrentUser(r); u != nil {
-			ownerUserID = u.ID
+		if user := CurrentUser(r); user != nil {
+			ownerUserID = user.ID
 		}
 	}
 
-	var createdBy interface{} = nil
-	if u := CurrentUser(r); u != nil {
-		createdBy = u.ID
+	values := orderMainValues{
+		OrderNo:              currentOrderNo,
+		CustomerName:         customerName,
+		CustomerID:           customerID,
+		OwnerUserID:          ownerUserID,
+		Region:               strings.TrimSpace(req.Region),
+		CustomerAddress:      strings.TrimSpace(req.CustomerAddress),
+		CustomerPhone:        strings.TrimSpace(req.CustomerPhone),
+		OrderDate:            orderDate,
+		ExpectedShippingDate: expectedShippingDate,
+		CustomerRequiredDate: customerRequiredDate,
+		LogisticsDays:        logisticsDays,
+		TotalAmount:          total,
+		PaymentStatus:        req.PaymentStatus,
+		PreparedBy:           preparedBy,
+		PaymentSettlement:    orderOptionDefault(req.PaymentSettlement, "现付"),
+		FreightPayment:       orderOptionDefault(req.FreightPayment, "现付"),
+		FreightRecovery:      orderOptionDefault(req.FreightRecovery, "可回收"),
+		TransportMethod:      orderOptionDefault(req.TransportMethod, "物流"),
+		Currency:             orderOptionDefault(req.Currency, "CNY"),
+		TradeTerms:           strings.TrimSpace(req.TradeTerms),
+		ShippingMark:         strings.TrimSpace(req.ShippingMark),
+		Remark:               req.Remark,
 	}
 
+	reservedTotal := 0.0
+	unreservedTotal := 0.0
+	orderID := req.ID
+	message := "草稿保存成功"
+
+	if req.SaveAsDraft {
+		values.OrderNo = currentOrderNo
+		if orderID == 0 {
+			localID := 0
+			if user := CurrentUser(r); user != nil {
+				localID = user.ID
+			}
+			values.OrderNo = newDraftOrderNo(localID)
+			var createdBy interface{} = nil
+			if user := CurrentUser(r); user != nil {
+				createdBy = user.ID
+			}
+			orderID64, err := insertOrderMainTx(tx, values, orderStatusDraft, createdBy)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			orderID = int(orderID64)
+		} else {
+			if err := updateOrderMainTx(tx, orderID, values, orderStatusDraft); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+		}
+		if err := replaceOrderItemsTx(tx, orderID, items); err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	} else {
+		orderNo, err := models.NextOrderNoTx(tx, orderDate)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		values.OrderNo = orderNo
+		if existingDraft {
+			if err := updateOrderMainTx(tx, orderID, values, 0); err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			message = "订单提交成功"
+		} else {
+			var createdBy interface{} = nil
+			if user := CurrentUser(r); user != nil {
+				createdBy = user.ID
+			}
+			orderID64, err := insertOrderMainTx(tx, values, 0, createdBy)
+			if err != nil {
+				http.Error(w, err.Error(), http.StatusInternalServerError)
+				return
+			}
+			orderID = int(orderID64)
+			message = "订单创建成功"
+		}
+		reservedTotal, unreservedTotal, err = replaceOrderItemsAndReserveTx(tx, orderID, items)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+	}
+
+	if err := tx.Commit(); err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseStatus := http.StatusCreated
+	if existingDraft {
+		responseStatus = http.StatusOK
+	}
+	savedStatus := 0
+	if req.SaveAsDraft {
+		savedStatus = orderStatusDraft
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(responseStatus)
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"id":                  orderID,
+		"order_no":            values.OrderNo,
+		"status":              savedStatus,
+		"total":               total,
+		"message":             message,
+		"reserved_quantity":   reservedTotal,
+		"unreserved_quantity": unreservedTotal,
+	})
+}
+
+func newDraftOrderNo(userID int) string {
+	return fmt.Sprintf("DRAFT-%x-%x", userID, time.Now().UnixNano())
+}
+
+func insertOrderMainTx(tx *sql.Tx, values orderMainValues, status int, createdBy interface{}) (int64, error) {
 	result, err := tx.Exec(`
         INSERT INTO orders
         (order_no, customer_name, region, customer_address, customer_phone,
          order_date, expected_shipping_date, customer_required_date, logistics_days, delivery_date, total_amount, status, payment_status,
          prepared_by, created_by_user_id, payment_settlement, freight_payment, freight_recovery, transport_method, remark,
          customer_id, owner_user_id, currency, trade_terms, shipping_mark)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, 0, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `, orderNo, req.CustomerName, req.Region, req.CustomerAddress, req.CustomerPhone,
-		orderDate, expectedShippingDate, customerRequiredDate, logisticsDays, total, req.PaymentStatus, preparedBy, createdBy, paymentSettlement,
-		freightPayment, freightRecovery, transportMethod, req.Remark, customerID, ownerUserID, currency, tradeTerms, shippingMark)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, values.OrderNo, values.CustomerName, values.Region, values.CustomerAddress, values.CustomerPhone,
+		values.OrderDate, values.ExpectedShippingDate, values.CustomerRequiredDate, values.LogisticsDays, values.TotalAmount, status, values.PaymentStatus,
+		values.PreparedBy, createdBy, values.PaymentSettlement, values.FreightPayment, values.FreightRecovery, values.TransportMethod, values.Remark,
+		values.CustomerID, values.OwnerUserID, values.Currency, values.TradeTerms, values.ShippingMark)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
+		return 0, err
 	}
-	orderID, _ := result.LastInsertId()
+	return result.LastInsertId()
+}
 
-	// 下单只建立订单占用账，不修改实际库存；缺口由采购需求公式计算。
+func updateOrderMainTx(tx *sql.Tx, orderID int, values orderMainValues, status int) error {
+	_, err := tx.Exec(`
+        UPDATE orders SET
+            order_no = ?,
+            customer_name = ?,
+            region = ?,
+            customer_address = ?,
+            customer_phone = ?,
+            order_date = ?,
+            expected_shipping_date = ?,
+            customer_required_date = ?,
+            logistics_days = ?,
+            total_amount = ?,
+            status = ?,
+            payment_status = ?,
+            prepared_by = ?,
+            payment_settlement = ?,
+            freight_payment = ?,
+            freight_recovery = ?,
+            transport_method = ?,
+            remark = ?,
+            customer_id = ?,
+            owner_user_id = ?,
+            currency = ?,
+            trade_terms = ?,
+            shipping_mark = ?
+        WHERE id = ?
+    `, values.OrderNo, values.CustomerName, values.Region, values.CustomerAddress, values.CustomerPhone,
+		values.OrderDate, values.ExpectedShippingDate, values.CustomerRequiredDate, values.LogisticsDays, values.TotalAmount, status,
+		values.PaymentStatus, values.PreparedBy, values.PaymentSettlement, values.FreightPayment, values.FreightRecovery,
+		values.TransportMethod, values.Remark, values.CustomerID, values.OwnerUserID, values.Currency, values.TradeTerms,
+		values.ShippingMark, orderID)
+	return err
+}
+
+func replaceOrderItemsTx(tx *sql.Tx, orderID int, items []preparedOrderItem) error {
+	if _, err := tx.Exec("DELETE FROM order_items WHERE order_id = ?", orderID); err != nil {
+		return err
+	}
+	for _, item := range items {
+		if _, err := tx.Exec(
+			"INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
+			orderID, item.ProductID, item.Quantity, item.Price,
+		); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func replaceOrderItemsAndReserveTx(tx *sql.Tx, orderID int, items []preparedOrderItem) (float64, float64, error) {
+	if _, err := tx.Exec("DELETE FROM order_items WHERE order_id = ?", orderID); err != nil {
+		return 0, 0, err
+	}
+	if _, err := tx.Exec("DELETE FROM order_bom_snapshot WHERE order_id = ?", orderID); err != nil {
+		return 0, 0, err
+	}
+
 	reservedTotal := 0.0
 	unreservedTotal := 0.0
-	for i, item := range req.Items {
-		price := itemPrices[i]
+	for _, item := range items {
 		result, err := tx.Exec("INSERT INTO order_items (order_id, product_id, quantity, price) VALUES (?, ?, ?, ?)",
-			orderID, item.ProductID, item.Quantity, price)
+			orderID, item.ProductID, item.Quantity, item.Price)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return 0, 0, err
 		}
 		orderItemID, err := result.LastInsertId()
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
+			return 0, 0, err
 		}
 
-		reserved, _, err := models.ReserveProductForOrderTx(tx, int(orderID), int(orderItemID), item.ProductID, float64(item.Quantity))
+		reserved, _, err := models.ReserveProductForOrderTx(tx, orderID, int(orderItemID), item.ProductID, float64(item.Quantity))
 		if err != nil {
-			http.Error(w, fmt.Sprintf("Product ID %d reservation failed: %v", item.ProductID, err), http.StatusInternalServerError)
-			return
+			return 0, 0, fmt.Errorf("Product ID %d reservation failed: %w", item.ProductID, err)
 		}
 		reservedTotal += reserved
 		unreservedTotal += float64(item.Quantity) - reserved
 
-		// 保存下单时BOM快照，供历史订单追溯；当前生产需求按可用BOM计算。
 		boms, err := models.GetBOMByProduct(item.ProductID)
 		if err != nil {
 			continue
@@ -242,25 +489,11 @@ func CreateOrder(w http.ResponseWriter, r *http.Request) {
 		for _, bom := range boms {
 			usage := bom.Quantity * float64(item.Quantity)
 			if _, err := tx.Exec("INSERT INTO order_bom_snapshot (order_id, product_id, raw_material_id, quantity) VALUES (?, ?, ?, ?)", orderID, item.ProductID, bom.RawMaterialID, usage); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+				return 0, 0, err
 			}
 		}
 	}
-	if err := tx.Commit(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"order_no":            orderNo,
-		"total":               total,
-		"message":             "订单创建成功",
-		"reserved_quantity":   reservedTotal,
-		"unreserved_quantity": unreservedTotal,
-	})
+	return reservedTotal, unreservedTotal, nil
 }
 
 // GetOrders 获取订单列表（支持状态筛选和搜索，返回订单及明细）
@@ -291,7 +524,7 @@ func GetOrders(w http.ResponseWriter, r *http.Request) {
 
 	if statusStr != "" {
 		status, err := strconv.Atoi(statusStr)
-		if err == nil && status >= 0 && status <= 4 {
+		if err == nil && status >= 0 && status <= orderStatusDraft {
 			query += " AND status = ?"
 			args = append(args, status)
 		}
@@ -602,7 +835,7 @@ func GetCustomerOrders(w http.ResponseWriter, r *http.Request) {
 	query := `
         SELECT id, order_no, order_date, total_amount, currency, status, payment_status, created_at
         FROM orders
-        WHERE customer_id = ?`
+        WHERE customer_id = ? AND status <> 5`
 	var args []interface{}
 	args = append(args, customerID)
 	if !viewAll {
@@ -760,8 +993,8 @@ func DeleteOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 已取消（status=4）的订单在取消时已归还过库存，删除时不再重复归还。
-	if status != 4 {
+	// 已取消或草稿订单没有有效占用，删除时无需归还库存。
+	if status != 4 && status != orderStatusDraft {
 		if err := restoreOrderStock(tx, id); err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -893,7 +1126,8 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 
 	var orderCreatedBy sql.NullInt64
 	var orderOwner sql.NullInt64
-	err = models.DB.QueryRow("SELECT created_by_user_id, owner_user_id FROM orders WHERE id = ?", req.ID).Scan(&orderCreatedBy, &orderOwner)
+	var currentStatus int
+	err = models.DB.QueryRow("SELECT status, created_by_user_id, owner_user_id FROM orders WHERE id = ?", req.ID).Scan(&currentStatus, &orderCreatedBy, &orderOwner)
 	if err == sql.ErrNoRows {
 		http.Error(w, "Order not found", http.StatusNotFound)
 		return
@@ -903,6 +1137,10 @@ func UpdateOrder(w http.ResponseWriter, r *http.Request) {
 	}
 	if !canEditOrder(CurrentUser(r), nullIntPtr(orderCreatedBy), nullIntPtr(orderOwner)) {
 		writeJSONError(w, http.StatusForbidden, "没有权限修改该订单")
+		return
+	}
+	if currentStatus == orderStatusDraft {
+		writeJSONError(w, http.StatusBadRequest, "请通过创建订单页保存或提交草稿")
 		return
 	}
 
@@ -1089,7 +1327,7 @@ const (
 func computeOrderWarning(o *models.Order, today time.Time) {
 	o.WarningLevel = ""
 	o.WarningLabel = ""
-	if o == nil || o.Status == 4 || o.CustomerRequiredDate == nil {
+	if o == nil || o.Status == 4 || o.Status == orderStatusDraft || o.CustomerRequiredDate == nil {
 		return
 	}
 	shipped := o.Status == 3
