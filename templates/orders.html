@@ -12,7 +12,7 @@
             </div>
             <div class="card-body">
                 <div class="row mb-3 filter-row">
-                    <div class="col-md-3 col-6 mb-2">
+                    <div class="col-md-2 col-6 mb-2">
                         <select class="form-select" id="filterStatus">
                             <option value="">全部状态</option>
                             <option value="0">待生产</option>
@@ -23,7 +23,7 @@
                             <option value="5">草稿</option>
                         </select>
                     </div>
-                    <div class="col-md-5 col-6 mb-2">
+                    <div class="col-md-4 col-6 mb-2">
                         <input type="text" class="form-control" id="searchKeyword" placeholder="搜索订单号、客户名称或地区...">
                     </div>
                     <div class="col-md-2 col-6">
@@ -31,6 +31,11 @@
                     </div>
                     <div class="col-md-2 col-6">
                         <button class="btn btn-secondary w-100" onclick="resetFilter()"><i class="bi bi-arrow-counterclockwise"></i> 重置</button>
+                    </div>
+                    <div class="col-md-2 col-6">
+                        <button type="button" id="toggleAllOrderDetails" class="btn btn-outline-secondary w-100 text-nowrap d-none" onclick="toggleAllOrderDetails()">
+                            <i class="bi bi-arrows-expand me-1 order-toggle-all-icon"></i><span class="order-toggle-all-text">展开全部</span>
+                        </button>
                     </div>
                 </div>
 
@@ -144,13 +149,43 @@ function escapeOrderHtml(value) {
         .replace(/'/g, '&#39;');
 }
 
-function toggleOrderDetails(orderID) {
+function updateOrderToggleAllButton() {
+    var mainRows = $('#orderTableBody .order-main-row:visible');
+    var button = $('#toggleAllOrderDetails');
+    if (!mainRows.length) {
+        button.addClass('d-none');
+        return;
+    }
+    var hasCollapsed = mainRows.find('.order-detail-toggle[aria-expanded="false"]').length > 0;
+    button.removeClass('d-none');
+    button.find('.order-toggle-all-text').text(hasCollapsed ? '展开全部' : '收起全部');
+    button.find('.order-toggle-all-icon')
+        .toggleClass('bi-arrows-expand', hasCollapsed)
+        .toggleClass('bi-arrows-collapse', !hasCollapsed);
+}
+
+function setOrderDetailExpanded(orderID, expanded) {
+    var mainRow = $(`.order-main-row[data-order-id="${orderID}"]`);
     var detailRow = $(`.order-detail-row[data-order-id="${orderID}"]`);
     var toggle = $(`.order-detail-toggle[data-order-id="${orderID}"]`);
-    var willShow = detailRow.hasClass('d-none');
-    detailRow.toggleClass('d-none', !willShow);
-    toggle.attr('aria-expanded', willShow ? 'true' : 'false');
-    toggle.find('i').toggleClass('bi-chevron-right', !willShow).toggleClass('bi-chevron-down', willShow);
+    detailRow.toggleClass('d-none', !expanded || !mainRow.is(':visible'));
+    toggle.attr('aria-expanded', expanded ? 'true' : 'false');
+    toggle.find('i').toggleClass('bi-chevron-right', !expanded).toggleClass('bi-chevron-down', expanded);
+}
+
+function toggleOrderDetails(orderID) {
+    var toggle = $(`.order-detail-toggle[data-order-id="${orderID}"]`);
+    setOrderDetailExpanded(orderID, toggle.attr('aria-expanded') !== 'true');
+    updateOrderToggleAllButton();
+}
+
+function toggleAllOrderDetails() {
+    var toggles = $('#orderTableBody .order-main-row:visible .order-detail-toggle');
+    var expand = toggles.filter('[aria-expanded="false"]').length > 0;
+    toggles.each(function() {
+        setOrderDetailExpanded($(this).data('order-id'), expand);
+    });
+    updateOrderToggleAllButton();
 }
 
 
@@ -184,6 +219,7 @@ function loadOrders(status, keyword) {
             tbody.empty();
             if (data.length === 0) {
                 tbody.append('<tr><td colspan="15" class="text-center text-muted">暂无匹配的订单</td></tr>');
+                updateOrderToggleAllButton();
                 return;
             }
 
@@ -332,7 +368,9 @@ function loadOrders(status, keyword) {
                     </tr>`;
 
                 tbody.append(mainRow + detailRow);
-            });        },
+            });
+            updateOrderToggleAllButton();
+        },
         error: function(xhr) {
             alert('加载订单失败: ' + xhr.responseText);
         }

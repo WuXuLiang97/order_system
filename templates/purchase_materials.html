@@ -73,8 +73,11 @@
                         </div>
                     </div>
                 </div>
-                <div class="mb-3">
+                <div class="mb-3 d-flex gap-2">
                     <input type="text" id="searchPurchase" class="form-control" placeholder="搜索采购单号、物料名称或供应商...">
+                    <button type="button" id="toggleAllPurchaseDetails" class="btn btn-outline-secondary text-nowrap d-none" onclick="toggleAllPurchaseDetails()">
+                        <i class="bi bi-arrows-expand me-1 purchase-toggle-all-icon"></i><span class="purchase-toggle-all-text">展开全部</span>
+                    </button>
                 </div>
                 <div class="table-responsive purchase-sticky-scroll">
                     <table class="table table-striped table-hover purchase-sticky-table" id="purchaseTable">
@@ -419,13 +422,43 @@ function loadPurchaseMaterials() {
     });
 }
 
-function togglePurchaseDetails(orderID) {
+function updatePurchaseToggleAllButton() {
+    var mainRows = $('#purchaseTableBody .purchase-main-row:visible');
+    var button = $('#toggleAllPurchaseDetails');
+    if (!mainRows.length) {
+        button.addClass('d-none');
+        return;
+    }
+    var hasCollapsed = mainRows.find('.purchase-detail-toggle[aria-expanded="false"]').length > 0;
+    button.removeClass('d-none');
+    button.find('.purchase-toggle-all-text').text(hasCollapsed ? '展开全部' : '收起全部');
+    button.find('.purchase-toggle-all-icon')
+        .toggleClass('bi-arrows-expand', hasCollapsed)
+        .toggleClass('bi-arrows-collapse', !hasCollapsed);
+}
+
+function setPurchaseDetailExpanded(orderID, expanded) {
+    var mainRow = $(`.purchase-main-row[data-order-id="${orderID}"]`);
     var detailRow = $(`.purchase-detail-row[data-order-id="${orderID}"]`);
     var toggle = $(`.purchase-detail-toggle[data-order-id="${orderID}"]`);
-    var willShow = detailRow.hasClass('d-none');
-    detailRow.toggleClass('d-none', !willShow);
-    toggle.attr('aria-expanded', willShow ? 'true' : 'false');
-    toggle.find('i').toggleClass('bi-chevron-right', !willShow).toggleClass('bi-chevron-down', willShow);
+    detailRow.toggleClass('d-none', !expanded || !mainRow.is(':visible'));
+    toggle.attr('aria-expanded', expanded ? 'true' : 'false');
+    toggle.find('i').toggleClass('bi-chevron-right', !expanded).toggleClass('bi-chevron-down', expanded);
+}
+
+function togglePurchaseDetails(orderID) {
+    var toggle = $(`.purchase-detail-toggle[data-order-id="${orderID}"]`);
+    setPurchaseDetailExpanded(orderID, toggle.attr('aria-expanded') !== 'true');
+    updatePurchaseToggleAllButton();
+}
+
+function toggleAllPurchaseDetails() {
+    var toggles = $('#purchaseTableBody .purchase-main-row:visible .purchase-detail-toggle');
+    var expand = toggles.filter('[aria-expanded="false"]').length > 0;
+    toggles.each(function() {
+        setPurchaseDetailExpanded($(this).data('order-id'), expand);
+    });
+    updatePurchaseToggleAllButton();
 }
 
 function applyPurchaseSearch() {
@@ -442,6 +475,7 @@ function applyPurchaseSearch() {
             detailRow.removeClass('d-none');
         }
     });
+    updatePurchaseToggleAllButton();
 }
 
 
