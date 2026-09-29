@@ -23,6 +23,8 @@ const (
 	PurchaseMaterialTypeOffice      = "办公用品"
 	PurchaseMaterialTypeEquipment   = "设备"
 	purchaseStatusDraft             = 2
+	purchaseSummaryScopeArrived     = "arrived"
+	purchaseSummaryScopePaid        = "paid"
 )
 
 var purchaseMaterialTypes = map[string]bool{
@@ -391,6 +393,91 @@ func updatePurchaseItemTx(tx *sql.Tx, orderID int, item purchaseItemRequest, req
 	return err
 }
 
+type storedPurchaseItem struct {
+	ID            int
+	RawMaterialID int
+	MaterialName  string
+	MaterialType  string
+	Spec          string
+	Unit          string
+	Quantity      float64
+	Price         float64
+	StockAdded    int
+}
+
+func purchaseDatesEqual(stored sql.NullTime, incoming *time.Time) bool {
+	if !stored.Valid {
+		return incoming == nil
+	}
+	if incoming == nil {
+		return false
+	}
+	return stored.Time.Format("2006-01-02") == incoming.Format("2006-01-02")
+}
+
+func purchaseStockFieldsChanged(stored storedPurchaseItem, incoming purchaseItemRequest) bool {
+	return stored.RawMaterialID != incoming.RawMaterialID ||
+		stored.MaterialName != incoming.MaterialName ||
+		stored.MaterialType != incoming.MaterialType ||
+		stored.Spec != incoming.Spec ||
+		stored.Unit != incoming.Unit ||
+		stored.Quantity != incoming.Quantity ||
+		stored.Price != incoming.Price
+}
+
+func purchaseStockRebuildRequired(existingStatus int, existingFreight float64,
+	existingPurchaseDate, existingActualDate sql.NullTime,
+	incomingPurchaseDate, incomingActualDate *time.Time,
+	storedItems map[int]storedPurchaseItem, incomingItems map[int]purchaseItemRequest,
+	req purchaseOrderRequest) bool {
+	if existingStatus != 1 && req.Status != 1 {
+		return false
+	}
+	if existingStatus != req.Status {
+		return true
+	}
+	if existingStatus != 1 {
+		return false
+	}
+	if existingFreight != req.Freight ||
+		!purchaseDatesEqual(existingPurchaseDate, incomingPurchaseDate) ||
+		!purchaseDatesEqual(existingActualDate, incomingActualDate) {
+		return true
+	}
+
+	for itemID, stored := range storedItems {
+		incoming, ok := incomingItems[itemID]
+		if !ok {
+			if stored.StockAdded == 1 {
+				return true
+			}
+			continue
+		}
+		if stored.StockAdded == 1 && purchaseStockFieldsChanged(stored, incoming) {
+			return true
+		}
+	}
+
+	if req.Freight > 0 {
+		storedRawItems := 0
+		for _, stored := range storedItems {
+			if stored.MaterialType == PurchaseMaterialTypeRawMaterial {
+				storedRawItems++
+			}
+		}
+		incomingRawItems := 0
+		for _, item := range req.Items {
+			if item.MaterialType == PurchaseMaterialTypeRawMaterial {
+				incomingRawItems++
+			}
+		}
+		if storedRawItems != incomingRawItems {
+			return true
+		}
+	}
+	return false
+}
+
 // ListPurchaseMaterials 获取采购单列表（接口地址保持不变，返回结构已升级为采购单+明细）。
 func ListPurchaseMaterials(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
@@ -685,10 +772,6 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "实际到货日期格式不正确", http.StatusBadRequest)
 		return
 	}
-	if req.Status == 1 && actualDate == nil {
-		now := time.Now()
-		actualDate = &now
-	}
 	receiptJSONBytes, err := json.Marshal(req.PaymentReceipts)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -713,7 +796,14 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var existingID, existingStatus int
-	if err := tx.QueryRow("SELECT id, status FROM purchase_orders WHERE id = ? FOR UPDATE", req.ID).Scan(&existingID, &existingStatus); err != nil {
+	var existingFreight float64
+	var existingPurchaseDate, existingActualDate sql.NullTime
+	if err := tx.QueryRow(`
+		SELECT id, status, freight, purchase_date, actual_arrival_date
+		FROM purchase_orders
+		WHERE id = ?
+		FOR UPDATE
+	`, req.ID).Scan(&existingID, &existingStatus, &existingFreight, &existingPurchaseDate, &existingActualDate); err != nil {
 		if err == sql.ErrNoRows {
 			http.Error(w, "Purchase order not found", http.StatusNotFound)
 		} else {
@@ -725,21 +815,35 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "请通过采购单创建页继续编辑或提交草稿", http.StatusBadRequest)
 		return
 	}
+	if req.Status == 1 && actualDate == nil && existingStatus != 1 {
+		now := time.Now()
+		actualDate = &now
+	}
 
-	existingStockAdded := make(map[int]int)
-	rows, err := tx.Query("SELECT id, stock_added FROM purchase_materials WHERE purchase_order_id = ? FOR UPDATE", req.ID)
+	storedItems := make(map[int]storedPurchaseItem)
+	rows, err := tx.Query(`
+		SELECT pm.id, pm.raw_material_id,
+		       COALESCE(rm.name, pm.material_name), pm.material_type,
+		       COALESCE(rm.spec, pm.spec), COALESCE(rm.unit, pm.unit),
+		       pm.quantity, pm.price, pm.stock_added
+		FROM purchase_materials pm
+		LEFT JOIN raw_materials rm ON rm.id = pm.raw_material_id
+		WHERE pm.purchase_order_id = ?
+		FOR UPDATE
+	`, req.ID)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 	for rows.Next() {
-		var itemID, stockAdded int
-		if err := rows.Scan(&itemID, &stockAdded); err != nil {
+		var item storedPurchaseItem
+		if err := rows.Scan(&item.ID, &item.RawMaterialID, &item.MaterialName, &item.MaterialType,
+			&item.Spec, &item.Unit, &item.Quantity, &item.Price, &item.StockAdded); err != nil {
 			rows.Close()
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		existingStockAdded[itemID] = stockAdded
+		storedItems[item.ID] = item
 	}
 	if err := rows.Close(); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -747,13 +851,15 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	}
 
 	incomingIDs := make(map[int]bool)
+	incomingItems := make(map[int]purchaseItemRequest)
 	for _, item := range req.Items {
 		if item.ID > 0 {
-			if _, ok := existingStockAdded[item.ID]; !ok {
+			if _, ok := storedItems[item.ID]; !ok {
 				http.Error(w, "采购明细不存在或不属于当前采购单", http.StatusBadRequest)
 				return
 			}
 			incomingIDs[item.ID] = true
+			incomingItems[item.ID] = item
 		}
 	}
 
@@ -761,16 +867,25 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	if user := CurrentUser(r); user != nil {
 		userID = user.ID
 	}
-	// 已到货明细先按原冻结成本冲回，再按更新后的数量、价格和运费重新入库。
-	for itemID, stockAdded := range existingStockAdded {
-		if stockAdded == 1 {
+
+	stockRebuildRequired := purchaseStockRebuildRequired(
+		existingStatus, existingFreight, existingPurchaseDate, existingActualDate,
+		purchaseDate, actualDate, storedItems, incomingItems, req,
+	)
+
+	// 仅在入库状态、入库明细或入库成本相关字段变化时冲回；付款状态等元数据更新不产生库存流水。
+	if stockRebuildRequired {
+		for itemID, stored := range storedItems {
+			if stored.StockAdded != 1 {
+				continue
+			}
 			if err := reversePurchaseItemStockTx(tx, int64(itemID), userID); err != nil {
 				http.Error(w, fmt.Sprintf("冲回原采购入库失败: %v", err), http.StatusBadRequest)
 				return
 			}
 		}
 	}
-	for itemID := range existingStockAdded {
+	for itemID := range storedItems {
 		if !incomingIDs[itemID] {
 			if _, err := tx.Exec("DELETE FROM purchase_materials WHERE id = ? AND purchase_order_id = ?", itemID, req.ID); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -793,8 +908,15 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	allocations := purchaseFreightAllocations(req.Items, req.Freight)
 	for i, item := range req.Items {
 		itemID := int64(item.ID)
+		stockAdded := 0
 		if item.ID > 0 {
-			if err := updatePurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, 0); err != nil {
+			stored := storedItems[item.ID]
+			if !stockRebuildRequired {
+				stockAdded = stored.StockAdded
+			}
+		}
+		if item.ID > 0 {
+			if err := updatePurchaseItemTx(tx, req.ID, item, req, purchaseDate, expectedDate, actualDate, receiptJSON, stockAdded); err != nil {
 				http.Error(w, err.Error(), http.StatusInternalServerError)
 				return
 			}
@@ -806,7 +928,11 @@ func UpdatePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 				return
 			}
 		}
-		if req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial {
+		shouldAddStock := req.Status == 1 && item.MaterialType == PurchaseMaterialTypeRawMaterial
+		if shouldAddStock && item.ID > 0 && storedItems[item.ID].StockAdded == 1 && !stockRebuildRequired {
+			shouldAddStock = false
+		}
+		if shouldAddStock {
 			unitCost := item.Price
 			if item.Quantity > 0 {
 				unitCost += allocations[i] / item.Quantity
@@ -925,7 +1051,27 @@ func DeletePurchaseMaterial(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "采购单删除成功"})
 }
 
-// GetPurchaseMaterialsSummary 获取指定月份的采购汇总金额（仅统计已到货采购单）。
+func normalizePurchaseSummaryScope(scope string) (string, bool) {
+	scope = strings.TrimSpace(scope)
+	if scope == "" {
+		return purchaseSummaryScopeArrived, true
+	}
+	switch scope {
+	case purchaseSummaryScopeArrived, purchaseSummaryScopePaid:
+		return scope, true
+	default:
+		return "", false
+	}
+}
+
+func purchaseSummaryCondition(scope string) string {
+	if scope == purchaseSummaryScopePaid {
+		return "po.status IN (0, 1) AND po.payment_status = '已付款'"
+	}
+	return "po.status = 1"
+}
+
+// GetPurchaseMaterialsSummary 获取指定月份和汇总项目下的采购金额与运费。
 func GetPurchaseMaterialsSummary(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -941,37 +1087,44 @@ func GetPurchaseMaterialsSummary(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	year := month[:4]
+	scope, ok := normalizePurchaseSummaryScope(r.URL.Query().Get("scope"))
+	if !ok {
+		http.Error(w, "汇总项目不正确", http.StatusBadRequest)
+		return
+	}
+
+	summaryCondition := purchaseSummaryCondition(scope)
 
 	var monthlyTotal float64
-	if err := models.DB.QueryRow(`
+	if err := models.DB.QueryRow(fmt.Sprintf(`
         SELECT COALESCE(SUM(pm.amount), 0)
         FROM purchase_orders po
         LEFT JOIN purchase_materials pm ON pm.purchase_order_id = po.id
-        WHERE po.status = 1 AND DATE_FORMAT(po.purchase_date, '%Y-%m') = ?
-    `, month).Scan(&monthlyTotal); err != nil {
+        WHERE %s AND DATE_FORMAT(po.purchase_date, '%%Y-%%m') = ?
+    `, summaryCondition), month).Scan(&monthlyTotal); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var yearlyTotal float64
-	if err := models.DB.QueryRow(`
+	if err := models.DB.QueryRow(fmt.Sprintf(`
         SELECT COALESCE(SUM(pm.amount), 0)
         FROM purchase_orders po
         LEFT JOIN purchase_materials pm ON pm.purchase_order_id = po.id
-        WHERE po.status = 1 AND DATE_FORMAT(po.purchase_date, '%Y') = ?
-    `, year).Scan(&yearlyTotal); err != nil {
+        WHERE %s AND DATE_FORMAT(po.purchase_date, '%%Y') = ?
+    `, summaryCondition), year).Scan(&yearlyTotal); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var monthlyFreight float64
-	if err := models.DB.QueryRow("SELECT COALESCE(SUM(freight), 0) FROM purchase_orders WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y-%m') = ?", month).Scan(&monthlyFreight); err != nil {
+	if err := models.DB.QueryRow(fmt.Sprintf("SELECT COALESCE(SUM(po.freight), 0) FROM purchase_orders po WHERE %s AND DATE_FORMAT(po.purchase_date, '%%Y-%%m') = ?", summaryCondition), month).Scan(&monthlyFreight); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	var yearlyFreight float64
-	if err := models.DB.QueryRow("SELECT COALESCE(SUM(freight), 0) FROM purchase_orders WHERE status = 1 AND DATE_FORMAT(purchase_date, '%Y') = ?", year).Scan(&yearlyFreight); err != nil {
+	if err := models.DB.QueryRow(fmt.Sprintf("SELECT COALESCE(SUM(po.freight), 0) FROM purchase_orders po WHERE %s AND DATE_FORMAT(po.purchase_date, '%%Y') = ?", summaryCondition), year).Scan(&yearlyFreight); err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -980,6 +1133,7 @@ func GetPurchaseMaterialsSummary(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]interface{}{
 		"month":           month,
 		"year":            year,
+		"scope":           scope,
 		"monthly_total":   monthlyTotal,
 		"yearly_total":    yearlyTotal,
 		"monthly_freight": monthlyFreight,

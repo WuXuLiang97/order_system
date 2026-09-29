@@ -12,6 +12,10 @@
         border-collapse: separate;
         border-spacing: 0;
     }
+    .purchase-summary-table th,
+    .purchase-summary-table td {
+        white-space: nowrap;
+    }
     .table.purchase-sticky-table thead th {
         position: sticky;
         top: 0;
@@ -206,27 +210,40 @@
                         <tbody id="purchaseTableBody"></tbody>
                     </table>
                 </div>
-                <div class="row mt-3">
-                    <div class="col-md-3">
+                <div class="row mt-3 g-3 align-items-end">
+                    <div class="col-lg-3 col-md-4">
                         <label class="form-label">汇总月份</label>
                         <input type="month" id="summaryMonth" class="form-control">
                     </div>
-                    <div class="col-md-9 d-flex align-items-end flex-wrap gap-3">
-                        <div class="me-4">
-                            <span class="text-muted">当月汇总金额（已到货）：</span>
-                            <strong id="monthlyTotal" class="fs-5 text-primary">¥0.00</strong>
-                        </div>
-                        <div class="me-4">
-                            <span class="text-muted">当月运费（已到货）：</span>
-                            <strong id="monthlyFreight" class="fs-5 text-primary">¥0.00</strong>
-                        </div>
-                        <div class="me-4">
-                            <span class="text-muted">年度汇总金额（已到货）：</span>
-                            <strong id="yearlyTotal" class="fs-5 text-success">¥0.00</strong>
-                        </div>
-                        <div>
-                            <span class="text-muted">年度运费（已到货）：</span>
-                            <strong id="yearlyFreight" class="fs-5 text-success">¥0.00</strong>
+                    <div class="col-lg-9 col-md-8">
+                        <div class="table-responsive">
+                            <table class="table table-sm table-bordered align-middle purchase-summary-table mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>汇总项目</th>
+                                        <th class="text-end">当月汇总金额</th>
+                                        <th class="text-end">当月运费</th>
+                                        <th class="text-end">年度汇总金额</th>
+                                        <th class="text-end">年度运费</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <th scope="row">已到货</th>
+                                        <td class="text-end"><strong id="arrivedMonthlyTotal" class="text-primary">¥0.00</strong></td>
+                                        <td class="text-end"><strong id="arrivedMonthlyFreight" class="text-primary">¥0.00</strong></td>
+                                        <td class="text-end"><strong id="arrivedYearlyTotal" class="text-success">¥0.00</strong></td>
+                                        <td class="text-end"><strong id="arrivedYearlyFreight" class="text-success">¥0.00</strong></td>
+                                    </tr>
+                                    <tr>
+                                        <th scope="row">全部已付款</th>
+                                        <td class="text-end"><strong id="paidMonthlyTotal" class="text-primary">¥0.00</strong></td>
+                                        <td class="text-end"><strong id="paidMonthlyFreight" class="text-primary">¥0.00</strong></td>
+                                        <td class="text-end"><strong id="paidYearlyTotal" class="text-success">¥0.00</strong></td>
+                                        <td class="text-end"><strong id="paidYearlyFreight" class="text-success">¥0.00</strong></td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -407,20 +424,26 @@ function viewReceipt(url) {
     }
 }
 
+function setSummaryValues(prefix, res) {
+    $('#' + prefix + 'MonthlyTotal').text('¥' + parseFloat(res.monthly_total || 0).toFixed(2));
+    $('#' + prefix + 'YearlyTotal').text('¥' + parseFloat(res.yearly_total || 0).toFixed(2));
+    $('#' + prefix + 'MonthlyFreight').text('¥' + parseFloat(res.monthly_freight || 0).toFixed(2));
+    $('#' + prefix + 'YearlyFreight').text('¥' + parseFloat(res.yearly_freight || 0).toFixed(2));
+}
+
 function loadSummary(month) {
     month = month || $('#summaryMonth').val() || currentMonth();
-    $.ajax({
-        url: '/api/purchase-materials/summary?month=' + encodeURIComponent(month),
-        method: 'GET',
-        success: function(res) {
-            $('#monthlyTotal').text('¥' + parseFloat(res.monthly_total || 0).toFixed(2));
-            $('#yearlyTotal').text('¥' + parseFloat(res.yearly_total || 0).toFixed(2));
-            $('#monthlyFreight').text('¥' + parseFloat(res.monthly_freight || 0).toFixed(2));
-            $('#yearlyFreight').text('¥' + parseFloat(res.yearly_freight || 0).toFixed(2));
-        },
-        error: function(xhr) {
-            EntityEditor.notify('加载汇总金额失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
-        }
+    var baseUrl = '/api/purchase-materials/summary?month=' + encodeURIComponent(month) + '&scope=';
+    Promise.all(['arrived', 'paid'].map(function(scope) {
+        return $.ajax({
+            url: baseUrl + encodeURIComponent(scope),
+            method: 'GET'
+        });
+    })).then(function(results) {
+        setSummaryValues('arrived', results[0]);
+        setSummaryValues('paid', results[1]);
+    }).catch(function(xhr) {
+        EntityEditor.notify('加载汇总金额失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
     });
 }
 
