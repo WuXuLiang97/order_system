@@ -23,7 +23,86 @@
         white-space: nowrap;
         vertical-align: middle;
     }
+    .purchase-filter-bar {
+        align-items: center;
+    }
+    .purchase-month-filter {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: .5rem;
+        padding: .25rem;
+        border: 1px solid #dee2e6;
+        border-radius: .75rem;
+        background: #f8f9fa;
+    }
+    .purchase-month-quick .btn {
+        min-width: 64px;
+        height: 44px;
+        font-weight: 600;
+    }
+    .purchase-month-trigger {
+        min-width: 178px;
+        height: 44px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: .65rem;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .purchase-month-menu {
+        width: min(360px, calc(100vw - 2rem));
+        padding: 1rem;
+        border: 1px solid #dbe2ea;
+        border-radius: .85rem;
+        box-shadow: 0 14px 34px rgba(20, 30, 55, .16);
+    }
+    .purchase-month-grid {
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        gap: .55rem;
+        margin-top: .9rem;
+    }
+    .purchase-month-option {
+        min-height: 50px;
+        border-radius: .65rem;
+        font-size: 1rem;
+        font-weight: 600;
+    }
+    .purchase-month-option.is-current {
+        position: relative;
+    }
+    .purchase-month-option.is-current::after {
+        content: '';
+        position: absolute;
+        top: .45rem;
+        right: .45rem;
+        width: 7px;
+        height: 7px;
+        border-radius: 50%;
+        background: #0d6efd;
+    }
+    .purchase-month-option.btn-primary.is-current::after {
+        background: #fff;
+    }
     @media (max-width: 767.98px) {
+        .purchase-month-filter {
+            width: 100%;
+        }
+        .purchase-month-quick {
+            flex: 1 1 auto;
+        }
+        .purchase-month-quick .btn {
+            flex: 1 1 0;
+        }
+        .purchase-month-picker,
+        .purchase-month-trigger {
+            width: 100%;
+        }
+        .purchase-month-menu {
+            width: min(360px, calc(100vw - 1.5rem));
+        }
         .purchase-sticky-scroll {
             max-height: calc(100vh - 160px);
         }
@@ -73,9 +152,34 @@
                         </div>
                     </div>
                 </div>
-                <div class="mb-3 d-flex gap-2">
-                    <input type="text" id="searchPurchase" class="form-control" placeholder="搜索采购单号、物料名称或供应商...">
-                    <button type="button" id="toggleAllPurchaseDetails" class="btn btn-outline-secondary text-nowrap d-none" onclick="toggleAllPurchaseDetails()">
+                <div class="purchase-filter-bar mb-3 d-flex gap-2 flex-wrap">
+                    <input type="text" id="searchPurchase" class="form-control" style="flex: 1 1 300px; max-width: 460px; min-width: 220px;" placeholder="搜索采购单号、物料名称或供应商...">
+                    <div class="purchase-month-filter">
+                        <div class="btn-group purchase-month-quick" role="group" aria-label="采购月份快捷筛选">
+                            <button type="button" class="btn btn-outline-primary" data-purchase-month-offset="0" aria-pressed="false">本月</button>
+                            <button type="button" class="btn btn-outline-primary" data-purchase-month-offset="-1" aria-pressed="false">上月</button>
+                            <button type="button" class="btn btn-outline-secondary" data-purchase-month-clear="1" aria-pressed="false">全部</button>
+                        </div>
+                        <div class="dropdown purchase-month-picker">
+                            <button type="button" id="purchaseMonthTrigger" class="btn btn-primary purchase-month-trigger dropdown-toggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" aria-label="选择采购月份">
+                                <span><i class="bi bi-calendar3 me-2"></i><span id="purchaseMonthLabel">选择月份</span></span>
+                            </button>
+                            <div class="dropdown-menu dropdown-menu-end purchase-month-menu" aria-labelledby="purchaseMonthTrigger">
+                                <div class="d-flex align-items-center justify-content-between gap-2">
+                                    <button type="button" class="btn btn-light" id="purchaseMonthPrevYear" aria-label="上一年"><i class="bi bi-chevron-left"></i></button>
+                                    <strong class="fs-5" id="purchaseMonthPickerYear">--年</strong>
+                                    <button type="button" class="btn btn-light" id="purchaseMonthNextYear" aria-label="下一年"><i class="bi bi-chevron-right"></i></button>
+                                </div>
+                                <div class="purchase-month-grid" id="purchaseMonthGrid" aria-label="月份列表"></div>
+                                <div class="d-flex align-items-center justify-content-between gap-2 mt-3 pt-2 border-top">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="purchaseMonthToday">回到本月</button>
+                                    <button type="button" class="btn btn-sm btn-link text-secondary text-decoration-none" id="purchaseMonthClear">显示全部月份</button>
+                                </div>
+                            </div>
+                        </div>
+                        <input type="hidden" id="purchaseMonthFilter" value="">
+                    </div>
+                    <button type="button" id="toggleAllPurchaseDetails" class="btn btn-outline-secondary text-nowrap flex-shrink-0 d-none" onclick="toggleAllPurchaseDetails()">
                         <i class="bi bi-arrows-expand me-1 purchase-toggle-all-icon"></i><span class="purchase-toggle-all-text">展开全部</span>
                     </button>
                 </div>
@@ -203,6 +307,74 @@ function currentMonth() {
     return currentDate().slice(0, 7);
 }
 
+function shiftMonth(month, amount) {
+    var parts = String(month || currentMonth()).split('-');
+    var year = parseInt(parts[0], 10);
+    var monthIndex = parseInt(parts[1], 10) - 1;
+    var shifted = new Date(year, monthIndex + Number(amount || 0), 1, 12, 0, 0, 0);
+    return shifted.getFullYear() + '-' + ('0' + (shifted.getMonth() + 1)).slice(-2);
+}
+
+function purchaseMonthText(month) {
+    if (!month) return '全部月份';
+    var parts = String(month).split('-');
+    if (parts.length < 2) return String(month);
+    return parts[0] + '年' + parseInt(parts[1], 10) + '月';
+}
+
+function updatePurchaseMonthQuick(month) {
+    var buttons = $('.purchase-month-quick .btn');
+    buttons.removeClass('active').attr('aria-pressed', 'false');
+    var target = null;
+    if (!month) {
+        target = $('.purchase-month-quick [data-purchase-month-clear]');
+    } else if (month === currentMonth()) {
+        target = $('.purchase-month-quick [data-purchase-month-offset="0"]');
+    } else if (month === shiftMonth(currentMonth(), -1)) {
+        target = $('.purchase-month-quick [data-purchase-month-offset="-1"]');
+    }
+    if (target && target.length) {
+        target.addClass('active').attr('aria-pressed', 'true');
+    }
+}
+
+function renderPurchaseMonthPicker(yearOverride) {
+    var selectedMonth = $('#purchaseMonthFilter').val() || '';
+    var baseMonth = selectedMonth || currentMonth();
+    var year = Number(yearOverride);
+    if (!Number.isInteger(year)) {
+        year = parseInt(baseMonth.slice(0, 4), 10);
+    }
+    $('#purchaseMonthPickerYear').text(year + '年').data('year', year);
+    var grid = $('#purchaseMonthGrid').empty();
+    for (var month = 1; month <= 12; month++) {
+        var value = year + '-' + ('0' + month).slice(-2);
+        var option = $('<button type="button" class="btn purchase-month-option"></button>')
+            .attr('data-month', value)
+            .text(month + '月');
+        if (value === selectedMonth) {
+            option.addClass('btn-primary active').attr('aria-current', 'date');
+        } else {
+            option.addClass('btn-outline-secondary');
+        }
+        if (value === currentMonth()) {
+            option.addClass('is-current');
+        }
+        grid.append(option);
+    }
+}
+
+function setPurchaseMonthFilter(month, refresh) {
+    month = month || '';
+    $('#purchaseMonthFilter').val(month);
+    $('#purchaseMonthLabel').text(purchaseMonthText(month));
+    updatePurchaseMonthQuick(month);
+    renderPurchaseMonthPicker();
+    if (refresh !== false) {
+        applyPurchaseSearch();
+    }
+}
+
 
 
 
@@ -328,6 +500,8 @@ function loadPurchaseMaterials() {
             tbody.empty();
             (Array.isArray(data) ? data : []).forEach(function(order) {
                 var items = Array.isArray(order.items) ? order.items : [];
+                var purchaseDate = formatDate(order.purchase_date);
+                var purchaseMonth = purchaseDate === '-' ? '' : purchaseDate.slice(0, 7);
                 var isDraft = Number(order.status) === 2;
                 var status = isDraft
                     ? '<span class="badge bg-light text-dark border">草稿</span>'
@@ -367,8 +541,8 @@ function loadPurchaseMaterials() {
                 }
 
                 var mainRow = `
-                    <tr class="purchase-main-row" data-order-id="${order.id}">
-                        <td class="text-nowrap">${formatDate(order.purchase_date)}</td>
+                    <tr class="purchase-main-row" data-order-id="${order.id}" data-purchase-month="${escapePurchaseAttr(purchaseMonth)}">
+                        <td class="text-nowrap">${purchaseDate}</td>
                         <td class="text-nowrap">
                             <button type="button" class="btn btn-sm btn-outline-secondary me-1 purchase-detail-toggle" data-order-id="${order.id}" onclick="togglePurchaseDetails(${order.id})" aria-expanded="false">
                                 <i class="bi bi-chevron-right"></i>
@@ -463,11 +637,13 @@ function toggleAllPurchaseDetails() {
 
 function applyPurchaseSearch() {
     var searchText = ($('#searchPurchase').val() || '').toLowerCase();
+    var selectedMonth = $('#purchaseMonthFilter').val() || '';
     $('#purchaseTableBody .purchase-main-row').each(function() {
         var mainRow = $(this);
         var orderID = mainRow.data('order-id');
         var detailRow = $(`.purchase-detail-row[data-order-id="${orderID}"]`);
-        var matches = (mainRow.text() + ' ' + detailRow.text()).toLowerCase().indexOf(searchText) > -1;
+        var matchesMonth = !selectedMonth || mainRow.attr('data-purchase-month') === selectedMonth;
+        var matches = matchesMonth && (mainRow.text() + ' ' + detailRow.text()).toLowerCase().indexOf(searchText) > -1;
         mainRow.toggle(matches);
         if (!matches) {
             detailRow.addClass('d-none');
@@ -515,10 +691,45 @@ function loadPurchaseDemand() {
 }
 
 $(document).ready(function() {
+    $('#summaryMonth').val(currentMonth());
+    setPurchaseMonthFilter(currentMonth(), false);
     loadPurchaseMaterials();
     loadPurchaseDemand();
     $('#searchPurchase').on('keyup', applyPurchaseSearch);
-    $('#summaryMonth').val(currentMonth());
+    $('.purchase-month-quick').on('click', 'button', function() {
+        if (this.hasAttribute('data-purchase-month-clear')) {
+            setPurchaseMonthFilter('');
+            return;
+        }
+        var offset = parseInt($(this).attr('data-purchase-month-offset'), 10);
+        setPurchaseMonthFilter(shiftMonth(currentMonth(), offset));
+    });
+    $('#purchaseMonthPicker').on('show.bs.dropdown', function() {
+        renderPurchaseMonthPicker();
+    });
+    $('#purchaseMonthPrevYear').on('click', function() {
+        var year = parseInt($('#purchaseMonthPickerYear').data('year'), 10);
+        renderPurchaseMonthPicker(year - 1);
+    });
+    $('#purchaseMonthNextYear').on('click', function() {
+        var year = parseInt($('#purchaseMonthPickerYear').data('year'), 10);
+        renderPurchaseMonthPicker(year + 1);
+    });
+    $('#purchaseMonthGrid').on('click', '.purchase-month-option', function() {
+        setPurchaseMonthFilter($(this).attr('data-month'));
+        var dropdown = bootstrap.Dropdown.getInstance(document.getElementById('purchaseMonthTrigger'));
+        if (dropdown) dropdown.hide();
+    });
+    $('#purchaseMonthToday').on('click', function() {
+        setPurchaseMonthFilter(currentMonth());
+        var dropdown = bootstrap.Dropdown.getInstance(document.getElementById('purchaseMonthTrigger'));
+        if (dropdown) dropdown.hide();
+    });
+    $('#purchaseMonthClear').on('click', function() {
+        setPurchaseMonthFilter('');
+        var dropdown = bootstrap.Dropdown.getInstance(document.getElementById('purchaseMonthTrigger'));
+        if (dropdown) dropdown.hide();
+    });
     loadSummary();
     $('#summaryMonth').on('change', function() {
         loadSummary($(this).val());

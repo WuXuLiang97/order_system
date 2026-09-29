@@ -271,11 +271,11 @@ func nullableTime(value sql.NullTime) interface{} {
 
 const (
 	purchaseNoPrefix           = "CG"
-	purchaseNoMaxDailySequence = 9999
+	purchaseNoMaxDailySequence = 99
 )
 
-// NextPurchaseNoTx 按采购日期生成“CG+YYYYMMDD+4位当天序号”，例如 CG202609190001。
-// 序号表行锁保证同一日期并发新增时不会生成重复单号，并会兼容已有无前缀单号。
+// NextPurchaseNoTx 按采购日期生成“CG+YYYYMMDD+2位当天序号”，例如 CG2026091901。
+// 序号表行锁保证同一日期并发新增时不会生成重复单号，并兼容历史 4 位及无前缀单号。
 func NextPurchaseNoTx(tx *sql.Tx, purchaseDate time.Time) (string, error) {
 	datePart := purchaseDate.Format("20060102")
 	if _, err := tx.Exec(`
@@ -298,10 +298,12 @@ func NextPurchaseNoTx(tx *sql.Tx, purchaseDate time.Time) (string, error) {
 
 	var existingMax int
 	if err := tx.QueryRow(`
-        SELECT COALESCE(MAX(CAST(RIGHT(purchase_no, 4) AS UNSIGNED)), 0)
+        SELECT COALESCE(MAX(CAST(RIGHT(purchase_no, 2) AS UNSIGNED)), 0)
         FROM purchase_orders
         WHERE (
-                (CHAR_LENGTH(purchase_no) = 14 AND purchase_no REGEXP '^CG[0-9]{12}$')
+                (CHAR_LENGTH(purchase_no) = 12 AND purchase_no REGEXP '^CG[0-9]{10}$')
+             OR (CHAR_LENGTH(purchase_no) = 14 AND purchase_no REGEXP '^CG[0-9]{12}$')
+             OR (CHAR_LENGTH(purchase_no) = 10 AND purchase_no REGEXP '^[0-9]{10}$')
              OR (CHAR_LENGTH(purchase_no) = 12 AND purchase_no REGEXP '^[0-9]{12}$')
             )
           AND SUBSTRING(purchase_no, IF(LEFT(purchase_no, 2) = 'CG', 3, 1), 8) = ?
@@ -323,7 +325,7 @@ func NextPurchaseNoTx(tx *sql.Tx, purchaseDate time.Time) (string, error) {
     `, nextNo, purchaseDate); err != nil {
 		return "", err
 	}
-	return fmt.Sprintf("%s%s%04d", purchaseNoPrefix, datePart, nextNo), nil
+	return fmt.Sprintf("%s%s%02d", purchaseNoPrefix, datePart, nextNo), nil
 }
 
 // ensurePaymentReceiptColumnText 兼容旧版本：将支付水单字段从 VARCHAR 升级为 TEXT。
