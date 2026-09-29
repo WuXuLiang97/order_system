@@ -15,7 +15,7 @@
     height: 100% !important;
     margin: 0 !important;
     opacity: 0 !important;
-    cursor: pointer;
+    pointer-events: none;
 }
 
 .custom-date-picker__native::-webkit-calendar-picker-indicator {
@@ -35,7 +35,8 @@
     border: 1px solid #ced4da;
     border-radius: 0.375rem;
     transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
-    pointer-events: none;
+    cursor: pointer;
+    pointer-events: auto;
 }
 
 .custom-date-picker__native:focus + .custom-date-picker__surface,
@@ -270,5 +271,28 @@
 
     .custom-date-picker__surface {
         padding: 0.375rem 0.75rem;
+    }
+}
+
+/* 移动端或触屏设备只保留原生日期选择器，防止增强逻辑残留时拦截原生控件。 */
+@media (max-width: 767.98px), (hover: none) and (pointer: coarse) {
+    .custom-date-picker__native {
+        position: static !important;
+        inset: auto !important;
+        z-index: auto !important;
+        width: 100% !important;
+        height: auto !important;
+        opacity: 1 !important;
+        pointer-events: auto !important;
+        cursor: auto;
+    }
+
+    .custom-date-picker__native::-webkit-calendar-picker-indicator {
+        display: block;
+        opacity: 1;
+    }
+
+    .custom-date-picker__surface {
+        display: none !important;
     }
 }

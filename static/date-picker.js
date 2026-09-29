@@ -4,6 +4,13 @@
     var instances = [];
     var activePicker = null;
     var uid = 0;
+    var nativePickerMode = window.matchMedia
+        ? window.matchMedia('(max-width: 767.98px), (hover: none) and (pointer: coarse)')
+        : null;
+
+    function prefersNativePicker() {
+        return Boolean(nativePickerMode && nativePickerMode.matches);
+    }
 
     function pad(value) {
         return String(value).padStart(2, '0');
@@ -51,6 +58,12 @@
 
     function CustomDatePicker(input) {
         this.input = input;
+        this.previousAutocomplete = input.getAttribute('autocomplete');
+        this.previousAriaHasPopup = input.getAttribute('aria-haspopup');
+        this.previousAriaExpanded = input.getAttribute('aria-expanded');
+        this.hadOwnShowPicker = Object.prototype.hasOwnProperty.call(input, 'showPicker');
+        this.originalShowPicker = input.showPicker;
+        this.showPickerPatched = false;
         this.wrapper = document.createElement('span');
         this.wrapper.className = 'custom-date-picker';
         this.surface = document.createElement('span');
@@ -83,15 +96,31 @@
 
         this.handlePointerDown = this.handlePointerDown.bind(this);
         this.handleKeyDown = this.handleKeyDown.bind(this);
+        this.handleFocus = this.syncDisplay.bind(this);
         this.handleInput = this.handleInput.bind(this);
         this.handleInvalid = this.handleInvalid.bind(this);
+        this.preventNativePicker = this.preventNativePicker.bind(this);
 
-        input.addEventListener('pointerdown', this.handlePointerDown);
+        if (typeof this.originalShowPicker === 'function') {
+            var self = this;
+            input.showPicker = function () {
+                if (prefersNativePicker()) {
+                    return self.originalShowPicker.apply(this, arguments);
+                }
+                self.open();
+            };
+            this.showPickerPatched = true;
+        }
+
+        this.wrapper.addEventListener('pointerdown', this.handlePointerDown);
         input.addEventListener('keydown', this.handleKeyDown);
-        input.addEventListener('focus', this.syncDisplay.bind(this));
+        input.addEventListener('focus', this.handleFocus);
         input.addEventListener('input', this.handleInput);
         input.addEventListener('change', this.handleInput);
         input.addEventListener('invalid', this.handleInvalid);
+        input.addEventListener('mousedown', this.preventNativePicker);
+        input.addEventListener('touchstart', this.preventNativePicker, { passive: false });
+        input.addEventListener('click', this.handlePointerDown);
 
         this.syncDisplay();
     }
@@ -112,13 +141,21 @@
         this.wrapper.classList.add('is-invalid');
     };
 
+    CustomDatePicker.prototype.preventNativePicker = function (event) {
+        if (prefersNativePicker()) return;
+        event.preventDefault();
+    };
+
     CustomDatePicker.prototype.handlePointerDown = function (event) {
+        if (prefersNativePicker()) return;
         event.preventDefault();
         this.input.focus({ preventScroll: true });
         this.open();
     };
 
     CustomDatePicker.prototype.handleKeyDown = function (event) {
+        if (prefersNativePicker()) return;
+
         if (event.key === 'Tab') {
             this.close(false);
             return;
@@ -129,7 +166,9 @@
             return;
         }
 
-        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar' || event.key === 'ArrowDown') {
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Spacebar' ||
+            event.key === 'ArrowDown' || event.key === 'Down' ||
+            event.key === 'F4' || (event.altKey && event.key === 'ArrowDown')) {
             event.preventDefault();
             this.open();
             return;
@@ -184,6 +223,45 @@
                 self.input.focus({ preventScroll: true });
                 self.syncDisplay();
             });
+        }
+    };
+
+    CustomDatePicker.prototype.destroy = function () {
+        this.close(false);
+
+        this.wrapper.removeEventListener('pointerdown', this.handlePointerDown);
+        this.input.removeEventListener('keydown', this.handleKeyDown);
+        this.input.removeEventListener('focus', this.handleFocus);
+        this.input.removeEventListener('input', this.handleInput);
+        this.input.removeEventListener('change', this.handleInput);
+        this.input.removeEventListener('invalid', this.handleInvalid);
+        this.input.removeEventListener('mousedown', this.preventNativePicker);
+        this.input.removeEventListener('touchstart', this.preventNativePicker);
+        this.input.removeEventListener('click', this.handlePointerDown);
+
+        if (this.showPickerPatched) {
+            if (this.hadOwnShowPicker) {
+                this.input.showPicker = this.originalShowPicker;
+            } else {
+                delete this.input.showPicker;
+            }
+        }
+
+        this.input.classList.remove('custom-date-picker__native');
+        delete this.input.dataset.customDatePickerReady;
+        this.input.removeAttribute('aria-haspopup');
+        this.input.removeAttribute('aria-expanded');
+
+        if (this.previousAutocomplete === null) this.input.removeAttribute('autocomplete');
+        else this.input.setAttribute('autocomplete', this.previousAutocomplete);
+        if (this.previousAriaHasPopup === null) this.input.removeAttribute('aria-haspopup');
+        else this.input.setAttribute('aria-haspopup', this.previousAriaHasPopup);
+        if (this.previousAriaExpanded === null) this.input.removeAttribute('aria-expanded');
+        else this.input.setAttribute('aria-expanded', this.previousAriaExpanded);
+
+        if (this.wrapper.parentNode) {
+            this.wrapper.parentNode.insertBefore(this.input, this.wrapper);
+            this.wrapper.parentNode.removeChild(this.wrapper);
         }
     };
 
@@ -407,7 +485,20 @@
         this.popup.style.top = Math.round(top) + 'px';
     };
 
+    function destroyAll() {
+        instances.slice().forEach(function (picker) {
+            picker.destroy();
+        });
+        instances = [];
+        activePicker = null;
+    }
+
     function enhanceAll(root) {
+        if (prefersNativePicker()) {
+            destroyAll();
+            return;
+        }
+
         var scope = root || document;
         scope.querySelectorAll('input[type="date"]:not([data-custom-date-picker-ready])').forEach(function (input) {
             instances.push(new CustomDatePicker(input));
@@ -455,8 +546,25 @@
 
     window.CustomDatePicker = {
         enhanceAll: enhanceAll,
-        refreshAll: refreshAll
+        refreshAll: refreshAll,
+        destroyAll: destroyAll
     };
+
+    if (nativePickerMode) {
+        var handlePickerModeChange = function () {
+            if (prefersNativePicker()) {
+                destroyAll();
+            } else {
+                enhanceAll(document);
+            }
+        };
+
+        if (nativePickerMode.addEventListener) {
+            nativePickerMode.addEventListener('change', handlePickerModeChange);
+        } else if (nativePickerMode.addListener) {
+            nativePickerMode.addListener(handlePickerModeChange);
+        }
+    }
 
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', function () {
