@@ -111,6 +111,245 @@
             max-height: calc(100vh - 160px);
         }
     }
+    @media (max-width: 767.98px) {
+        .purchase-page-header {
+            align-items: flex-start;
+            gap: .75rem;
+        }
+        .purchase-page-header .btn {
+            min-height: 44px;
+        }
+        .purchase-sticky-scroll {
+            max-height: none;
+            overflow: visible;
+            border: 0;
+        }
+        .purchase-orders-table,
+        .purchase-demand-table,
+        .purchase-detail-table {
+            display: block;
+            width: 100%;
+            min-width: 0 !important;
+        }
+        .purchase-orders-table thead,
+        .purchase-demand-table thead,
+        .purchase-detail-table thead {
+            display: none;
+        }
+        .purchase-orders-table tbody,
+        .purchase-demand-table tbody,
+        .purchase-detail-table tbody {
+            display: block;
+        }
+        .purchase-orders-table tbody tr.purchase-main-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-areas:
+                "order order"
+                "date status"
+                "supplier supplier"
+                "count quantity"
+                "amount freight"
+                "payment payment"
+                "expected actual"
+                "receipt receipt"
+                "remark remark"
+                "actions actions";
+            gap: .7rem .85rem;
+            margin-bottom: .65rem;
+            padding: .9rem;
+            border: 1px solid #e7ecf1;
+            border-radius: .75rem;
+            background: #fff;
+            box-shadow: 0 2px 8px rgba(20, 30, 55, .045);
+        }
+        .purchase-orders-table tbody tr.purchase-main-row:hover td,
+        .purchase-orders-table tbody tr.purchase-main-row:focus-within td {
+            background: transparent;
+        }
+        .purchase-orders-table tbody tr.purchase-main-row td {
+            display: block;
+            min-width: 0;
+            padding: 0;
+            border: 0;
+            background: transparent;
+        }
+        .purchase-main-row td[data-label]:not(.purchase-cell-order)::before {
+            display: block;
+            margin-bottom: .2rem;
+            color: #8a94a0;
+            font-size: .7rem;
+            font-weight: 600;
+            line-height: 1.1;
+        }
+        .purchase-main-row td[data-label]:not(.purchase-cell-order)::before {
+            content: attr(data-label);
+        }
+        .purchase-cell-order {
+            grid-area: order;
+            padding-right: 2.5rem !important;
+            color: #1f2937;
+            font-size: 1.02rem;
+        }
+        .purchase-cell-order .purchase-detail-toggle {
+            min-width: 36px;
+            min-height: 36px;
+            padding: .35rem .5rem;
+        }
+        .purchase-cell-date { grid-area: date; }
+        .purchase-cell-status { grid-area: status; text-align: right; }
+        .purchase-cell-supplier {
+            grid-area: supplier;
+            padding: .55rem .65rem !important;
+            border-radius: .55rem;
+            background: #f8fafc !important;
+            overflow-wrap: anywhere;
+        }
+        .purchase-cell-count { grid-area: count; }
+        .purchase-cell-quantity { grid-area: quantity; }
+        .purchase-cell-amount { grid-area: amount; }
+        .purchase-cell-freight { grid-area: freight; }
+        .purchase-cell-payment { grid-area: payment; }
+        .purchase-cell-expected { grid-area: expected; }
+        .purchase-cell-actual { grid-area: actual; }
+        .purchase-cell-receipt { grid-area: receipt; }
+        .purchase-cell-remark {
+            grid-area: remark;
+            padding-top: .55rem !important;
+            border-top: 1px dashed #e5eaf0 !important;
+            color: #4b5563;
+            overflow-wrap: anywhere;
+        }
+        .purchase-cell-actions:not(.d-none) {
+            grid-area: actions;
+            display: flex !important;
+            flex-wrap: wrap;
+            gap: .5rem;
+            padding-top: .65rem !important;
+            border-top: 1px solid #eef1f5 !important;
+        }
+        .purchase-cell-actions .btn {
+            flex: 1 1 96px;
+            min-height: 44px;
+            margin: 0 !important;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .purchase-cell-amount,
+        .purchase-cell-quantity {
+            font-weight: 600;
+            font-variant-numeric: tabular-nums;
+        }
+        .purchase-detail-row {
+            display: block;
+            margin: -.65rem 0 .8rem;
+            border: 1px solid #e7ecf1;
+            border-top: 0;
+            border-radius: 0 0 .75rem .75rem;
+            background: #f8fafc;
+        }
+        .purchase-detail-row > td {
+            display: block;
+            padding: .8rem !important;
+            border: 0;
+            background: #f8fafc !important;
+        }
+        .purchase-detail-row .table-responsive {
+            overflow: visible;
+        }
+        .purchase-detail-table tbody tr.purchase-detail-item {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: .55rem .75rem;
+            margin-bottom: .55rem;
+            padding: .7rem;
+            border: 1px solid #e3e9ef;
+            border-radius: .6rem;
+            background: #fff;
+        }
+        .purchase-detail-table tbody tr.purchase-detail-item:last-child {
+            margin-bottom: 0;
+        }
+        .purchase-detail-table tbody tr.purchase-detail-item td {
+            display: block;
+            padding: 0;
+            border: 0;
+            background: transparent;
+            overflow-wrap: anywhere;
+        }
+        .purchase-detail-table tbody tr.purchase-detail-item td::before {
+            content: attr(data-label);
+            display: block;
+            margin-bottom: .18rem;
+            color: #8a94a0;
+            font-size: .68rem;
+            font-weight: 600;
+        }
+        .purchase-detail-item .purchase-detail-name,
+        .purchase-detail-item .purchase-detail-spec {
+            grid-column: 1 / -1;
+        }
+        .purchase-demand-table tbody tr.purchase-demand-row {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            grid-template-areas:
+                "name name"
+                "actual reserved"
+                "available demand"
+                "transit safety"
+                "net net"
+                "suggested suggested"
+                "cost cost";
+            gap: .6rem .8rem;
+            margin-bottom: .65rem;
+            padding: .85rem;
+            border: 1px solid #e7ecf1;
+            border-radius: .7rem;
+            background: #fff;
+        }
+        .purchase-demand-table tbody tr.purchase-demand-row td {
+            display: block;
+            padding: 0;
+            border: 0;
+            background: transparent;
+        }
+        .purchase-demand-row td::before {
+            content: attr(data-label);
+            display: block;
+            margin-bottom: .18rem;
+            color: #8a94a0;
+            font-size: .68rem;
+            font-weight: 600;
+        }
+        .purchase-demand-cell-name { grid-area: name; }
+        .purchase-demand-cell-actual { grid-area: actual; }
+        .purchase-demand-cell-reserved { grid-area: reserved; }
+        .purchase-demand-cell-available { grid-area: available; }
+        .purchase-demand-cell-demand { grid-area: demand; }
+        .purchase-demand-cell-transit { grid-area: transit; }
+        .purchase-demand-cell-safety { grid-area: safety; }
+        .purchase-demand-cell-net {
+            grid-area: net;
+            padding-top: .55rem !important;
+            border-top: 1px dashed #e5eaf0 !important;
+            font-weight: 600;
+        }
+        .purchase-demand-cell-suggested {
+            grid-area: suggested;
+            padding: .55rem .65rem !important;
+            border-radius: .55rem;
+            background: #fff8e8 !important;
+        }
+        .purchase-demand-cell-cost { grid-area: cost; }
+        .purchase-summary-table {
+            font-size: .75rem;
+        }
+        .purchase-summary-table th,
+        .purchase-summary-table td {
+            padding: .4rem .35rem;
+        }
+    }
 </style>
 <div class="row">
     <div class="col-md-12">
@@ -136,7 +375,7 @@
                     </div>
                     <div class="collapse" id="purchaseDemandCollapse">
                         <div class="table-responsive purchase-sticky-scroll">
-                            <table class="table table-sm table-hover mb-0 purchase-sticky-table">
+                            <table class="table table-sm table-hover mb-0 purchase-sticky-table purchase-demand-table">
                                 <thead>
                                     <tr>
                                         <th>原材料</th>
@@ -188,7 +427,7 @@
                     </button>
                 </div>
                 <div class="table-responsive purchase-sticky-scroll">
-                    <table class="table table-striped table-hover purchase-sticky-table" id="purchaseTable">
+                    <table class="table table-striped table-hover purchase-sticky-table purchase-orders-table" id="purchaseTable">
                         <thead>
                             <tr>
                                 <th>采购日期</th>
@@ -548,42 +787,42 @@ function loadPurchaseMaterials() {
                     }
                 }
                 var detailHtml = items.map(function(item, index) {
-                    return `<tr>
-                        <td>${index + 1}</td>
-                        <td>${escapePurchaseHtml(item.material_type || '-')}</td>
-                        <td><strong>${escapePurchaseHtml(item.material_name || '-')}</strong></td>
-                        <td>${escapePurchaseHtml(item.spec || '-')}</td>
-                        <td>${escapePurchaseHtml(item.unit || '-')}</td>
-                        <td>${parseFloat(item.quantity || 0)}</td>
-                        <td>¥${parseFloat(item.price || 0).toFixed(2)}</td>
-                        <td>¥${parseFloat(item.amount || 0).toFixed(2)}</td>
+                    return `<tr class="purchase-detail-item">
+                        <td data-label="序号">${index + 1}</td>
+                        <td data-label="物料类型">${escapePurchaseHtml(item.material_type || '-')}</td>
+                        <td class="purchase-detail-name" data-label="物料名称"><strong>${escapePurchaseHtml(item.material_name || '-')}</strong></td>
+                        <td class="purchase-detail-spec" data-label="规格型号">${escapePurchaseHtml(item.spec || '-')}</td>
+                        <td data-label="单位">${escapePurchaseHtml(item.unit || '-')}</td>
+                        <td data-label="采购数量">${parseFloat(item.quantity || 0)}</td>
+                        <td data-label="单价">¥${parseFloat(item.price || 0).toFixed(2)}</td>
+                        <td data-label="金额">¥${parseFloat(item.amount || 0).toFixed(2)}</td>
                     </tr>`;
                 }).join('');
                 if (!detailHtml) {
-                    detailHtml = '<tr><td colspan="8" class="text-center text-muted">暂无物料明细</td></tr>';
+                    detailHtml = '<tr class="purchase-detail-item"><td colspan="8" class="text-center text-muted">暂无物料明细</td></tr>';
                 }
 
                 var mainRow = `
                     <tr class="purchase-main-row" data-order-id="${order.id}" data-purchase-month="${escapePurchaseAttr(purchaseMonth)}">
-                        <td class="text-nowrap">${purchaseDate}</td>
-                        <td class="text-nowrap">
+                        <td class="purchase-cell-order text-nowrap">
                             <button type="button" class="btn btn-sm btn-outline-secondary me-1 purchase-detail-toggle" data-order-id="${order.id}" onclick="togglePurchaseDetails(${order.id})" aria-expanded="false">
                                 <i class="bi bi-chevron-right"></i>
                             </button>
                             <strong>${isDraft ? '草稿 #' + order.id : escapePurchaseHtml(order.purchase_no || '-')}</strong>
                         </td>
-                        <td>${parseInt(order.item_count || items.length, 10)} 项</td>
-                        <td><strong>${parseFloat(order.total_quantity || 0)}</strong></td>
-                        <td>¥${parseFloat(order.total_amount || 0).toFixed(2)}</td>
-                        <td>¥${parseFloat(order.freight || 0).toFixed(2)}</td>
-                        <td>${escapePurchaseHtml(order.supplier || '-')}</td>
-                        <td class="text-nowrap">${formatDate(order.expected_arrival_date)}</td>
-                        <td class="text-nowrap">${formatDate(order.actual_arrival_date)}</td>
-                        <td>${payment}</td>
-                        <td>${status}</td>
-                        <td class="text-nowrap">${receiptCell(order.payment_receipts)}</td>
-                        <td>${escapePurchaseHtml(order.remark || '-')}</td>
-                        <td class="text-nowrap">${actions}</td>
+                        <td class="purchase-cell-date text-nowrap" data-label="采购日期">${purchaseDate}</td>
+                        <td class="purchase-cell-count" data-label="物料数">${parseInt(order.item_count || items.length, 10)} 项</td>
+                        <td class="purchase-cell-quantity" data-label="采购数量">${parseFloat(order.total_quantity || 0)}</td>
+                        <td class="purchase-cell-amount" data-label="采购金额">¥${parseFloat(order.total_amount || 0).toFixed(2)}</td>
+                        <td class="purchase-cell-freight" data-label="运费">¥${parseFloat(order.freight || 0).toFixed(2)}</td>
+                        <td class="purchase-cell-supplier" data-label="供应商">${escapePurchaseHtml(order.supplier || '-')}</td>
+                        <td class="purchase-cell-expected text-nowrap" data-label="预计到货">${formatDate(order.expected_arrival_date)}</td>
+                        <td class="purchase-cell-actual text-nowrap" data-label="实际到货">${formatDate(order.actual_arrival_date)}</td>
+                        <td class="purchase-cell-payment" data-label="付款状态">${payment}</td>
+                        <td class="purchase-cell-status" data-label="采购状态">${status}</td>
+                        <td class="purchase-cell-receipt text-nowrap" data-label="支付水单">${receiptCell(order.payment_receipts)}</td>
+                        <td class="purchase-cell-remark" data-label="备注">${escapePurchaseHtml(order.remark || '-')}</td>
+                        <td class="purchase-cell-actions text-nowrap${actions ? '' : ' d-none'}">${actions}</td>
                     </tr>`;
 
                 var detailRow = `
@@ -591,7 +830,7 @@ function loadPurchaseMaterials() {
                         <td colspan="14" class="bg-light">
                             <div class="small fw-bold mb-2">采购物料明细</div>
                             <div class="table-responsive">
-                                <table class="table table-sm table-bordered bg-white mb-0">
+                                <table class="table table-sm table-bordered bg-white mb-0 purchase-detail-table">
                                     <thead>
                                         <tr>
                                             <th style="width:6%;">序号</th>
@@ -691,18 +930,19 @@ function loadPurchaseDemand() {
             data.forEach(function(item) {
                 var netClass = Number(item.net_demand) < 0 ? 'text-danger fw-bold' : 'text-success';
                 var suggested = Number(item.suggested_purchase || 0);
+                var suggestedHtml = suggested > 0 ? '<span class="badge bg-danger">' + suggested.toFixed(3) + '</span>' : '<span class="badge bg-success">0</span>';
                 tbody.append(`
-                    <tr>
-                        <td><strong>${escapePurchaseHtml(item.name || '-')}</strong>${item.spec ? '<div class="small text-muted">' + escapePurchaseHtml(item.spec) + '</div>' : ''}</td>
-                        <td>${Number(item.actual_stock || 0).toFixed(3)}</td>
-                        <td>${Number(item.reserved_stock || 0).toFixed(3)}</td>
-                        <td>${Number(item.available_stock || 0).toFixed(3)}</td>
-                        <td>${Number(item.production_demand || 0).toFixed(3)}</td>
-                        <td>${Number(item.in_transit_purchase || 0).toFixed(3)}</td>
-                        <td>${Number(item.safety_stock || 0).toFixed(3)}</td>
-                        <td class="${netClass}">${Number(item.net_demand || 0).toFixed(3)}</td>
-                        <td>${suggested > 0 ? '<span class="badge bg-danger">' + suggested.toFixed(3) + '</span>' : '<span class="badge bg-success">0</span>'}</td>
-                        <td>¥${Number(item.avg_cost || 0).toFixed(2)}</td>
+                    <tr class="purchase-demand-row">
+                        <td class="purchase-demand-cell-name" data-label="原材料"><strong>${escapePurchaseHtml(item.name || '-')}</strong>${item.spec ? '<div class="small text-muted">' + escapePurchaseHtml(item.spec) + '</div>' : ''}</td>
+                        <td class="purchase-demand-cell-actual" data-label="实际库存">${Number(item.actual_stock || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-reserved" data-label="订单占用">${Number(item.reserved_stock || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-available" data-label="可用库存">${Number(item.available_stock || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-demand" data-label="生产/历史需求">${Number(item.production_demand || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-transit" data-label="在途采购">${Number(item.in_transit_purchase || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-safety" data-label="安全库存">${Number(item.safety_stock || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-net ${netClass}" data-label="净需求">${Number(item.net_demand || 0).toFixed(3)}</td>
+                        <td class="purchase-demand-cell-suggested" data-label="建议采购">${suggestedHtml}</td>
+                        <td class="purchase-demand-cell-cost" data-label="平均成本">¥${Number(item.avg_cost || 0).toFixed(2)}</td>
                     </tr>
                 `);
             });

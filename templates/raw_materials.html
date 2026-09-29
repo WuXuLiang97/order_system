@@ -1,10 +1,159 @@
 {{define "content"}}
+<style>
+.raw-material-list-scroll {
+    max-height: clamp(320px, calc(100vh - 220px), 720px);
+}
+.raw-material-image-thumb {
+    height: 40px;
+    width: 40px;
+    object-fit: cover;
+    cursor: pointer;
+    margin-right: 4px;
+}
+@media (max-width: 767.98px) {
+    .raw-page-header {
+        align-items: flex-start;
+        gap: .75rem;
+    }
+    .raw-page-actions {
+        width: 100%;
+        display: flex;
+        gap: .5rem;
+    }
+    .raw-page-actions .btn {
+        flex: 1;
+        min-height: 44px;
+    }
+    .raw-material-list-scroll {
+        max-height: none;
+        overflow: visible;
+        border: 0;
+    }
+    .raw-materials-table {
+        display: block;
+        width: 100%;
+        min-width: 0 !important;
+    }
+    .raw-materials-table thead {
+        display: none;
+    }
+    .raw-materials-table tbody {
+        display: block;
+    }
+    .raw-materials-table tbody tr.raw-material-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+        grid-template-areas:
+            "name name status"
+            "spec spec spec"
+            "stock reserved available"
+            "min unit cost"
+            "price price images"
+            "actions actions actions";
+        gap: .65rem .75rem;
+        margin-bottom: .7rem;
+        padding: .9rem;
+        border: 1px solid #e7ecf1;
+        border-left-width: 4px;
+        border-radius: .75rem;
+        background: #fff;
+        box-shadow: 0 2px 8px rgba(20, 30, 55, .045);
+    }
+    .raw-materials-table tbody tr.raw-material-row.table-danger {
+        border-left-color: #dc3545;
+        background: #fffafa;
+    }
+    .raw-materials-table tbody tr.raw-material-row.table-warning {
+        border-left-color: #ffc107;
+        background: #fffdf5;
+    }
+    .raw-materials-table tbody tr.raw-material-row:not(.table-danger):not(.table-warning) {
+        border-left-color: #198754;
+    }
+    .raw-materials-table tbody tr.raw-material-row:hover td,
+    .raw-materials-table tbody tr.raw-material-row:focus-within td {
+        background: transparent;
+    }
+    .raw-materials-table tbody tr.raw-material-row td {
+        display: block;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        overflow-wrap: anywhere;
+    }
+    .raw-material-row td[data-label]:not(.raw-material-cell-name):not(.raw-material-cell-status)::before {
+        content: attr(data-label);
+        display: block;
+        margin-bottom: .2rem;
+        color: #8a94a0;
+        font-size: .68rem;
+        font-weight: 600;
+        line-height: 1.1;
+    }
+    .raw-material-cell-index {
+        display: none !important;
+    }
+    .raw-material-cell-name {
+        grid-area: name;
+        padding-right: .35rem !important;
+        color: #1f2937;
+        font-size: 1.02rem;
+    }
+    .raw-material-cell-spec {
+        grid-area: spec;
+        color: #6c757d;
+        font-size: .82rem;
+    }
+    .raw-material-cell-stock { grid-area: stock; }
+    .raw-material-cell-reserved { grid-area: reserved; }
+    .raw-material-cell-available { grid-area: available; }
+    .raw-material-cell-avg-cost { grid-area: cost; }
+    .raw-material-cell-unit { grid-area: unit; }
+    .raw-material-cell-min-stock { grid-area: min; }
+    .raw-material-cell-price { grid-area: price; }
+    .raw-material-cell-images { grid-area: images; }
+    .raw-material-cell-status {
+        grid-area: status;
+        text-align: right;
+    }
+    .raw-material-cell-actions:not(.d-none) {
+        grid-area: actions;
+        min-width: 0 !important;
+        display: flex !important;
+        flex-wrap: wrap;
+        gap: .5rem;
+        padding-top: .65rem !important;
+        border-top: 1px solid #eef1f5 !important;
+    }
+    .raw-material-cell-actions .btn-group-sm {
+        width: 100%;
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: .5rem;
+    }
+    .raw-material-cell-actions .btn {
+        width: 100%;
+        min-height: 44px;
+        margin: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+    }
+    .raw-material-image-thumb {
+        height: 52px;
+        width: 52px;
+        border-radius: .45rem;
+    }
+}
+</style>
 <div class="row">
     <div class="col-md-12">
         <div class="card">
-            <div class="card-header d-flex justify-content-between align-items-center flex-wrap">
+            <div class="card-header raw-page-header d-flex justify-content-between align-items-center flex-wrap">
                 <h4 class="mb-0">原材料管理</h4>
-                <div>
+                <div class="raw-page-actions">
                     <button class="btn btn-warning btn-sm me-2" onclick="checkLowStock()">
                         <i class="bi bi-exclamation-triangle"></i> 库存预警
                     </button>
@@ -19,13 +168,13 @@
                 <!-- 搜索和筛选 -->
                 <div class="row mb-3">
                     <div class="col-md-6">
-                        <input type="text" id="searchInput" class="form-control" placeholder="搜索原材料名称...">
+                        <input type="text" id="searchInput" class="form-control" placeholder="搜索名称或规格...">
                     </div>
                 </div>
                 
                 <!-- 原材料列表 -->
-                <div class="table-responsive sticky-list-scroll">
-                    <table class="table table-striped table-hover sticky-list-table" id="materialTable">
+                <div class="table-responsive sticky-list-scroll raw-material-list-scroll">
+                    <table class="table table-striped table-hover sticky-list-table raw-materials-table" id="materialTable">
                         <thead>
                             <tr>
                                 <th>序号</th>
@@ -346,7 +495,7 @@ function loadMaterials() {
                 var imageGallery = '-';
                 if (images.length > 0) {
                     imageGallery = images.map(function(url) {
-                        return `<img src="${url}" style="height:40px;width:40px;object-fit:cover;cursor:pointer;margin-right:4px;" onclick="viewMaterialImage('${url}')">`;
+                        return `<img src="${url}" class="raw-material-image-thumb" onclick="viewMaterialImage('${url}')">`;
                     }).join('');
                 }
 
@@ -360,20 +509,20 @@ function loadMaterials() {
                             </div>`;
                 }
                 var row = `
-                    <tr class="${statusClass}">
-                        <td>${index + 1}</td>
-                        <td><strong>${m.name}</strong></td>
-                        <td>${m.spec || '-'}</td>
-                        <td>${Number(m.stock || 0).toFixed(3)}</td>
-                        <td>${Number(m.reserved_stock || 0).toFixed(3)}</td>
-                        <td><span class="badge bg-${statusClass === 'table-danger' ? 'danger' : statusClass === 'table-warning' ? 'warning text-dark' : 'success'}">${available.toFixed(3)}</span></td>
-                        <td>¥${Number(m.avg_cost || 0).toFixed(2)}</td>
-                        <td>${m.unit || '-'}</td>
-                        <td>${Number(m.min_stock || 0).toFixed(3)}</td>
-                        <td>¥${Number(m.price || 0).toFixed(2)}</td>
-                        <td>${imageGallery}</td>
-                        <td>${status}</td>
-                        <td>${actions}</td>
+                    <tr class="${statusClass} raw-material-row">
+                        <td class="raw-material-cell-index">${index + 1}</td>
+                        <td class="raw-material-cell-name" data-label="名称"><strong>${m.name}</strong></td>
+                        <td class="raw-material-cell-spec" data-label="规格型号">${m.spec || '-'}</td>
+                        <td class="raw-material-cell-stock" data-label="实际库存">${Number(m.stock || 0).toFixed(3)}</td>
+                        <td class="raw-material-cell-reserved" data-label="订单占用">${Number(m.reserved_stock || 0).toFixed(3)}</td>
+                        <td class="raw-material-cell-available" data-label="可用库存"><span class="badge bg-${statusClass === 'table-danger' ? 'danger' : statusClass === 'table-warning' ? 'warning text-dark' : 'success'}">${available.toFixed(3)}</span></td>
+                        <td class="raw-material-cell-avg-cost" data-label="平均成本">¥${Number(m.avg_cost || 0).toFixed(2)}</td>
+                        <td class="raw-material-cell-unit" data-label="单位">${m.unit || '-'}</td>
+                        <td class="raw-material-cell-min-stock" data-label="最低库存">${Number(m.min_stock || 0).toFixed(3)}</td>
+                        <td class="raw-material-cell-price" data-label="参考单价">¥${Number(m.price || 0).toFixed(2)}</td>
+                        <td class="raw-material-cell-images" data-label="图鉴">${imageGallery}</td>
+                        <td class="raw-material-cell-status" data-label="状态">${status}</td>
+                        <td class="raw-material-cell-actions${actions ? '' : ' d-none'}">${actions}</td>
                     </tr>
                 `;
                 tbody.append(row);
@@ -394,8 +543,8 @@ function loadMaterials() {
 function applySearch() {
     var searchText = $('#searchInput').val().toLowerCase();
     $('#materialTableBody tr').each(function() {
-        var name = $(this).find('td:eq(1)').text().toLowerCase();
-        $(this).toggle(name.indexOf(searchText) > -1);
+        var rowText = $(this).text().toLowerCase();
+        $(this).toggle(rowText.indexOf(searchText) > -1);
     });
 }
 

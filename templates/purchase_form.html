@@ -13,6 +13,310 @@
 .purchase-editor-layout {
     grid-template-columns: minmax(0, 1fr);
 }
+.purchase-material-picker-backdrop {
+    position: fixed;
+    inset: 0;
+    z-index: 1084;
+    background: rgba(15, 23, 42, .34);
+    backdrop-filter: blur(2px);
+}
+.purchase-material-picker-sheet-header,
+.purchase-material-picker-sheet-title-row,
+.purchase-material-picker-search {
+    display: none;
+}
+.purchase-material-picker {
+    position: fixed;
+    z-index: 1085;
+    width: min(460px, calc(100vw - 16px));
+    max-height: min(340px, calc(100vh - 24px));
+    overflow-y: auto;
+    padding: .25rem;
+    border: 1px solid #ced4da;
+    border-radius: .5rem;
+    background: #fff;
+    box-shadow: 0 12px 28px rgba(20, 30, 55, .18);
+}
+.purchase-material-picker-option {
+    display: block;
+    width: 100%;
+    padding: .62rem .7rem;
+    border: 0;
+    border-radius: .4rem;
+    background: transparent;
+    color: inherit;
+    text-align: left;
+}
+.purchase-material-picker-option + .purchase-material-picker-option {
+    margin-top: .15rem;
+}
+.purchase-material-picker-option:hover,
+.purchase-material-picker-option.active {
+    background: #eef5ff;
+}
+.purchase-material-picker-option-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: .75rem;
+}
+.purchase-material-picker-option-name {
+    min-width: 0;
+    font-weight: 600;
+    overflow-wrap: anywhere;
+}
+.purchase-material-picker-option-stock {
+    flex: 0 0 auto;
+    color: #198754;
+    font-size: .82rem;
+    font-weight: 600;
+}
+.purchase-material-picker-option-meta,
+.purchase-material-picker-empty {
+    margin-top: .18rem;
+    color: #6c757d;
+    font-size: .76rem;
+    line-height: 1.4;
+}
+.purchase-material-picker-empty {
+    padding: .9rem .7rem;
+    text-align: center;
+}
+.purchase-item-hint {
+    min-height: 1rem;
+    margin-top: .3rem;
+    color: #87919d;
+    font-size: .73rem;
+    line-height: 1.35;
+}
+.purchase-items-grid {
+    min-width: 1160px;
+}
+@media (max-width: 767.98px) {
+    .purchase-material-picker {
+        left: 0 !important;
+        right: 0 !important;
+        top: auto !important;
+        bottom: var(--purchase-material-keyboard-inset, 0px) !important;
+        width: auto !important;
+        max-height: min(68vh, 520px) !important;
+        max-height: var(--purchase-material-sheet-max-height, min(68dvh, 520px)) !important;
+        padding: 0 0 calc(.35rem + env(safe-area-inset-bottom));
+        border: 0;
+        border-radius: 1rem 1rem 0 0;
+        box-shadow: 0 -18px 48px rgba(15, 23, 42, .24);
+        overscroll-behavior: contain;
+        -webkit-overflow-scrolling: touch;
+        animation: purchaseMaterialSheetIn .18s ease-out;
+        transition: bottom .12s ease-out;
+    }
+    .purchase-material-picker-sheet-header {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        display: block;
+        padding: .85rem .75rem .6rem;
+        border-bottom: 1px solid #eef1f5;
+        background: rgba(255, 255, 255, .98);
+        backdrop-filter: blur(12px);
+    }
+    .purchase-material-picker-sheet-header::before {
+        content: "";
+        position: absolute;
+        top: .35rem;
+        left: 50%;
+        width: 2.5rem;
+        height: .25rem;
+        border-radius: 999px;
+        background: #d9dee5;
+        transform: translateX(-50%);
+    }
+    .purchase-material-picker-sheet-title-row {
+        display: flex;
+        align-items: center;
+        min-height: 2.25rem;
+        padding-left: .25rem;
+    }
+    .purchase-material-picker-sheet-title {
+        color: #1f2937;
+        font-size: .95rem;
+        font-weight: 700;
+    }
+    .purchase-material-picker-close {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        margin-left: auto;
+        padding: 0;
+        border: 0;
+        border-radius: 999px;
+        background: #f3f5f8;
+        color: #667085;
+    }
+    .purchase-material-picker-search {
+        position: relative;
+        display: block;
+        margin-top: .45rem;
+    }
+    .purchase-material-picker-search > i {
+        position: absolute;
+        top: 50%;
+        left: .8rem;
+        z-index: 1;
+        color: #8a94a0;
+        font-size: .9rem;
+        pointer-events: none;
+        transform: translateY(-50%);
+    }
+    .purchase-material-picker-search .form-control {
+        min-height: 44px;
+        padding-left: 2.25rem;
+        border-color: #e4e9ef;
+        border-radius: .68rem;
+        background: #f7f9fb;
+        box-shadow: none;
+    }
+    .purchase-material-picker-search .form-control:focus {
+        border-color: #86b7fe;
+        background: #fff;
+        box-shadow: 0 0 0 .18rem rgba(13, 110, 253, .1);
+    }
+    .purchase-material-picker-option {
+        padding: .8rem .78rem;
+        border-bottom: 1px solid #f1f3f6;
+        border-radius: 0;
+    }
+    .purchase-material-picker-option + .purchase-material-picker-option {
+        margin-top: 0;
+    }
+    .purchase-material-picker-option-stock {
+        font-size: .9rem;
+    }
+    .purchase-material-picker-option-meta {
+        margin-top: .24rem;
+        font-size: .79rem;
+    }
+    .purchase-material-picker-empty {
+        padding: 1.25rem .75rem calc(1.5rem + env(safe-area-inset-bottom));
+        font-size: .82rem;
+    }
+    .purchase-items-grid-scroll {
+        overflow-x: visible;
+    }
+    .purchase-items-grid {
+        display: block;
+        width: 100%;
+        min-width: 0;
+    }
+    .purchase-items-grid thead {
+        display: none;
+    }
+    .purchase-items-grid tbody {
+        display: block;
+    }
+    .purchase-items-grid tbody tr.purchase-item-row {
+        position: relative;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+        grid-template-areas:
+            "name name"
+            "type unit"
+            "spec spec"
+            "qty price"
+            "amount amount";
+        gap: .55rem .7rem;
+        padding: .85rem .9rem;
+        border-bottom: 1px solid #eef1f5;
+        background: #fff;
+    }
+    .purchase-items-grid tbody tr.purchase-item-row:last-child {
+        border-bottom: 0;
+    }
+    .purchase-items-grid tbody tr.purchase-item-row:hover td,
+    .purchase-items-grid tbody tr.purchase-item-row:focus-within td {
+        background: transparent;
+    }
+    .purchase-items-grid tbody td {
+        display: block;
+        min-width: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+    }
+    .purchase-item-cell-name {
+        grid-area: name;
+        padding-right: 2.35rem !important;
+    }
+    .purchase-item-cell-type { grid-area: type; }
+    .purchase-item-cell-unit { grid-area: unit; }
+    .purchase-item-cell-spec { grid-area: spec; }
+    .purchase-item-cell-qty { grid-area: qty; }
+    .purchase-item-cell-price { grid-area: price; }
+    .purchase-item-cell-amount {
+        grid-area: amount;
+        display: flex;
+        align-items: baseline;
+        justify-content: space-between;
+        gap: .5rem;
+        padding-top: .5rem !important;
+        border-top: 1px dashed #e5eaf0 !important;
+    }
+    .purchase-item-cell-remove {
+        position: absolute;
+        top: .5rem;
+        right: .5rem;
+        width: auto;
+        min-width: 0 !important;
+    }
+    .purchase-item-cell-type::before,
+    .purchase-item-cell-unit::before,
+    .purchase-item-cell-spec::before,
+    .purchase-item-cell-qty::before,
+    .purchase-item-cell-price::before,
+    .purchase-item-cell-amount::before {
+        display: block;
+        margin-bottom: .22rem;
+        color: #8a94a0;
+        font-size: .7rem;
+        font-weight: 600;
+        line-height: 1.1;
+    }
+    .purchase-item-cell-type::before { content: attr(data-label); }
+    .purchase-item-cell-unit::before { content: attr(data-label); }
+    .purchase-item-cell-spec::before { content: attr(data-label); }
+    .purchase-item-cell-qty::before { content: attr(data-label); }
+    .purchase-item-cell-price::before { content: attr(data-label); }
+    .purchase-item-cell-amount::before {
+        content: attr(data-label);
+        margin-bottom: 0;
+    }
+    .purchase-items-grid .form-control,
+    .purchase-items-grid .form-select {
+        width: 100%;
+        min-height: 44px;
+        font-size: 16px;
+    }
+    .purchase-items-grid .item-amount {
+        min-height: 0;
+        font-size: 1.05rem;
+        text-align: right;
+    }
+    .purchase-material-hint {
+        margin-top: .3rem;
+        font-size: .74rem;
+    }
+    .light-data-grid-table .light-grid-remove {
+        width: 2.25rem;
+        height: 2.25rem;
+        opacity: .6;
+    }
+}
+@keyframes purchaseMaterialSheetIn {
+    from { transform: translateY(18px); opacity: .65; }
+    to { transform: translateY(0); opacity: 1; }
+}
 </style>
 <div class="editor-layout purchase-editor-layout">
     <main>
@@ -87,14 +391,14 @@
                 <div class="editor-section-header">
                     <div>
                         <h5><i class="bi bi-boxes"></i> 采购物料</h5>
-                        <div class="small text-muted mt-1">原材料可通过小型选择器带入规格和单位，其他物料可直接填写。</div>
+                        <div class="small text-muted mt-1">点击原材料名称可选择并带入规格、单位与参考成本；其他物料可直接填写。</div>
                     </div>
                     <span class="badge rounded-pill text-bg-light border" id="purchaseVisibleItemCount">共 0 项</span>
                 </div>
                 <div class="editor-section-body">
-                    <div class="light-data-grid">
-                        <div class="light-data-grid-scroll">
-                            <table class="table light-data-grid-table align-middle" style="min-width:1160px;">
+                    <div class="light-data-grid purchase-items-panel">
+                            <div class="light-data-grid-scroll purchase-items-grid-scroll">
+                                <table class="table light-data-grid-table align-middle purchase-items-grid">
                                 <thead>
                                     <tr>
                                         <th style="width:120px;">物料类型 <span class="text-danger">*</span></th>
@@ -163,6 +467,21 @@
 
 <datalist id="purchaseMaterialAutocompleteOptions"></datalist>
 
+<div class="purchase-material-picker-backdrop d-none" id="purchaseMaterialPickerBackdrop" aria-hidden="true"></div>
+<div class="purchase-material-picker d-none" id="purchaseMaterialPicker" role="dialog" aria-modal="true" aria-label="选择原材料">
+    <div class="purchase-material-picker-sheet-header">
+        <div class="purchase-material-picker-sheet-title-row">
+            <span class="purchase-material-picker-sheet-title">选择原材料</span>
+            <button type="button" class="purchase-material-picker-close" id="purchaseMaterialPickerClose" aria-label="关闭原材料选择器"><i class="bi bi-x-lg" aria-hidden="true"></i></button>
+        </div>
+        <div class="purchase-material-picker-search">
+            <i class="bi bi-search" aria-hidden="true"></i>
+            <input type="search" class="form-control" id="purchaseMaterialPickerSearch" placeholder="搜索名称、规格或单位" autocomplete="off" spellcheck="false" enterkeyhint="search" aria-label="搜索原材料">
+        </div>
+    </div>
+    <div id="purchaseMaterialPickerList" role="listbox"></div>
+</div>
+
 <div class="modal fade" id="purchaseReceiptViewModal" tabindex="-1">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content">
@@ -183,6 +502,9 @@
 var purchaseRawMaterials = [];
 var purchaseReceiptURLs = [];
 var purchaseMaterialAutocomplete = null;
+var purchaseMaterialPickerInput = null;
+var purchaseMaterialPickerItems = [];
+var purchaseMaterialPickerIndex = -1;
 var purchaseIsEdit = false;
 var purchaseIsDraft = false;
 
@@ -210,16 +532,39 @@ function materialDisplay(material) {
     return (material.name || '') + '（' + parts.join('，') + '）';
 }
 
+function materialPickerDisplay(material) {
+    return isMobilePurchaseMaterialPicker() ? (material.name || '') : materialDisplay(material);
+}
+
+function materialRowMeta(material) {
+    var parts = [];
+    if (material.spec) parts.push('规格：' + material.spec);
+    if (material.unit) parts.push('单位：' + material.unit);
+    parts.push('库存：' + Number(material.stock || 0), '平均成本：¥' + Number(material.avg_cost || 0).toFixed(2));
+    return parts.join('，');
+}
+
+function setPurchaseMaterialRawID(row, materialID) {
+    var value = parseInt(materialID, 10) || 0;
+    row = $(row).first();
+    row.attr('data-raw-material-id', value);
+    row.find('.item-raw-material-id').val(value);
+    return value;
+}
+
 function applyPurchaseMaterial(material, input) {
     var row = $(input).closest('tr');
     if (!material || !row.length) return;
     row.find('.item-material-type').val('原材料');
-    row.find('.item-raw-material-id').val(material.id);
+    setPurchaseMaterialRawID(row, material.id);
+    row.find('.item-material-name').val(material.name || '');
     row.find('.item-spec').val(material.spec || '');
     row.find('.item-unit').val(material.unit || '个');
+    row.find('.purchase-material-hint').text(materialRowMeta(material));
     if (!parseFloat(row.find('.item-price').val())) {
         row.find('.item-price').val(Number(material.avg_cost || 0).toFixed(2));
     }
+    syncPurchaseMaterialInputMode(row);
     recalcPurchaseItem(row.find('.item-quantity')[0]);
 }
 
@@ -231,7 +576,7 @@ function initPurchaseMaterialAutocomplete() {
         hiddenSelector: '.item-raw-material-id',
         datalistSelector: '#purchaseMaterialAutocompleteOptions',
         getId: function (material) { return material.id; },
-        getDisplay: materialDisplay,
+        getDisplay: materialPickerDisplay,
         getAliases: function (material) {
             return [material.name, material.spec, material.unit, materialDisplay(material)];
         },
@@ -252,6 +597,7 @@ function loadPurchaseRawMaterials() {
             purchaseRawMaterials = Array.isArray(data) ? data : [];
             initPurchaseMaterialAutocomplete();
             purchaseMaterialAutocomplete.setItems(purchaseRawMaterials);
+            syncPurchaseMaterialInputMode();
         },
         error: function (xhr) {
             EntityEditor.notify('加载原材料失败：' + EntityEditor.parseJSONResponse(xhr, '请求失败'), 'error');
@@ -259,24 +605,215 @@ function loadPurchaseRawMaterials() {
     });
 }
 
+function isMobilePurchaseMaterialPicker() {
+    return window.matchMedia ? window.matchMedia('(max-width: 767.98px)').matches : window.innerWidth <= 767.98;
+}
+
+function purchaseMaterialPickerViewport() {
+    var viewport = window.visualViewport;
+    var layoutHeight = window.innerHeight || 0;
+    var visibleHeight = viewport ? viewport.height : layoutHeight;
+    var offsetTop = viewport ? viewport.offsetTop : 0;
+    return {
+        height: visibleHeight || layoutHeight,
+        keyboardInset: viewport ? Math.max(0, layoutHeight - visibleHeight - offsetTop) : 0
+    };
+}
+
+function syncPurchaseMaterialInputMode(scope) {
+    $(scope || '.purchase-item-row').each(function () {
+        var row = $(this);
+        var input = row.find('.item-material-name');
+        var isRaw = (row.find('.item-material-type').val() || '原材料') === '原材料';
+        if (isMobilePurchaseMaterialPicker() && isRaw) {
+            input.prop('readonly', true)
+                .attr('inputmode', 'none')
+                .attr('aria-haspopup', 'dialog')
+                .attr('placeholder', '点击选择原材料');
+        } else {
+            input.prop('readonly', false)
+                .removeAttr('inputmode')
+                .removeAttr('aria-haspopup')
+                .attr('placeholder', '输入原材料名称、规格或单位');
+        }
+    });
+}
+
+function openPurchaseMaterialPicker(input, keyword) {
+    input = $(input).first();
+    if (!input.length) return;
+
+    purchaseMaterialPickerInput = input;
+    var search = $('#purchaseMaterialPickerSearch');
+    search.val(keyword == null ? '' : keyword);
+    input.attr('aria-haspopup', 'dialog').attr('aria-expanded', 'true');
+    renderPurchaseMaterialPicker(search.val());
+}
+
+function syncPurchaseMaterialPickerBackdrop(visible) {
+    $('#purchaseMaterialPickerBackdrop').toggleClass('d-none', !(visible && isMobilePurchaseMaterialPicker()));
+}
+
+function hidePurchaseMaterialPicker() {
+    var picker = $('#purchaseMaterialPicker');
+    var search = $('#purchaseMaterialPickerSearch');
+    if (purchaseMaterialPickerInput && purchaseMaterialPickerInput.length) {
+        purchaseMaterialPickerInput.attr('aria-expanded', 'false');
+    }
+    if (search.is(':focus')) search[0].blur();
+    search.val('');
+    picker.addClass('d-none');
+    $('#purchaseMaterialPickerList').empty();
+    syncPurchaseMaterialPickerBackdrop(false);
+    purchaseMaterialPickerInput = null;
+    purchaseMaterialPickerItems = [];
+    purchaseMaterialPickerIndex = -1;
+}
+
+function positionPurchaseMaterialPicker() {
+    var input = purchaseMaterialPickerInput;
+    var picker = $('#purchaseMaterialPicker');
+    if (!input || !input.length || picker.hasClass('d-none')) return;
+
+    if (isMobilePurchaseMaterialPicker()) {
+        var viewport = purchaseMaterialPickerViewport();
+        var searchFocused = $('#purchaseMaterialPickerSearch').is(':focus');
+        var keyboardInset = searchFocused ? viewport.keyboardInset : 0;
+        var sheetMaxHeight = Math.min(520, Math.max(220, viewport.height * .68));
+        if (picker[0]) {
+            picker[0].style.setProperty('--purchase-material-sheet-max-height', sheetMaxHeight + 'px');
+            picker[0].style.setProperty('--purchase-material-keyboard-inset', keyboardInset + 'px');
+        }
+        picker.css({ left: '', width: '', maxHeight: '', top: '', bottom: '' });
+        syncPurchaseMaterialPickerBackdrop(true);
+        return;
+    }
+    syncPurchaseMaterialPickerBackdrop(false);
+
+    var rect = input[0].getBoundingClientRect();
+    var summaryHeight = $('.editor-summary').is(':visible') ? $('.editor-summary').outerHeight() : 0;
+    var viewportBottom = window.innerHeight - summaryHeight - 8;
+    var pickerWidth = Math.min(460, Math.max(280, rect.width));
+    if (window.innerWidth < 576) pickerWidth = window.innerWidth - 16;
+    var left = Math.min(Math.max(8, rect.left), Math.max(8, window.innerWidth - pickerWidth - 8));
+    var spaceBelow = Math.max(0, viewportBottom - rect.bottom - 4);
+    var spaceAbove = Math.max(0, rect.top - 8);
+    var openAbove = spaceBelow < 190 && spaceAbove > spaceBelow;
+    var maxHeight = Math.min(340, Math.max(130, openAbove ? spaceAbove : spaceBelow));
+    picker.css({
+        left: left + 'px',
+        width: pickerWidth + 'px',
+        maxHeight: maxHeight + 'px',
+        top: openAbove ? 'auto' : (rect.bottom + 4) + 'px',
+        bottom: openAbove ? (window.innerHeight - rect.top + 4) + 'px' : 'auto'
+    });
+}
+
+function setPurchaseMaterialPickerIndex(index) {
+    var count = purchaseMaterialPickerItems.length;
+    if (!count) return;
+    if (index < 0) index = count - 1;
+    if (index >= count) index = 0;
+    purchaseMaterialPickerIndex = index;
+    var options = $('#purchaseMaterialPickerList .purchase-material-picker-option');
+    options.removeClass('active').attr('aria-selected', 'false');
+    var active = options.eq(index).addClass('active').attr('aria-selected', 'true');
+    if (active.length && active[0].scrollIntoView) active[0].scrollIntoView({ block: 'nearest' });
+}
+
+function purchaseMaterialSearchText(material) {
+    return [material.name, material.spec, material.unit, materialDisplay(material)].join(' ').toLowerCase();
+}
+
+function filterPurchaseMaterials(keyword) {
+    keyword = String(keyword || '').trim().toLowerCase();
+    var list = purchaseRawMaterials.filter(function (material) {
+        return !keyword || purchaseMaterialSearchText(material).indexOf(keyword) >= 0;
+    });
+    list.sort(function (a, b) {
+        var aName = String(a.name || '').toLowerCase();
+        var bName = String(b.name || '').toLowerCase();
+        var aScore = !keyword || aName === keyword ? 0 : (aName.indexOf(keyword) === 0 ? 1 : 2);
+        var bScore = !keyword || bName === keyword ? 0 : (bName.indexOf(keyword) === 0 ? 1 : 2);
+        if (aScore !== bScore) return aScore - bScore;
+        return String(a.name || '').localeCompare(String(b.name || ''), 'zh-CN');
+    });
+    return list;
+}
+
+function renderPurchaseMaterialPicker(keyword) {
+    var input = purchaseMaterialPickerInput;
+    var picker = $('#purchaseMaterialPicker');
+    var list = $('#purchaseMaterialPickerList');
+    if (!input || !input.length) {
+        hidePurchaseMaterialPicker();
+        return;
+    }
+
+    var matched = filterPurchaseMaterials(keyword == null ? input.val() : keyword);
+    purchaseMaterialPickerItems = matched.slice(0, 80);
+    purchaseMaterialPickerIndex = purchaseMaterialPickerItems.length ? 0 : -1;
+    var html = '';
+    if (!purchaseMaterialPickerItems.length) {
+        html = '<div class="purchase-material-picker-empty">没有匹配的原材料，可直接关闭后填写其他物料。</div>';
+    } else {
+        purchaseMaterialPickerItems.forEach(function (material, index) {
+            html += '<button type="button" class="purchase-material-picker-option' + (index === purchaseMaterialPickerIndex ? ' active' : '') + '" role="option" aria-selected="' + (index === purchaseMaterialPickerIndex ? 'true' : 'false') + '" data-index="' + index + '" data-material-id="' + (parseInt(material.id, 10) || 0) + '">' +
+                '<div class="purchase-material-picker-option-title"><span class="purchase-material-picker-option-name">' + purchaseEscape(material.name || '') + '</span><span class="purchase-material-picker-option-stock">库存 ' + Number(material.stock || 0) + '</span></div>' +
+                '<div class="purchase-material-picker-option-meta">' + purchaseEscape(materialRowMeta(material)) + '</div></button>';
+        });
+        if (matched.length > purchaseMaterialPickerItems.length) {
+            html += '<div class="purchase-material-picker-empty">结果较多，仅显示前 80 条，请继续输入以缩小范围。</div>';
+        }
+    }
+    list.html(html);
+    picker.removeClass('d-none');
+    syncPurchaseMaterialPickerBackdrop(true);
+    positionPurchaseMaterialPicker();
+}
+
+function selectPurchaseMaterial(input, materialID) {
+    input = $(input).first();
+    if (!input.length) return;
+    var material = purchaseRawMaterials.find(function (item) {
+        return parseInt(item.id, 10) === parseInt(materialID, 10);
+    });
+    if (!material) return;
+    var row = input.closest('tr');
+    var selectedMaterialID = parseInt(material.id, 10) || 0;
+    applyPurchaseMaterial(material, input);
+    hidePurchaseMaterialPicker();
+    input.blur();
+    setPurchaseMaterialRawID(row, selectedMaterialID);
+    window.setTimeout(function () {
+        hidePurchaseMaterialPicker();
+        setPurchaseMaterialRawID(row, selectedMaterialID);
+    }, 0);
+    EntityEditor.markDirty();
+}
+
 function purchaseItemRowHtml(item) {
     item = item || {};
     var itemID = parseInt(item.id || 0, 10) || 0;
     var rawID = parseInt(item.raw_material_id || 0, 10) || 0;
     var type = item.material_type || '原材料';
+    var mobilePicker = isMobilePurchaseMaterialPicker() && type === '原材料';
+    var pickerAttrs = mobilePicker ? 'readonly inputmode="none" aria-haspopup="dialog" ' : '';
+    var namePlaceholder = mobilePicker ? '点击选择原材料' : '输入原材料名称、规格或单位';
     var types = ['原材料','固定资产','办公用品','设备'].map(function (value) {
         return '<option value="' + value + '"' + (value === type ? ' selected' : '') + '>' + value + '</option>';
     }).join('');
-    return '<tr class="purchase-item-row" data-item-id="' + itemID + '">' +
-        '<td><select class="form-select form-select-sm item-material-type" onchange="togglePurchaseMaterialType(this)">' + types + '</select></td>' +
-        '<td class="light-grid-name-wrap"><input type="hidden" class="item-raw-material-id" value="' + rawID + '">' +
-        '<input type="text" class="form-control form-control-sm item-material-name" value="' + purchaseEscape(item.material_name || '') + '" placeholder="输入原材料名称、规格或单位" autocomplete="off" spellcheck="false" list="purchaseMaterialAutocompleteOptions" aria-autocomplete="list" aria-controls="purchaseMaterialAutocompleteOptions"></td>' +
-        '<td><input type="text" class="form-control form-control-sm item-spec" value="' + purchaseEscape(item.spec || '') + '"></td>' +
-        '<td><input type="text" class="form-control form-control-sm item-unit" value="' + purchaseEscape(item.unit || '个') + '"></td>' +
-        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm item-quantity" min="0.001" step="0.001" value="' + (item.quantity == null ? '' : item.quantity) + '" oninput="recalcPurchaseItem(this)"></td>' +
-        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm item-price" min="0" step="0.01" value="' + (item.price == null ? '' : item.price) + '" oninput="recalcPurchaseItem(this)"></td>' +
-        '<td class="light-grid-number"><input type="number" class="form-control form-control-sm item-amount light-grid-amount" value="' + Number(item.amount || 0).toFixed(2) + '" readonly tabindex="-1"></td>' +
-        '<td class="text-end"><button type="button" class="light-grid-remove" onclick="removePurchaseItem(this)" title="删除此行" aria-label="删除此行"><i class="bi bi-trash"></i></button></td></tr>';
+    return '<tr class="purchase-item-row" data-item-id="' + itemID + '" data-raw-material-id="' + rawID + '">' +
+        '<td class="purchase-item-cell-type" data-label="物料类型"><select class="form-select form-select-sm item-material-type" onchange="togglePurchaseMaterialType(this)">' + types + '</select></td>' +
+        '<td class="light-grid-name-wrap purchase-item-cell-name" data-label="物料名称"><input type="hidden" class="item-raw-material-id" value="' + rawID + '">' +
+        '<input type="text" class="form-control form-control-sm item-material-name" value="' + purchaseEscape(item.material_name || '') + '" placeholder="' + namePlaceholder + '" autocomplete="off" spellcheck="false" list="purchaseMaterialAutocompleteOptions" aria-autocomplete="list" aria-controls="purchaseMaterialAutocompleteList" aria-expanded="false" ' + pickerAttrs + '>' +
+        '<div class="purchase-item-hint purchase-material-hint"></div></td>' +
+        '<td class="purchase-item-cell-spec" data-label="规格型号"><input type="text" class="form-control form-control-sm item-spec" value="' + purchaseEscape(item.spec || '') + '"></td>' +
+        '<td class="purchase-item-cell-unit" data-label="单位"><input type="text" class="form-control form-control-sm item-unit" value="' + purchaseEscape(item.unit || '个') + '"></td>' +
+        '<td class="light-grid-number purchase-item-cell-qty" data-label="采购数量"><input type="number" class="form-control form-control-sm item-quantity" min="0.001" step="0.001" inputmode="decimal" value="' + (item.quantity == null ? '' : item.quantity) + '" oninput="recalcPurchaseItem(this)"></td>' +
+        '<td class="light-grid-number purchase-item-cell-price" data-label="单价"><input type="number" class="form-control form-control-sm item-price" min="0" step="0.01" inputmode="decimal" value="' + (item.price == null ? '' : item.price) + '" oninput="recalcPurchaseItem(this)"></td>' +
+        '<td class="light-grid-number purchase-item-cell-amount" data-label="金额"><input type="number" class="form-control form-control-sm item-amount light-grid-amount" value="' + Number(item.amount || 0).toFixed(2) + '" readonly tabindex="-1"></td>' +
+        '<td class="text-end purchase-item-cell-remove"><button type="button" class="light-grid-remove" onclick="removePurchaseItem(this)" title="删除此行" aria-label="删除此行"><i class="bi bi-trash"></i></button></td></tr>';
 }
 
 function addPurchaseItem(item) {
@@ -295,11 +832,19 @@ function removePurchaseItem(button) {
 
 function togglePurchaseMaterialType(select) {
     var row = $(select).closest('tr');
-    if ($(select).val() !== '原材料') row.find('.item-raw-material-id').val(0);
+    if (($(select).val() || '原材料') !== '原材料') {
+        setPurchaseMaterialRawID(row, 0);
+        row.find('.purchase-material-hint').empty();
+    }
+    syncPurchaseMaterialInputMode(row);
+    EntityEditor.markDirty();
 }
 
 function clearPurchaseMaterial(input) {
-    $(input).closest('tr').find('.item-raw-material-id').val(0);
+    var row = $(input).closest('tr');
+    setPurchaseMaterialRawID(row, 0);
+    row.find('.purchase-material-hint').empty();
+    syncPurchaseMaterialInputMode(row);
 }
 
 function recalcPurchaseItem(input) {
@@ -341,7 +886,7 @@ function collectPurchaseItems() {
         }
         items.push({
             id: parseInt(row.attr('data-item-id'), 10) || 0,
-            raw_material_id: parseInt(row.find('.item-raw-material-id').val(), 10) || 0,
+            raw_material_id: parseInt(row.attr('data-raw-material-id') || row.find('.item-raw-material-id').val(), 10) || 0,
             material_type: row.find('.item-material-type').val() || '原材料',
             material_name: name,
             spec: ($(row.find('.item-spec')[0]).val() || '').trim(),
@@ -361,7 +906,7 @@ function collectPurchaseDraftItems() {
         var spec = ($(row.find('.item-spec')[0]).val() || '').trim();
         var quantityText = String(row.find('.item-quantity').val() || '').trim();
         var priceText = String(row.find('.item-price').val() || '').trim();
-        var rawMaterialID = parseInt(row.find('.item-raw-material-id').val(), 10) || 0;
+        var rawMaterialID = parseInt(row.attr('data-raw-material-id') || row.find('.item-raw-material-id').val(), 10) || 0;
         var materialType = row.find('.item-material-type').val() || '原材料';
         if (!name && !spec && !quantityText && !priceText && !rawMaterialID && materialType === '原材料') return;
 
@@ -522,6 +1067,8 @@ function loadPurchaseForEdit(id) {
             $('#purchaseItems').empty();
             if (!items.length) addPurchaseItem();
             items.forEach(function (item) { addPurchaseItem(item); });
+            if (purchaseMaterialAutocomplete) purchaseMaterialAutocomplete.setItems(purchaseRawMaterials);
+            syncPurchaseMaterialInputMode();
             if (purchaseIsDraft) {
                 $('#purchaseEditorTitle').html('<i class="bi bi-pencil-square"></i> 编辑采购单草稿 #' + purchaseEscape(data.id || id));
                 $('#savePurchaseButton').html('<i class="bi bi-check2-circle"></i> 提交采购单');
@@ -543,6 +1090,89 @@ function loadPurchaseForEdit(id) {
 
 $(document).ready(function () {
     loadPurchaseRawMaterials();
+    $(document)
+        .on('focus.purchaseMaterialPicker', '.item-material-name', function () {
+            var input = $(this);
+            var row = input.closest('tr');
+            if (!isMobilePurchaseMaterialPicker() || (row.find('.item-material-type').val() || '原材料') !== '原材料') return;
+            input.prop('readonly', true).attr('inputmode', 'none');
+            openPurchaseMaterialPicker(input, '');
+        })
+        .on('input.purchaseMaterialPicker', '.item-material-name', function () {
+            if (isMobilePurchaseMaterialPicker()) return;
+            var input = $(this);
+            var row = input.closest('tr');
+            if (parseInt(row.find('.item-raw-material-id').val(), 10) || 0) {
+                clearPurchaseMaterial(input);
+            }
+        })
+        .on('change.purchaseMaterialPicker', '.item-material-name', function () {
+            var input = $(this);
+            var row = input.closest('tr');
+            window.setTimeout(function () {
+                var materialID = parseInt(row.attr('data-raw-material-id'), 10) || 0;
+                if (materialID && String(input.val() || '').trim()) {
+                    row.find('.item-raw-material-id').val(materialID);
+                }
+            }, 0);
+        })
+        .on('keydown.purchaseMaterialPicker', '.item-material-name', function (event) {
+            if (isMobilePurchaseMaterialPicker()) return;
+            if (event.key === 'Escape') hidePurchaseMaterialPicker();
+        })
+        .on('input.purchaseMaterialPicker', '#purchaseMaterialPickerSearch', function () {
+            renderPurchaseMaterialPicker($(this).val());
+        })
+        .on('focus.purchaseMaterialPicker', '#purchaseMaterialPickerSearch', function () {
+            setTimeout(positionPurchaseMaterialPicker, 50);
+        })
+        .on('keydown.purchaseMaterialPicker', '#purchaseMaterialPickerSearch', function (event) {
+            var visible = !$('#purchaseMaterialPicker').hasClass('d-none');
+            if (event.key === 'ArrowDown' && visible) {
+                event.preventDefault();
+                setPurchaseMaterialPickerIndex(purchaseMaterialPickerIndex + 1);
+                return;
+            }
+            if (event.key === 'ArrowUp' && visible) {
+                event.preventDefault();
+                setPurchaseMaterialPickerIndex(purchaseMaterialPickerIndex - 1);
+                return;
+            }
+            if (event.key === 'Enter' && visible) {
+                event.preventDefault();
+                if (purchaseMaterialPickerIndex >= 0 && purchaseMaterialPickerItems[purchaseMaterialPickerIndex]) {
+                    selectPurchaseMaterial(purchaseMaterialPickerInput, purchaseMaterialPickerItems[purchaseMaterialPickerIndex].id);
+                }
+                return;
+            }
+            if (event.key === 'Escape') hidePurchaseMaterialPicker();
+        })
+        .on('click.purchaseMaterialPicker', '#purchaseMaterialPickerClose', function (event) {
+            event.preventDefault();
+            hidePurchaseMaterialPicker();
+        })
+        .on('mousedown.purchaseMaterialPicker', '#purchaseMaterialPicker .purchase-material-picker-option', function (event) {
+            event.preventDefault();
+            setPurchaseMaterialPickerIndex(parseInt($(this).attr('data-index'), 10) || 0);
+        })
+        .on('click.purchaseMaterialPicker', '#purchaseMaterialPicker .purchase-material-picker-option', function () {
+            var input = purchaseMaterialPickerInput;
+            if (!input || !input.length) input = $('.item-material-name:focus').first();
+            selectPurchaseMaterial(input, $(this).attr('data-material-id'));
+        })
+        .on('mousedown.purchaseMaterialPicker', function (event) {
+            if ($(event.target).closest('.item-material-name, #purchaseMaterialPicker').length) return;
+            hidePurchaseMaterialPicker();
+        });
+    $(window).on('resize.purchaseMaterialPicker', function () {
+        syncPurchaseMaterialInputMode();
+        positionPurchaseMaterialPicker();
+    });
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', positionPurchaseMaterialPicker);
+        window.visualViewport.addEventListener('scroll', positionPurchaseMaterialPicker);
+    }
+    $('#purchase-items .purchase-items-grid-scroll').on('scroll.purchaseMaterialPicker', positionPurchaseMaterialPicker);
     $('#freight, #purchaseStatus').on('input change', recalcPurchaseSummary);
     $('#purchaseStatus').on('change', updatePurchaseStatusHint);
     EntityEditor.bindForm('#purchaseEditorForm', savePurchaseEditor, { button: '#savePurchaseButton' });
