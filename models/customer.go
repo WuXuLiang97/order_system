@@ -20,7 +20,7 @@ var TargetMarkets = []string{"国内", "东南亚", "欧洲", "美洲", "中东"
 var Currencies = []string{"CNY", "USD", "EUR", "GBP", "JPY", "HKD", "AUD"}
 var PaymentTerms = []string{"现结", "到付", "月结30天", "月结60天", "T/T", "L/C", "其他"}
 var TradeTerms = []string{"EXW", "FOB", "CIF", "DDP"}
-var Sources = []string{"展会", "阿里国际站", "独立站", "转介绍", "其他"}
+var Sources = []string{"地推", "闲鱼", "线上平台", "展会", "阿里国际站", "独立站", "转介绍", "其他"}
 var RiskLevels = []string{"低", "中", "高"}
 var ContactTitles = []string{"老板", "总监", "业务", "采购", "技术"}
 
