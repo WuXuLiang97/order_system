@@ -101,9 +101,9 @@ function loadUserOptions() {
 }
 
 function setupOptions() {
-    fillSelect('#filterType', CUSTOMER_TYPES);
-    fillSelect('#filterStatus', CUSTOMER_STATUSES);
-    fillSelect('#filterRisk', RISK_LEVELS);
+    fillSelect('#filterType', CUSTOMER_TYPES, '全部类型');
+    fillSelect('#filterStatus', CUSTOMER_STATUSES, '全部状态');
+    fillSelect('#filterRisk', RISK_LEVELS, '全部风险');
 }
 
 
