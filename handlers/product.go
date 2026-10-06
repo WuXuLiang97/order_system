@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -250,7 +251,136 @@ func DeleteProduct(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// ProduceProduct 生产入库：按实际领料成本扣原材料，并把冻结的材料成本转入成品。
+// productionItemRequest 描述一行生产入库明细。
+type productionItemRequest struct {
+	ProductID int     `json:"product_id"`
+	Quantity  float64 `json:"quantity"`
+}
+
+// productionLineResult 返回单个产品的入库结果，用于批量汇总与前端展示。
+type productionLineResult struct {
+	ProductID    int     `json:"product_id"`
+	ProductName  string  `json:"product_name"`
+	Quantity     float64 `json:"quantity"`
+	MaterialCost float64 `json:"material_cost"`
+	UnitCost     float64 `json:"unit_cost"`
+	HasBOM       bool    `json:"has_bom"`
+}
+
+type productionBOMLine struct {
+	RawMaterialID int
+	Quantity      float64
+}
+
+// normalizeProductionItems 校验并合并生产入库明细：同一产品合并数量，避免重复领料、重复计成本。
+func normalizeProductionItems(items []productionItemRequest) ([]productionItemRequest, error) {
+	if len(items) == 0 {
+		return nil, fmt.Errorf("请至少填写一个入库产品")
+	}
+	merged := make([]productionItemRequest, 0, len(items))
+	indexByProduct := make(map[int]int)
+	for _, item := range items {
+		if item.ProductID <= 0 {
+			return nil, fmt.Errorf("产品ID不正确")
+		}
+		if item.Quantity <= 0 {
+			return nil, fmt.Errorf("生产数量必须大于0")
+		}
+		if idx, ok := indexByProduct[item.ProductID]; ok {
+			merged[idx].Quantity += item.Quantity
+			continue
+		}
+		indexByProduct[item.ProductID] = len(merged)
+		merged = append(merged, item)
+	}
+	return merged, nil
+}
+
+// produceOneProductTx 在调用方事务内完成单个产品的生产入库：
+// 先按 BOM 扣减原材料并冻结领料成本，再把成本结转到成品库存。
+func produceOneProductTx(tx *sql.Tx, item productionItemRequest, productionNo, batchNo, productionRemark string, occurredAt time.Time, userID int) (productionLineResult, error) {
+	var result productionLineResult
+	result.ProductID = item.ProductID
+	result.Quantity = item.Quantity
+
+	var productName string
+	if err := tx.QueryRow("SELECT name FROM products WHERE id = ? FOR UPDATE", item.ProductID).Scan(&productName); err != nil {
+		if err == sql.ErrNoRows {
+			return result, fmt.Errorf("产品不存在或已被删除")
+		}
+		return result, err
+	}
+	result.ProductName = productName
+
+	rows, err := tx.Query("SELECT raw_material_id, quantity FROM product_bom WHERE product_id = ? ORDER BY raw_material_id ASC", item.ProductID)
+	if err != nil {
+		return result, err
+	}
+	var boms []productionBOMLine
+	for rows.Next() {
+		var line productionBOMLine
+		if err := rows.Scan(&line.RawMaterialID, &line.Quantity); err != nil {
+			rows.Close()
+			return result, err
+		}
+		boms = append(boms, line)
+	}
+	if err := rows.Close(); err != nil {
+		return result, err
+	}
+	if err := rows.Err(); err != nil {
+		return result, err
+	}
+	result.HasBOM = len(boms) > 0
+
+	materialCost := 0.0
+	for _, bom := range boms {
+		consumeQty := bom.Quantity * item.Quantity
+		movement, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+			ItemType:        models.InventoryItemRawMaterial,
+			ItemID:          bom.RawMaterialID,
+			Quantity:        -consumeQty,
+			MovementType:    models.MovementProductionConsume,
+			ReferenceType:   "production",
+			ReferenceNo:     productionNo,
+			OccurredAt:      occurredAt,
+			BatchNo:         batchNo,
+			Remark:          productionRemark,
+			CreatedByUserID: userID,
+		})
+		if err != nil {
+			return result, fmt.Errorf("产品「%s」领料失败：%v", productName, err)
+		}
+		materialCost += -movement.TotalCost
+	}
+
+	unitCost := 0.0
+	if item.Quantity > 0 {
+		unitCost = materialCost / item.Quantity
+	}
+	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
+		ItemType:        models.InventoryItemProduct,
+		ItemID:          item.ProductID,
+		Quantity:        item.Quantity,
+		UnitCost:        unitCost,
+		MovementType:    models.MovementProductionIn,
+		ReferenceType:   "production",
+		ReferenceNo:     productionNo,
+		OccurredAt:      occurredAt,
+		BatchNo:         batchNo,
+		Remark:          productionRemark,
+		CreatedByUserID: userID,
+	}); err != nil {
+		return result, err
+	}
+
+	result.MaterialCost = materialCost
+	result.UnitCost = unitCost
+	return result, nil
+}
+
+// ProduceProduct 生产入库：一次可提交多个产品，按实际领料成本扣原材料，
+// 并把冻结的材料成本分别转入对应成品库存。所有明细在同一事务内完成，任一失败整单回滚。
 func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -258,65 +388,37 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var req struct {
-		ProductID    int    `json:"product_id"`
-		Quantity     int    `json:"quantity"`
-		BusinessDate string `json:"business_date"`
-		BatchNo      string `json:"batch_no"`
-		Remark       string `json:"remark"`
+		ProductID    int                     `json:"product_id"`
+		Quantity     float64                 `json:"quantity"`
+		Items        []productionItemRequest `json:"items"`
+		BusinessDate string                  `json:"business_date"`
+		BatchNo      string                  `json:"batch_no"`
+		Remark       string                  `json:"remark"`
 	}
-
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
-	if req.ProductID <= 0 {
-		http.Error(w, "Invalid product ID", http.StatusBadRequest)
+
+	// 兼容旧的单产品提交：没有 items 时用 product_id + quantity 组装一行。
+	items := req.Items
+	if len(items) == 0 && req.ProductID > 0 && req.Quantity > 0 {
+		items = []productionItemRequest{{ProductID: req.ProductID, Quantity: req.Quantity}}
+	}
+	if len(items) == 0 {
+		http.Error(w, "请至少填写一个入库产品", http.StatusBadRequest)
 		return
 	}
-	if req.Quantity <= 0 {
-		http.Error(w, "Quantity must be greater than 0", http.StatusBadRequest)
-		return
-	}
-	occurredAt, err := businessTimeFromDate(req.BusinessDate)
+
+	merged, err := normalizeProductionItems(items)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
-	tx, err := models.DB.Begin()
+	occurredAt, err := businessTimeFromDate(req.BusinessDate)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	defer tx.Rollback()
-
-	var productExists int
-	if err := tx.QueryRow("SELECT 1 FROM products WHERE id = ? FOR UPDATE", req.ProductID).Scan(&productExists); err != nil {
-		http.Error(w, "Product not found", http.StatusNotFound)
-		return
-	}
-
-	type bomLine struct {
-		RawMaterialID int
-		Quantity      float64
-	}
-	rows, err := tx.Query("SELECT raw_material_id, quantity FROM product_bom WHERE product_id = ? ORDER BY raw_material_id ASC", req.ProductID)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-	var boms []bomLine
-	for rows.Next() {
-		var line bomLine
-		if err := rows.Scan(&line.RawMaterialID, &line.Quantity); err != nil {
-			rows.Close()
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		boms = append(boms, line)
-	}
-	if err := rows.Close(); err != nil {
-		http.Error(w, err.Error(), http.StatusInternalServerError)
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
@@ -334,47 +436,30 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 	if remark != "" {
 		productionRemark += "：" + remark
 	}
-	materialCost := 0.0
-	for _, bom := range boms {
-		consumeQty := bom.Quantity * float64(req.Quantity)
-		result, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
-			ItemType:        models.InventoryItemRawMaterial,
-			ItemID:          bom.RawMaterialID,
-			Quantity:        -consumeQty,
-			MovementType:    models.MovementProductionConsume,
-			ReferenceType:   "production",
-			ReferenceNo:     productionNo,
-			OccurredAt:      occurredAt,
-			BatchNo:         batchNo,
-			Remark:          productionRemark,
-			CreatedByUserID: userID,
-		})
-		if err != nil {
-			http.Error(w, fmt.Sprintf("生产领料失败：%v", err), http.StatusBadRequest)
-			return
-		}
-		materialCost += -result.TotalCost
-	}
 
-	unitCost := 0.0
-	if req.Quantity > 0 {
-		unitCost = materialCost / float64(req.Quantity)
-	}
-	if _, err := models.ApplyStockDeltaTx(tx, models.StockMovementInput{
-		ItemType:        models.InventoryItemProduct,
-		ItemID:          req.ProductID,
-		Quantity:        float64(req.Quantity),
-		UnitCost:        unitCost,
-		MovementType:    models.MovementProductionIn,
-		ReferenceType:   "production",
-		ReferenceNo:     productionNo,
-		OccurredAt:      occurredAt,
-		BatchNo:         batchNo,
-		Remark:          productionRemark,
-		CreatedByUserID: userID,
-	}); err != nil {
+	tx, err := models.DB.Begin()
+	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
+	}
+	defer tx.Rollback()
+
+	results := make([]productionLineResult, 0, len(merged))
+	totalQuantity := 0.0
+	totalMaterialCost := 0.0
+	noBOMCount := 0
+	for _, item := range merged {
+		result, err := produceOneProductTx(tx, item, productionNo, batchNo, productionRemark, occurredAt, userID)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !result.HasBOM {
+			noBOMCount++
+		}
+		results = append(results, result)
+		totalQuantity += result.Quantity
+		totalMaterialCost += result.MaterialCost
 	}
 
 	if err := tx.Commit(); err != nil {
@@ -382,18 +467,27 @@ func ProduceProduct(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	message := "生产入库成功，材料成本已冻结"
-	if len(boms) == 0 {
-		message = "成品库存已增加，但该产品无BOM，本次生产成本记为0"
+	message := fmt.Sprintf("生产入库成功，共 %d 种产品，材料成本已冻结", len(results))
+	if noBOMCount > 0 {
+		message += fmt.Sprintf("（其中 %d 种无BOM，本次成本记为0）", noBOMCount)
 	}
+
+	payload := map[string]interface{}{
+		"message":             message,
+		"production_no":       productionNo,
+		"batch_no":            batchNo,
+		"items":               results,
+		"total_quantity":      totalQuantity,
+		"total_material_cost": totalMaterialCost,
+	}
+	// 兼容旧的单产品返回字段。
+	if len(results) == 1 {
+		payload["product_id"] = results[0].ProductID
+		payload["quantity"] = results[0].Quantity
+		payload["material_cost"] = results[0].MaterialCost
+		payload["unit_cost"] = results[0].UnitCost
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]interface{}{
-		"message":       message,
-		"product_id":    req.ProductID,
-		"quantity":      req.Quantity,
-		"production_no": productionNo,
-		"batch_no":      batchNo,
-		"material_cost": materialCost,
-		"unit_cost":     unitCost,
-	})
+	json.NewEncoder(w).Encode(payload)
 }

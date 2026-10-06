@@ -175,10 +175,11 @@
     </div>
 </div>
 <datalist id="outboundProductOptions"></datalist>
+<datalist id="productionProductOptions"></datalist>
 
-<!-- 生产入库模态框 -->
+<!-- 生产入库模态框（支持多个产品） -->
 <div class="modal fade" id="productionModal" tabindex="-1">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <div class="modal-header">
                 <h5 class="modal-title">生产入库</h5>
@@ -186,24 +187,22 @@
             </div>
             <div class="modal-body">
                 <form id="productionForm">
-                    <div class="mb-3">
-                        <label class="form-label">选择产品 <span class="text-danger">*</span></label>
-                        <input type="text" class="form-control production-product-input" id="productionProductInput" list="productionProductOptions" placeholder="输入产品名称、规格或单位" autocomplete="off" required>
-                        <input type="hidden" id="productionProductId">
-                        <datalist id="productionProductOptions"></datalist>
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">业务日期 <span class="text-danger">*</span></label>
+                            <input type="date" class="form-control" id="productionBusinessDate" required>
+                        </div>
+                        <div class="col-md-6 mb-3">
+                            <label class="form-label">生产批次</label>
+                            <input type="text" class="form-control" id="productionBatchNo" maxlength="64" placeholder="可留空，系统自动使用生产编号">
+                        </div>
                     </div>
                     <div class="mb-3">
-
-                        <label class="form-label">生产数量 <span class="text-danger">*</span></label>
-                        <input type="number" class="form-control" id="productionQuantity" placeholder="请输入生产数量" step="any" min="0" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">业务日期 <span class="text-danger">*</span></label>
-                        <input type="date" class="form-control" id="productionBusinessDate" required>
-                    </div>
-                    <div class="mb-3">
-                        <label class="form-label">生产批次</label>
-                        <input type="text" class="form-control" id="productionBatchNo" maxlength="64" placeholder="可留空，系统自动使用生产编号">
+                        <label class="form-label">入库产品明细（产品 + 数量）<span class="text-danger">*</span></label>
+                        <div id="productionItems"></div>
+                        <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addProductionRow()">
+                            <i class="bi bi-plus"></i> 添加一个产品
+                        </button>
                     </div>
                     <div class="mb-3">
                         <label class="form-label">生产说明 / 备注</label>
@@ -283,12 +282,14 @@ function applySearch() {
 
 $(document).ready(function() {
     loadProducts();
+    initProductionProductAutocomplete();
+    initProductionEvents();
     $('#searchProduct').on('keyup', applySearch);
     // 生产入库模态框打开时加载产品下拉框
     $('#productionModal').on('show.bs.modal', function() {
         loadProductionProducts();
-        if (!$('#productionBusinessDate').val()) $('#productionBusinessDate').val(todayStr());
-        $('#productionBatchNo,#productionRemark').val('');
+        loadProductionMaterials();
+        resetProductionForm();
     });
 
     // 从订单管理跳转过来时，直接打开该订单的发货窗口。
@@ -322,8 +323,11 @@ function deleteProduct(id) {
 }
 
 // ============================
-// 生产入库功能
+// 生产入库功能（支持多个产品一次入库）
 // ============================
+
+var productionBomCache = {};
+var productionMaterials = null;
 
 function productionProductDisplayValue(product) {
     var details = [];
@@ -333,29 +337,49 @@ function productionProductDisplayValue(product) {
     return (product.name || '') + '（' + details.join('，') + '）';
 }
 
+function productionMaterialName(id) {
+    if (productionMaterials && productionMaterials[id]) {
+        var m = productionMaterials[id];
+        var label = m.name || ('原材料#' + id);
+        if (m.spec) label += ' / ' + m.spec;
+        return label;
+    }
+    return '原材料#' + id;
+}
+
+function loadProductionMaterials() {
+    if (productionMaterials) return;
+    $.ajax({
+        url: '/api/raw-materials',
+        method: 'GET',
+        success: function(data) {
+            var map = {};
+            (data || []).forEach(function(m) { map[m.id] = m; });
+            productionMaterials = map;
+            renderProductionSummary();
+        },
+        error: function() {
+            productionMaterials = {};
+        }
+    });
+}
+
 function loadProductionBom(productID) {
-    if (!productID) {
-        $('#productionBomInfo').text('');
+    if (!productID || productionBomCache[productID]) {
+        renderProductionSummary();
         return;
     }
     $.ajax({
-        url: `/api/products/get?id=${productID}`,
+        url: '/api/products/get?id=' + encodeURIComponent(productID),
         method: 'GET',
         success: function(data) {
-            var bom = data.bom || [];
-            if (bom.length === 0) {
-                $('#productionBomInfo').html('<span class="text-warning">⚠️ 该产品无BOM，入库将不扣减原材料。</span>');
-            } else {
-                var html = '<strong>📦 原材料消耗清单：</strong><br>';
-                bom.forEach(function(b) {
-                    html += `- 原材料ID: ${b.raw_material_id}，用量: ${b.quantity}<br>`;
-                });
-                $('#productionBomInfo').html(html);
-            }
+            productionBomCache[productID] = {
+                name: data.name || ('产品#' + productID),
+                bom: data.bom || []
+            };
+            renderProductionSummary();
         },
-        error: function() {
-            $('#productionBomInfo').html('<span class="text-danger">加载BOM信息失败</span>');
-        }
+        error: function() {}
     });
 }
 
@@ -363,8 +387,8 @@ function initProductionProductAutocomplete() {
     if (productionProductAutocomplete) return;
     productionProductAutocomplete = AutoComplete.create({
         name: 'production_product',
-        inputSelector: '#productionProductInput',
-        hiddenSelector: '#productionProductId',
+        inputSelector: '.production-product-input',
+        hiddenSelector: '.production-product-id',
         datalistSelector: '#productionProductOptions',
         getId: function(product) { return product.id; },
         getDisplay: productionProductDisplayValue,
@@ -372,9 +396,60 @@ function initProductionProductAutocomplete() {
         sortItems: function(a, b) {
             return (a.name || '').localeCompare(b.name || '', 'zh-CN');
         },
-        onSelect: function(product) { loadProductionBom(product.id); },
-        onClear: function() { $('#productionBomInfo').text(''); }
+        onSelect: function(product, input) { applyProductionProductSelection(product, input); },
+        onClear: function(_, input) { clearProductionRow(input); }
     });
+}
+
+function clearProductionRow(input) {
+    var row = $(input).closest('.production-row');
+    row.find('.production-product-id').val('');
+    row.find('.production-spec').val('');
+    row.find('.production-unit').val('');
+    renderProductionSummary();
+}
+
+function applyProductionProductSelection(product, input) {
+    var row = $(input).closest('.production-row');
+    row.find('.production-product-id').val(product.id);
+    row.find('.production-spec').val(product.spec || '');
+    row.find('.production-unit').val(product.unit || '');
+    loadProductionBom(product.id);
+}
+
+function buildProductionRow() {
+    return `<div class="row mb-2 production-row align-items-end">
+        <div class="col-md-5">
+            <input type="text" class="form-control production-product-input" list="productionProductOptions" placeholder="输入产品名称、规格或单位" autocomplete="off">
+            <input type="hidden" class="production-product-id">
+        </div>
+        <div class="col-md-2">
+            <input type="text" class="form-control production-spec" placeholder="规格型号" readonly>
+        </div>
+        <div class="col-md-1">
+            <input type="text" class="form-control production-unit" placeholder="单位" readonly>
+        </div>
+        <div class="col-md-2">
+            <input type="number" class="form-control production-qty" placeholder="入库数量" step="any" min="0">
+        </div>
+        <div class="col-md-2 text-end">
+            <button type="button" class="btn btn-danger btn-sm remove-production-row"><i class="bi bi-trash"></i> 删除</button>
+        </div>
+    </div>`;
+}
+
+function addProductionRow() {
+    $('#productionItems').append(buildProductionRow());
+}
+
+function resetProductionForm() {
+    $('#productionForm')[0].reset();
+    $('#productionItems').empty();
+    $('#productionBomInfo').empty();
+    $('#productionBusinessDate').val(todayStr());
+    addProductionRow();
+    addProductionRow();
+    renderProductionSummary();
 }
 
 function loadProductionProducts() {
@@ -384,25 +459,124 @@ function loadProductionProducts() {
         success: function(data) {
             initProductionProductAutocomplete();
             productionProductAutocomplete.setItems(data || []);
-            $('#productionBomInfo').text('');
+            renderProductionSummary();
         },
         error: function() {
             alert('加载产品列表失败');
         }
     });
 }
-// 提交生产入库
-function submitProduction() {
-    productionProductAutocomplete.resolveInput($('#productionProductInput'));
-    var productId = $('#productionProductId').val();
-    var quantity = parseFloat($('#productionQuantity').val());
 
-    if (!productId) {
-        alert('请选择产品');
+function collectProductionRows() {
+    var rows = [];
+    $('#productionItems .production-row').each(function() {
+        var row = $(this);
+        rows.push({
+            product_id: parseInt(row.find('.production-product-id').val(), 10) || 0,
+            quantity: parseFloat(row.find('.production-qty').val()),
+            name: String(row.find('.production-product-input').val() || '').trim()
+        });
+    });
+    return rows;
+}
+
+function renderProductionSummary() {
+    var rows = collectProductionRows().filter(function(r) {
+        return r.product_id > 0 && Number(r.quantity) > 0;
+    });
+    if (!rows.length) {
+        $('#productionBomInfo').empty();
         return;
     }
-    if (!quantity || quantity <= 0) {
-        alert('请输入有效的生产数量');
+    var aggregate = {};
+    var noBomNames = [];
+    var pending = false;
+    rows.forEach(function(r) {
+        var cached = productionBomCache[r.product_id];
+        if (!cached) {
+            pending = true;
+            return;
+        }
+        if (!cached.bom || !cached.bom.length) {
+            noBomNames.push(cached.name);
+            return;
+        }
+        cached.bom.forEach(function(b) {
+            var key = String(b.raw_material_id);
+            aggregate[key] = (aggregate[key] || 0) + Number(b.quantity || 0) * r.quantity;
+        });
+    });
+
+    var html = '<strong>📦 预计原材料消耗（按BOM汇总）：</strong><br>';
+    var keys = Object.keys(aggregate);
+    if (keys.length) {
+        keys.forEach(function(key) {
+            html += '- ' + escapeOut(productionMaterialName(key)) + '：' + qtyText(aggregate[key]) + '<br>';
+        });
+    } else if (!pending) {
+        html += '<span class="text-muted">暂无BOM原材料消耗</span><br>';
+    }
+    if (noBomNames.length) {
+        html += '<span class="text-warning">⚠️ 无BOM产品：' + escapeOut(noBomNames.join('、')) + '，入库不扣减原材料、成本记为0。</span>';
+    }
+    if (pending) {
+        html += '<span class="text-muted">正在加载BOM…</span>';
+    }
+    $('#productionBomInfo').html(html);
+}
+
+function initProductionEvents() {
+    $(document).on('input', '.production-qty', function() {
+        renderProductionSummary();
+    });
+    $(document).on('click', '.remove-production-row', function() {
+        if ($('#productionItems .production-row').length > 1) {
+            $(this).closest('.production-row').remove();
+            renderProductionSummary();
+        } else {
+            alert('至少保留一行');
+        }
+    });
+}
+
+function validateProductionRows() {
+    var rows = $('#productionItems .production-row');
+    if (!rows.length) {
+        return { error: '请至少添加一个产品' };
+    }
+    var items = [];
+    var error = '';
+    rows.each(function() {
+        var row = $(this);
+        var input = row.find('.production-product-input');
+        if (productionProductAutocomplete) {
+            productionProductAutocomplete.resolveInput(input);
+        }
+        var productID = parseInt(row.find('.production-product-id').val(), 10) || 0;
+        var qty = parseFloat(row.find('.production-qty').val());
+        var name = String(input.val() || '').trim();
+        if (!productID) {
+            error = name ? ('产品“' + name + '”不在产品列表中，请从下拉中选择') : '请选择产品';
+            return false;
+        }
+        if (!qty || qty <= 0) {
+            error = '请输入“' + (name || '所选产品') + '”的有效入库数量';
+            return false;
+        }
+        items.push({ product_id: productID, quantity: qty });
+        return true;
+    });
+    if (error) {
+        return { error: error };
+    }
+    return { items: items };
+}
+
+// 提交生产入库（支持多个产品）
+function submitProduction() {
+    var result = validateProductionRows();
+    if (result.error) {
+        alert(result.error);
         return;
     }
 
@@ -411,24 +585,15 @@ function submitProduction() {
         method: 'POST',
         contentType: 'application/json',
         data: JSON.stringify({
-
-            product_id: parseInt(productId),
-
-            quantity: quantity,
-
+            items: result.items,
             business_date: $('#productionBusinessDate').val(),
-
             batch_no: $('#productionBatchNo').val(),
-
             remark: $('#productionRemark').val()
-
         }),
         success: function(response) {
             alert(response.message || '生产入库成功');
             $('#productionModal').modal('hide');
-            $('#productionForm')[0].reset();
-            $('#productionBomInfo').text('');
-            $('#productionBusinessDate').val(todayStr());
+            resetProductionForm();
             loadProducts(); // 刷新列表
             loadProductionProducts(); // 刷新下拉框
         },
