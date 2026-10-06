@@ -4,6 +4,8 @@ import (
 	"database/sql"
 	"testing"
 	"time"
+
+	"order-system/models"
 )
 
 func TestPurchaseDraftAllowsIncompleteData(t *testing.T) {
@@ -173,5 +175,24 @@ func TestPurchaseSummaryConditionUsesScopeSpecificCriteria(t *testing.T) {
 				t.Fatalf("purchaseSummaryCondition(%q) = %q, want %q", tt.scope, got, tt.want)
 			}
 		})
+	}
+}
+
+func TestPurchaseRawMaterialOptionCarriesInventoryFields(t *testing.T) {
+	option := newPurchaseRawMaterialOption(models.RawMaterial{
+		ID:             11,
+		Name:           "树脂",
+		Spec:           "A级",
+		Unit:           "kg",
+		Stock:          506,
+		AvailableStock: 480.5,
+		AvgCost:        0.2,
+	})
+
+	if option.ID != 11 || option.Name != "树脂" || option.Spec != "A级" || option.Unit != "kg" {
+		t.Fatalf("identity fields not carried over: %#v", option)
+	}
+	if option.Stock != 506 || option.AvailableStock != 480.5 || option.AvgCost != 0.2 {
+		t.Fatalf("inventory fields not carried over: %#v", option)
 	}
 }

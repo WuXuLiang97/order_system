@@ -494,13 +494,28 @@ func ListPurchaseMaterials(w http.ResponseWriter, r *http.Request) {
 }
 
 type purchaseRawMaterialOption struct {
-	ID   int    `json:"id"`
-	Name string `json:"name"`
-	Spec string `json:"spec"`
-	Unit string `json:"unit"`
+	ID             int     `json:"id"`
+	Name           string  `json:"name"`
+	Spec           string  `json:"spec"`
+	Unit           string  `json:"unit"`
+	Stock          float64 `json:"stock"`
+	AvailableStock float64 `json:"available_stock"`
+	AvgCost        float64 `json:"avg_cost"`
 }
 
-// ListPurchaseRawMaterialOptions 获取采购原材料可索引的名称、规格型号和单位。
+func newPurchaseRawMaterialOption(material models.RawMaterial) purchaseRawMaterialOption {
+	return purchaseRawMaterialOption{
+		ID:             material.ID,
+		Name:           material.Name,
+		Spec:           material.Spec,
+		Unit:           material.Unit,
+		Stock:          material.Stock,
+		AvailableStock: material.AvailableStock,
+		AvgCost:        material.AvgCost,
+	}
+}
+
+// ListPurchaseRawMaterialOptions 获取采购原材料可索引的名称、规格、单位、库存与平均成本。
 func ListPurchaseRawMaterialOptions(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodGet {
 		http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
@@ -515,12 +530,7 @@ func ListPurchaseRawMaterialOptions(w http.ResponseWriter, r *http.Request) {
 
 	options := make([]purchaseRawMaterialOption, 0, len(materials))
 	for _, material := range materials {
-		options = append(options, purchaseRawMaterialOption{
-			ID:   material.ID,
-			Name: material.Name,
-			Spec: material.Spec,
-			Unit: material.Unit,
-		})
+		options = append(options, newPurchaseRawMaterialOption(material))
 	}
 
 	w.Header().Set("Content-Type", "application/json")
