@@ -42,12 +42,12 @@
                             <tr>
                                 <th>编号</th>
                                 <th>客户名称</th>
+                                <th>地区/省份</th>
                                 <th>类型</th>
                                 <th>状态</th>
                                 <th>等级</th>
                                 <th>风险</th>
                                 <th>业务员</th>
-                                <th>联系电话</th>
                                 <th>更新时间</th>
                                 <th>操作</th>
                             </tr>
@@ -170,12 +170,12 @@ function renderCustomers() {
             <tr>
                 <td><span class="badge bg-dark">${escapeHtml(c.code || '-')}</span></td>
                 <td><strong>${escapeHtml(c.name)}</strong>${c.full_name ? `<div class="small text-muted">${escapeHtml(c.full_name)}</div>` : ''}</td>
+                <td>${c.country_region ? escapeHtml(c.country_region) : '-'}</td>
                 <td>${c.customer_type ? escapeHtml(c.customer_type) : '<span class="text-muted">-</span>'}</td>
                 <td>${badge('status', STATUS_BADGE, c.status)}</td>
                 <td>${c.level ? `<span class="badge bg-primary">${escapeHtml(c.level)}</span>` : '-'}</td>
                 <td>${badge('risk', RISK_BADGE, c.risk_level)}</td>
                 <td>${escapeHtml(ownerName(c))}</td>
-                <td>${c.phone ? escapeHtml(c.phone) : '-'}</td>
                 <td class="small text-muted">${c.updated_at ? new Date(c.updated_at).toLocaleString() : '-'}</td>
                 <td class="text-nowrap">${actions}${manageActions}</td>
             </tr>`;
