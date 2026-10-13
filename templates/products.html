@@ -198,6 +198,14 @@
                         </div>
                     </div>
                     <div class="mb-3">
+                        <label class="form-label" for="productionOrderSelect">按订单入库（可选）</label>
+                        <select class="form-select" id="productionOrderSelect" onchange="applyProductionOrder()">
+                            <option value="">选择订单后自动带入产品明细</option>
+                        </select>
+                        <div class="form-text">导入订单中尚未发货的产品与数量，仍可按本次实际完工数量调整。</div>
+                        <div class="small mt-1" id="productionOrderHint"></div>
+                    </div>
+                    <div class="mb-3">
                         <label class="form-label">入库产品明细（产品 + 数量）<span class="text-danger">*</span></label>
                         <div id="productionItems"></div>
                         <button type="button" class="btn btn-secondary btn-sm mt-2" onclick="addProductionRow()">
@@ -290,6 +298,7 @@ $(document).ready(function() {
         loadProductionProducts();
         loadProductionMaterials();
         resetProductionForm();
+        loadProductionOrders();
     });
 
     // 从订单管理跳转过来时，直接打开该订单的发货窗口。
@@ -328,6 +337,8 @@ function deleteProduct(id) {
 
 var productionBomCache = {};
 var productionMaterials = null;
+var productionOrdersById = {};
+var productionProductsById = {};
 
 function productionProductDisplayValue(product) {
     var details = [];
@@ -446,6 +457,7 @@ function resetProductionForm() {
     $('#productionForm')[0].reset();
     $('#productionItems').empty();
     $('#productionBomInfo').empty();
+    $('#productionOrderHint').empty();
     $('#productionBusinessDate').val(todayStr());
     addProductionRow();
     addProductionRow();
@@ -457,6 +469,10 @@ function loadProductionProducts() {
         url: '/api/products',
         method: 'GET',
         success: function(data) {
+            productionProductsById = {};
+            (data || []).forEach(function(product) {
+                productionProductsById[product.id] = product;
+            });
             initProductionProductAutocomplete();
             productionProductAutocomplete.setItems(data || []);
             renderProductionSummary();
@@ -465,6 +481,77 @@ function loadProductionProducts() {
             alert('加载产品列表失败');
         }
     });
+}
+
+function loadProductionOrders() {
+    var select = $('#productionOrderSelect');
+    select.prop('disabled', true).html('<option value="">正在加载订单...</option>');
+    $.ajax({
+        url: '/api/production/orders',
+        method: 'GET',
+        success: function(data) {
+            productionOrdersById = {};
+            var orders = data || [];
+            var options = ['<option value="">选择订单后自动带入产品明细</option>'];
+            orders.forEach(function(order) {
+                productionOrdersById[order.id] = order;
+                var statusText = {0: '待生产', 1: '生产中', 2: '待发货'}[order.status] || '有效订单';
+                var label = (order.order_no || ('订单#' + order.id)) + '｜' + (order.customer_name || '未填写客户') + '｜' + statusText;
+                options.push('<option value="' + order.id + '">' + escapeOut(label) + '</option>');
+            });
+            select.html(options.join('')).prop('disabled', orders.length === 0);
+            if (!orders.length) {
+                select.html('<option value="">暂无待生产/生产中的订单</option>');
+            }
+        },
+        error: function(xhr) {
+            select.html('<option value="">订单加载失败，可手动选择产品</option>').prop('disabled', true);
+            $('#productionOrderHint').html('<span class="text-danger">订单列表加载失败：' + escapeOut(xhr.responseText || '请稍后重试') + '</span>');
+        }
+    });
+}
+
+function productionOrderItemQuantity(item) {
+    var value = item.remaining_quantity;
+    if (value === undefined || value === null) value = item.quantity;
+    return Math.max(0, Number(value || 0));
+}
+
+function applyProductionOrder() {
+    var orderID = parseInt($('#productionOrderSelect').val(), 10) || 0;
+    if (!orderID || !productionOrdersById[orderID]) return;
+
+    var order = productionOrdersById[orderID];
+    var items = order.items || [];
+    $('#productionItems').empty();
+    items.forEach(function(item) {
+        var row = $(buildProductionRow());
+        var input = row.find('.production-product-input');
+        var hidden = row.find('.production-product-id');
+        var product = productionProductsById[item.product_id] || null;
+
+        if (product) {
+            input.val(productionProductDisplayValue(product));
+            applyProductionProductSelection(product, input);
+        } else {
+            input.val(item.product_name || ('产品#' + item.product_id));
+            hidden.val(item.product_id);
+            row.find('.production-spec').val(item.spec || '');
+            row.find('.production-unit').val(item.unit || '');
+            loadProductionBom(item.product_id);
+        }
+        row.find('.production-qty').val(qtyText(productionOrderItemQuantity(item)));
+        $('#productionItems').append(row);
+    });
+
+    if (!items.length) {
+        addProductionRow();
+        $('#productionOrderHint').html('<span class="text-warning">该订单没有可入库的未发货明细。</span>');
+        renderProductionSummary();
+        return;
+    }
+    $('#productionOrderHint').html('<span class="text-success">已带入 ' + items.length + ' 项订单明细，数量按未发货数量预填，可继续调整。</span>');
+    renderProductionSummary();
 }
 
 function collectProductionRows() {
@@ -596,6 +683,7 @@ function submitProduction() {
             resetProductionForm();
             loadProducts(); // 刷新列表
             loadProductionProducts(); // 刷新下拉框
+            loadProductionOrders(); // 刷新订单选项
         },
         error: function(xhr) {
             alert('生产入库失败: ' + xhr.responseText);

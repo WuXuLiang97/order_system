@@ -74,6 +74,7 @@ func main() {
 	http.HandleFunc("/api/products/update", handlers.RequirePermission(handlers.PermProductManage, handlers.UpdateProduct))
 	http.HandleFunc("/api/products/delete", handlers.RequirePermission(handlers.PermProductManage, handlers.DeleteProduct))
 	http.HandleFunc("/api/production", handlers.RequirePermission(handlers.PermProductManage, handlers.ProduceProduct))
+	http.HandleFunc("/api/production/orders", handlers.RequirePermission(handlers.PermProductManage, handlers.ListProductionOrders))
 	http.HandleFunc("/outbound/detail", handlers.RequirePermission(handlers.PermProductView, handlers.ProductOutboundPrintPage))
 	http.HandleFunc("/api/outbounds/list", handlers.RequirePermission(handlers.PermProductView, handlers.ListProductOutbounds))
 	http.HandleFunc("/api/outbounds/by-order", handlers.RequirePermission(handlers.PermProductView, handlers.ListProductOutboundsByOrder))
