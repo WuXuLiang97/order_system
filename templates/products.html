@@ -134,6 +134,9 @@
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">取消</button>
+                <button type="button" id="shipWholeOrderBtn" class="btn btn-success d-none" onclick="shipWholeOrder()">
+                    <i class="bi bi-box-seam"></i> 整单发货
+                </button>
                 <button type="button" class="btn btn-warning" onclick="submitOutbound()">保存出库并打印</button>
             </div>
         </div>
@@ -814,6 +817,7 @@ function resetStandaloneOutbound() {
     $('#outboundReceiver').prop('readonly', false).val('');
     $('#outboundItemsLabel').text('出库明细（型号 + 数量）');
     $('#addOutboundRowBtn').removeClass('d-none');
+    $('#shipWholeOrderBtn').addClass('d-none');
     $('#outboundForm')[0].reset();
     $('#outboundDate').val(todayStr());
     $('#outboundSettlementMethod').val('现金');
@@ -857,6 +861,7 @@ function openOrderShipment(orderID) {
             $('#outboundReceiver').val(data.customer_name || '').prop('readonly', true);
             $('#outboundItemsLabel').text('订单发货明细（已发 / 剩余）');
             $('#addOutboundRowBtn').addClass('d-none');
+            $('#shipWholeOrderBtn').removeClass('d-none');
             $('#outboundItems').empty();
             items.forEach(function(item) {
                 $('#outboundItems').append(buildOrderShipmentRow(item));
@@ -883,6 +888,7 @@ $('#outboundModal').on('hidden.bs.modal', function() {
     outboundOrderID = 0;
     $('#outboundOrderId').val('');
     $('#outboundItems').empty();
+    $('#shipWholeOrderBtn').addClass('d-none');
 });
 
 $(document).on('click', '.remove-outbound-row', function() {
@@ -892,6 +898,31 @@ $(document).on('click', '.remove-outbound-row', function() {
         alert('至少保留一行');
     }
 });
+
+function fillAllOrderShipmentQuantities() {
+    var filled = 0;
+    $('#outboundItems .order-shipment-row').each(function() {
+        var qtyInput = $(this).find('.outbound-order-qty');
+        var remaining = parseFloat(qtyInput.attr('data-remaining')) || 0;
+        if (remaining > 0) {
+            qtyInput.val(qtyText(remaining));
+            filled++;
+        }
+    });
+    return filled;
+}
+
+function shipWholeOrder() {
+    if (!(parseInt($('#outboundOrderId').val(), 10) > 0)) return;
+    if (!confirm('确定按订单剩余数量整单发货吗？')) return;
+
+    var filled = fillAllOrderShipmentQuantities();
+    if (!filled) {
+        alert('该订单没有可发货数量');
+        return;
+    }
+    submitOutbound();
+}
 
 function submitOutbound() {
     var items = [];
